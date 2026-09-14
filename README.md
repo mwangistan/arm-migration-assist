@@ -45,12 +45,9 @@ arm-migration-assist/
 │       ├── BuildValidation/         # Story 4.1
 │       └── Dashboard/               # Story 4.2 (backend support)
 │
-├── samples/                   # Reference repos for the demo (Story 4.3)
-│   ├── comfyui/
-│   └── open-webui/
-│
-└── docs/
-    └── architecture.md
+└── samples/                   # Reference repos for the demo (Story 4.3)
+    ├── comfyui/
+    └── open-webui/
 ```
 
 ## How the folders map to the spec
@@ -67,3 +64,20 @@ arm-migration-assist/
 Each subfolder name matches a user story. AI, GitHub, and code-analysis code lives
 inside whichever feature uses it — there are no shared/infra folders, to keep things
 simple.
+
+## Workflow
+
+The product follows the six stages in the spec:
+
+| Stage | What happens | Folder |
+|-------|--------------|--------|
+| 1. Connect | Provide a GitHub URL or local path; pick target (ARM64 native or Arm64EC) | `frontend/` |
+| 2. Assess | Discover languages, dependencies, build system, and architecture-specific code | `backend/Assessment/` |
+| 3. Plan | Score readiness and recommend a migration strategy | `backend/MigrationPlanner/` |
+| 4. Transform | Generate reviewable build, pipeline, and code changes | `backend/AutomatedMigration/` |
+| 5. Validate | Build, run checks/tests, capture pass/fail evidence | `backend/Validation/` |
+| 6. Package | Export the report, diffs, and decision log | `backend/MigrationPlanner/ReportGeneration/` |
+
+Keep the boundaries simple: assessment produces facts with file evidence, the planner
+scores and recommends, automated migration produces reviewable patches, and validation
+records measured build/test outcomes.
