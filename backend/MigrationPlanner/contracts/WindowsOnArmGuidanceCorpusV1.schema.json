@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arm-migration-assist:schemas:WindowsOnArmGuidanceCorpusV1",
+  "title": "WindowsOnArmGuidanceCorpusV1",
+  "description": "Manifest for the curated Windows on Arm guidance corpus served through the MCP lookup_windows_arm_guidance tool. Cross-record rules (guidanceId uniqueness, relativePath uniqueness, sha256 verification against the actual snippet files, retrievedAt <= generatedAt) are enforced by the corpus loader/validator, not by JSON Schema. Format assertions (date-time, uri) must be explicitly enabled in the validator.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "corpusVersion",
+    "generatedAt",
+    "producer",
+    "source",
+    "snippets"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "description": "Contract version tag. Accepts 1.x minor versions.",
+      "type": "string",
+      "pattern": "^1\\.\\d{1,3}$",
+      "examples": ["1.0"]
+    },
+    "corpusVersion": {
+      "description": "Human-friendly corpus revision. Convention: 'YYYY-MM-DD.N' where N is the intra-day revision. Every refresh increments this.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}\\.\\d{1,3}$",
+      "examples": ["2026-09-15.1"]
+    },
+    "generatedAt": {
+      "description": "ISO 8601 / RFC 3339 UTC timestamp when this corpus manifest was produced.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "maxLength": 40
+    },
+    "producer": {
+      "description": "What produced this corpus. Recorded in the audit log alongside every planner run.",
+      "$ref": "#/$defs/Producer"
+    },
+    "source": {
+      "description": "Canonical source identifier. Fixed for v1: Microsoft Learn Windows on Arm documentation.",
+      "const": "microsoft-learn-windows-on-arm"
+    },
+    "snippets": {
+      "description": "The corpus. Each entry is one addressable guidance chunk with a stable guidanceId.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {"$ref": "#/$defs/Snippet"}
+    },
+    "notes": {
+      "description": "Optional maintainer notes about this corpus revision.",
+      "type": ["string", "null"],
+      "maxLength": 2000
+    }
+  },
+  "$defs": {
+    "SemanticVersion": {
+      "description": "Semantic Versioning 2.0.0 string.",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+      "maxLength": 100
+    },
+    "Producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "sourceKind"],
+      "properties": {
+        "name": {
+          "description": "Tool identifier (e.g. 'arm-migration-assist-corpus').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "version": {"$ref": "#/$defs/SemanticVersion"},
+        "sourceKind": {
+          "$comment": "Distinguishes prototype content from real snapshots so audits show provenance honestly.",
+          "description": "How the snippets in this corpus were produced.",
+          "enum": ["hand-authored-prototype", "microsoft-learn-snapshot"]
+        },
+        "toolCommit": {
+          "description": "Optional Git commit SHA of the tool that produced the corpus.",
+          "type": ["string", "null"],
+          "pattern": "^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$"
+        }
+      }
+    },
+    "Topic": {
+      "$comment": "Closed enum shared with the MCP lookup_windows_arm_guidance tool. Add topics deliberately; do not accept free-text.",
+      "description": "Topic tag. Every snippet is tagged with one or more topics; the MCP tool queries by topic.",
+      "enum": [
+        "woa-overview",
+        "add-arm-support",
+        "native-arm64-build",
+        "arm64ec-overview",
+        "arm64ec-abi",
+        "arm32-to-arm64-migration",
+        "winui3-porting",
+        "msix-arm64-packaging",
+        "windows-app-sdk",
+        "performance-optimization",
+        "compatibility-troubleshooting"
+      ]
+    },
+    "Snippet": {
+      "description": "One addressable guidance chunk.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "guidanceId",
+        "sourceUrl",
+        "title",
+        "section",
+        "retrievedAt",
+        "relativePath",
+        "sha256",
+        "topics",
+        "summary"
+      ],
+      "properties": {
+        "guidanceId": {
+          "$comment": "Cross-record uniqueness is enforced by the corpus loader, not by JSON Schema.",
+          "description": "Stable, kebab-case identifier ending in a numeric suffix (e.g. 'arm64ec-overview-01').",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*-\\d{2,3}$",
+          "maxLength": 100
+        },
+        "sourceUrl": {
+          "description": "Canonical HTTPS Microsoft Learn URL the snippet was derived from.",
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://learn\\.microsoft\\.com/",
+          "maxLength": 2048
+        },
+        "title": {
+          "description": "Page title (H1) from the source.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "section": {
+          "description": "Section heading (H2 or equivalent) the snippet corresponds to.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "retrievedAt": {
+          "description": "ISO 8601 / RFC 3339 UTC timestamp when the source content was retrieved (or, for prototype content, when it was authored).",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+          "maxLength": 40
+        },
+        "relativePath": {
+          "$comment": "Uniqueness across snippets is enforced by the corpus loader.",
+          "description": "Path to the snippet markdown file, relative to the corpus root. Must live under 'snippets/' and end in '.md'.",
+          "type": "string",
+          "pattern": "^snippets/[A-Za-z0-9_/.-]+\\.md$",
+          "maxLength": 300
+        },
+        "sha256": {
+          "description": "Lowercase SHA-256 hex digest of the snippet file bytes. Verified by the corpus loader at startup.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "topics": {
+          "description": "Topic tags the snippet is relevant to.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/Topic"}
+        },
+        "summary": {
+          "description": "One-line factual summary the MCP tool returns in list responses.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "byteLength": {
+          "description": "Optional recorded byte length of the snippet file; used for extra tamper detection.",
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      }
+    }
+  }
+}

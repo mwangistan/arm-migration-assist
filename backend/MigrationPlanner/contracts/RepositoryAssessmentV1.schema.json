@@ -1,0 +1,658 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arm-migration-assist:schemas:RepositoryAssessmentV1",
+  "title": "RepositoryAssessmentV1",
+  "description": "Versioned repository assessment produced by ARM Migration Assist Feature 1 (Repository Analysis) and consumed by the AI Migration Planner (Feature 2). Cross-record rules that JSON Schema cannot express (unique evidence IDs, evidence-reference resolution, filesScanned <= filesTotal) are enforced by the evidence validator. Format assertions (date-time, uri) must be explicitly enabled in the JSON Schema validator; the .NET planner enables strict format validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "assessmentId",
+    "generatedAt",
+    "producer",
+    "repository",
+    "technology",
+    "dependencies",
+    "codeFindings",
+    "buildFindings",
+    "windowsExperience",
+    "scanCoverage",
+    "unknowns",
+    "availableSkills"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "description": "Contract version tag. Accepts 1.x minor versions. Unsupported majors are rejected with a 409 Problem Details response.",
+      "type": "string",
+      "pattern": "^1\\.\\d{1,3}$",
+      "examples": ["1.0", "1.1"]
+    },
+    "assessmentId": {
+      "description": "Stable identifier for this assessment run. Referenced by the planner output and audit log.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,64}$",
+      "maxLength": 64
+    },
+    "generatedAt": {
+      "description": "ISO 8601 / RFC 3339 UTC timestamp when the assessment was produced.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "maxLength": 40
+    },
+    "producer": {
+      "description": "Metadata about the scanners that produced this assessment. Recorded in the audit log so plans are reproducible.",
+      "$ref": "#/$defs/Producer"
+    },
+    "repository": {
+      "description": "Identity of the assessed repository.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "url", "commitSha", "defaultBranch"],
+      "properties": {
+        "name": {
+          "description": "Repository display name (e.g. 'ComfyUI').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "url": {
+          "description": "Canonical repository URL.",
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://",
+          "maxLength": 2048
+        },
+        "commitSha": {
+          "description": "Full Git commit SHA the assessment was produced against. SHA-1 (40 hex) or SHA-256 (64 hex).",
+          "type": "string",
+          "pattern": "^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$",
+          "maxLength": 64
+        },
+        "defaultBranch": {
+          "description": "Default branch name at assessment time.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "license": {
+          "description": "SPDX license identifier, free-form label, or null when unknown.",
+          "type": ["string", "null"],
+          "maxLength": 100
+        }
+      }
+    },
+    "technology": {
+      "description": "Detected technology inventory.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "languages",
+        "frameworks",
+        "projectTypes",
+        "buildSystems",
+        "packageManagers",
+        "installers",
+        "ciSystems"
+      ],
+      "properties": {
+        "languages": {
+          "description": "Programming languages detected in the repository.",
+          "type": "array",
+          "maxItems": 200,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 100}
+        },
+        "frameworks": {
+          "description": "Application frameworks detected (e.g. 'wpf', 'winui3', 'qt', 'electron', 'pytorch').",
+          "type": "array",
+          "maxItems": 200,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 200}
+        },
+        "projectTypes": {
+          "description": "Project types detected (e.g. 'desktop', 'service', 'cli', 'library').",
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 100}
+        },
+        "buildSystems": {
+          "description": "Build systems detected (e.g. 'msbuild', 'cmake', 'make', 'gradle', 'setuptools').",
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 100}
+        },
+        "packageManagers": {
+          "description": "Package managers detected (e.g. 'nuget', 'npm', 'pip', 'vcpkg', 'conan').",
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 100}
+        },
+        "installers": {
+          "description": "Installer technologies detected (e.g. 'msix', 'msi', 'wix', 'inno-setup', 'squirrel').",
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 100}
+        },
+        "ciSystems": {
+          "description": "CI systems detected (e.g. 'github-actions', 'azure-pipelines', 'appveyor').",
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 100}
+        }
+      }
+    },
+    "dependencies": {
+      "description": "Dependency inventory with ARM64 compatibility signals.",
+      "type": "array",
+      "maxItems": 10000,
+      "items": {"$ref": "#/$defs/DependencyFinding"}
+    },
+    "codeFindings": {
+      "description": "Architecture-specific code patterns detected by scanners.",
+      "type": "array",
+      "maxItems": 20000,
+      "items": {"$ref": "#/$defs/CodeFinding"}
+    },
+    "buildFindings": {
+      "description": "Build system and CI readiness signals.",
+      "$ref": "#/$defs/BuildFindings"
+    },
+    "windowsExperience": {
+      "description": "Signals about Windows-native experience quality.",
+      "$ref": "#/$defs/WindowsExperience"
+    },
+    "scanCoverage": {
+      "description": "Scanner completeness so incomplete results can be marked provisional.",
+      "$ref": "#/$defs/ScanCoverage"
+    },
+    "unknowns": {
+      "description": "Explicit unresolved questions the assessment could not answer.",
+      "type": "array",
+      "maxItems": 1000,
+      "items": {"$ref": "#/$defs/Unknown"}
+    },
+    "availableSkills": {
+      "description": "Reusable agents and skills the planner may cite in workItems. The planner must reference only skills listed here or declare gaps in missingSkills.",
+      "type": "array",
+      "maxItems": 500,
+      "items": {"$ref": "#/$defs/Skill"}
+    }
+  },
+  "$defs": {
+    "EvidenceId": {
+      "$comment": "Cross-record uniqueness is enforced by the evidence validator, not by JSON Schema.",
+      "description": "Unique evidence identifier.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,64}$",
+      "maxLength": 64
+    },
+    "Confidence": {
+      "description": "Analyst confidence in the finding on a 0.0 to 1.0 scale. Aggregate readiness confidence lives in ReadinessScoreV1.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "SemanticVersion": {
+      "description": "Semantic Versioning 2.0.0 string.",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+      "maxLength": 100
+    },
+    "Producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {
+          "description": "Producing tool identifier (e.g. 'arm-migration-assist-feature1').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "version": {"$ref": "#/$defs/SemanticVersion"},
+        "ruleset": {
+          "description": "Ruleset or rule-catalog identifier used by the scanners, or null.",
+          "type": ["string", "null"],
+          "maxLength": 200
+        },
+        "scannerVersions": {
+          "description": "Per-scanner semantic versions used to produce this assessment.",
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "version"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1, "maxLength": 200},
+              "version": {"$ref": "#/$defs/SemanticVersion"}
+            }
+          }
+        }
+      }
+    },
+    "Evidence": {
+      "description": "A concrete piece of evidence supporting a finding. References exactly one source (file path or non-file artifact) and includes a concise, factual observation. No inferences or recommendations belong here.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceType", "observation"],
+      "properties": {
+        "sourceType": {
+          "description": "Kind of source the evidence was drawn from.",
+          "enum": ["file", "manifest", "binary", "config", "ci-log", "documentation", "artifact"]
+        },
+        "path": {
+          "description": "Repository-relative path when the evidence is a file, manifest, or config.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "artifact": {
+          "description": "Artifact identifier when the evidence is not a source-tree file (e.g. a build output name or dependency graph node).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "observation": {
+          "description": "Concise, factual observation the scanner recorded from the source.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "oneOf": [
+        {"required": ["path"], "not": {"required": ["artifact"]}},
+        {"required": ["artifact"], "not": {"required": ["path"]}}
+      ]
+    },
+    "DependencyFinding": {
+      "description": "One dependency and its ARM64 compatibility signals.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceId",
+        "name",
+        "ecosystem",
+        "type",
+        "criticality",
+        "architectureStatus",
+        "availableArchitectures",
+        "replacementCandidates",
+        "evidence",
+        "confidence"
+      ],
+      "properties": {
+        "evidenceId": {"$ref": "#/$defs/EvidenceId"},
+        "name": {
+          "description": "Package or component name as declared by the ecosystem.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "version": {
+          "description": "Declared version string, or null when not resolvable.",
+          "type": ["string", "null"],
+          "maxLength": 100
+        },
+        "ecosystem": {
+          "description": "Package ecosystem (e.g. 'nuget', 'npm', 'pypi', 'vcpkg', 'conan', 'native-dll', 'msi').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "type": {
+          "description": "Dependency kind. Drives the scoring model and blocker caps.",
+          "enum": ["managed", "native", "com", "plugin", "driver", "unknown"]
+        },
+        "criticality": {
+          "description": "Whether the dependency is required for the primary application path or optional.",
+          "enum": ["required", "optional"]
+        },
+        "architectureStatus": {
+          "description": "ARM64 availability classification.",
+          "enum": ["ready", "emulation-only", "unknown", "blocked"]
+        },
+        "availableArchitectures": {
+          "description": "Architectures the dependency is known to be published for.",
+          "type": "array",
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["x86", "x64", "arm", "arm64", "arm64ec", "any-cpu", "unknown"]
+          }
+        },
+        "replacementCandidates": {
+          "description": "Known ARM64-capable alternatives, if any.",
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 300}
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {"$ref": "#/$defs/Evidence"}
+        },
+        "confidence": {"$ref": "#/$defs/Confidence"}
+      }
+    },
+    "CodeFinding": {
+      "description": "One architecture-specific code pattern detected in source.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceId",
+        "ruleId",
+        "category",
+        "severity",
+        "file",
+        "description",
+        "evidence",
+        "confidence"
+      ],
+      "properties": {
+        "evidenceId": {"$ref": "#/$defs/EvidenceId"},
+        "ruleId": {
+          "description": "Stable rule identifier from the scanner (e.g. 'ARM-CODE-SIMD-01').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "category": {
+          "description": "Rule category (e.g. 'simd', 'inline-asm', 'p-invoke', 'pointer-size', 'concurrency', 'com-interop').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "severity": {
+          "description": "Impact classification driving prioritization.",
+          "enum": ["critical", "high", "medium", "low", "informational"]
+        },
+        "file": {
+          "description": "Repository-relative file path where the finding was observed.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "line": {
+          "description": "1-based line number, or null when the finding is file-scoped.",
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 2000000
+        },
+        "column": {
+          "description": "1-based column number, or null when unavailable.",
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "description": {
+          "description": "Short, human-readable description of the pattern.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {"$ref": "#/$defs/Evidence"}
+        },
+        "confidence": {"$ref": "#/$defs/Confidence"}
+      }
+    },
+    "BuildFindings": {
+      "description": "Build system and CI readiness signals aggregated across the repository.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceId",
+        "arm64TargetExists",
+        "arm64EcTargetExists",
+        "arm64CiJobExists",
+        "packagingSupportsArm64",
+        "testsExist",
+        "detectedTargets",
+        "evidence"
+      ],
+      "properties": {
+        "evidenceId": {"$ref": "#/$defs/EvidenceId"},
+        "arm64TargetExists": {
+          "description": "Whether at least one build target produces native ARM64 binaries.",
+          "type": "boolean"
+        },
+        "arm64EcTargetExists": {
+          "description": "Whether at least one build target produces Arm64EC binaries.",
+          "type": "boolean"
+        },
+        "arm64CiJobExists": {
+          "description": "Whether CI configuration includes an ARM64 or Arm64EC job.",
+          "type": "boolean"
+        },
+        "packagingSupportsArm64": {
+          "description": "Whether installer or packaging configuration produces an ARM64 artifact.",
+          "type": "boolean"
+        },
+        "testsExist": {
+          "description": "Whether any automated test suite exists in the repository.",
+          "type": "boolean"
+        },
+        "detectedTargets": {
+          "description": "Build targets or platforms detected in project files or CI (e.g. 'x64/Debug', 'ARM64/Release').",
+          "type": "array",
+          "maxItems": 500,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 200}
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 40,
+          "items": {"$ref": "#/$defs/Evidence"}
+        }
+      }
+    },
+    "WindowsExperience": {
+      "description": "Signals about how Windows-native the application currently is.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "windowsVersionExists",
+        "uiTechnology",
+        "installerExists",
+        "offlineCapable",
+        "accessibilityEvidence",
+        "notificationsIntegrated",
+        "lifecycleIntegrated",
+        "evidence"
+      ],
+      "properties": {
+        "windowsVersionExists": {
+          "description": "Whether the application already ships a Windows build.",
+          "type": "boolean"
+        },
+        "uiTechnology": {
+          "description": "Detected UI stack. Use 'other' when a known stack falls outside the enum; use 'unknown' when detection failed.",
+          "enum": [
+            "winui3",
+            "wpf",
+            "winforms",
+            "uwp",
+            "maui",
+            "xaml-islands",
+            "qt",
+            "gtk",
+            "electron",
+            "tauri",
+            "flutter",
+            "web",
+            "cli",
+            "none",
+            "other",
+            "unknown"
+          ]
+        },
+        "installerExists": {
+          "description": "Whether the repository produces a Windows installer or package.",
+          "type": "boolean"
+        },
+        "offlineCapable": {
+          "description": "Whether the application supports meaningful offline usage.",
+          "type": "boolean"
+        },
+        "accessibilityEvidence": {
+          "description": "Accessibility signal classification. 'none' = no accessibility affordances detected; 'partial' = some affordances; 'full' = comprehensive coverage; 'unknown' = not assessed.",
+          "enum": ["none", "partial", "full", "unknown"]
+        },
+        "accessibilityNotes": {
+          "description": "Optional free-form notes describing the specific accessibility signals detected.",
+          "type": ["string", "null"],
+          "maxLength": 2000
+        },
+        "notificationsIntegrated": {
+          "description": "Whether the application integrates with Windows notifications.",
+          "type": "boolean"
+        },
+        "lifecycleIntegrated": {
+          "description": "Whether the application integrates with Windows app lifecycle events (suspend, resume, background).",
+          "type": "boolean"
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 40,
+          "items": {"$ref": "#/$defs/Evidence"}
+        }
+      }
+    },
+    "ScanCoverage": {
+      "$comment": "filesScanned <= filesTotal is enforced by the evidence validator.",
+      "description": "Scanner completeness. Insufficient coverage marks the plan as provisional.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filesScanned",
+        "filesTotal",
+        "dependencyResolutionRate",
+        "scannersCompleted",
+        "scannersFailed"
+      ],
+      "properties": {
+        "filesScanned": {"type": "integer", "minimum": 0, "maximum": 100000000},
+        "filesTotal": {"type": "integer", "minimum": 0, "maximum": 100000000},
+        "dependencyResolutionRate": {
+          "description": "Fraction of declared dependencies whose ARM64 status could be classified (0.0 to 1.0).",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "scannersCompleted": {
+          "description": "Scanner identifiers that ran to completion.",
+          "type": "array",
+          "maxItems": 200,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 200}
+        },
+        "scannersFailed": {
+          "description": "Scanner identifiers that failed or timed out.",
+          "type": "array",
+          "maxItems": 200,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 200}
+        }
+      }
+    },
+    "Unknown": {
+      "description": "An explicit unresolved question the assessment could not answer. The planner surfaces these rather than guessing.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "area"],
+      "properties": {
+        "description": {
+          "description": "Concise description of the unresolved question.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "area": {
+          "description": "Which part of the assessment the unknown belongs to.",
+          "enum": [
+            "repository",
+            "technology",
+            "dependency",
+            "code",
+            "build",
+            "windows-experience",
+            "scan-coverage",
+            "other"
+          ]
+        },
+        "requiredSkill": {
+          "description": "Suggested skill name that could resolve this unknown, or null.",
+          "type": ["string", "null"],
+          "maxLength": 200
+        },
+        "evidenceIds": {
+          "description": "Optional links to related evidence records.",
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        }
+      }
+    },
+    "Skill": {
+      "description": "A reusable agent or skill available to the planner. Write-capable skills always require approval before execution.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "description",
+        "writeAccess",
+        "supportedInputs",
+        "supportedOutputs"
+      ],
+      "properties": {
+        "name": {
+          "description": "Kebab-case skill identifier, optionally namespaced with '/' (e.g. 'assessment/repository-discovery').",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$",
+          "maxLength": 128
+        },
+        "version": {"$ref": "#/$defs/SemanticVersion"},
+        "description": {
+          "description": "Short description of what the skill accepts and produces.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "writeAccess": {
+          "description": "true if this skill can modify a repository or execute non-read operations. Write-capable skills always require approval.",
+          "type": "boolean"
+        },
+        "supportedInputs": {
+          "description": "Named inputs the skill accepts.",
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 200}
+        },
+        "supportedOutputs": {
+          "description": "Named outputs the skill produces.",
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 200}
+        }
+      }
+    }
+  }
+}

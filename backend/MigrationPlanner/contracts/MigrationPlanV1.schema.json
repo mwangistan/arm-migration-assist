@@ -1,0 +1,714 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arm-migration-assist:schemas:MigrationPlanV1",
+  "title": "MigrationPlanV1",
+  "description": "Versioned migration plan produced by the AI Migration Planner (Feature 2) from a RepositoryAssessmentV1 + ReadinessScoreV1 pair. Cross-record rules that JSON Schema cannot express (evidenceId and guidanceId resolution, workItem dependency acyclicity, workItem.agentOrSkill resolution against availableSkills[] or missingSkills[], scoreDigest byte-identity against the deterministic scorer output, prohibition of manual-coding / mutation / execution / publishing instructions) are enforced by the plan validator. Format assertions (date-time, uri) must be explicitly enabled in the JSON Schema validator; the .NET planner enables strict format validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "planId",
+    "assessmentId",
+    "generatedAt",
+    "modelProvenance",
+    "scoreDigest",
+    "corpusVersion",
+    "recommendedPath",
+    "confidence",
+    "executiveSummary",
+    "scoreInterpretation",
+    "facts",
+    "inferences",
+    "alternatives",
+    "workItems",
+    "missingSkills",
+    "validationPlan",
+    "risks",
+    "unknowns",
+    "requiredApprovals",
+    "reusableOutputs"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "description": "Contract version tag. Accepts 1.x minor versions. Unsupported majors are rejected with a 409 Problem Details response.",
+      "type": "string",
+      "pattern": "^1\\.\\d{1,3}$",
+      "examples": ["1.0"]
+    },
+    "planId": {
+      "description": "Stable identifier for this plan artifact. Unique across all plans; the audit log ties runId to planId.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,64}$",
+      "maxLength": 64
+    },
+    "assessmentId": {
+      "description": "The RepositoryAssessmentV1.assessmentId this plan was produced from. Byte-identical match is enforced by the plan validator.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,64}$",
+      "maxLength": 64
+    },
+    "generatedAt": {
+      "description": "ISO 8601 / RFC 3339 UTC timestamp when the plan was produced.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "maxLength": 40
+    },
+    "modelProvenance": {
+      "description": "Which model produced this plan. Recorded in the audit log for reproducibility.",
+      "$ref": "#/$defs/ModelProvenance"
+    },
+    "scoreDigest": {
+      "$comment": "Byte-identity of the deterministic score is enforced by the plan validator, not by JSON Schema.",
+      "description": "Lowercase SHA-256 hex digest of the canonical JSON serialization of the ReadinessScoreV1 output. Guarantees the model did not alter the deterministic score.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "corpusVersion": {
+      "description": "corpusVersion of the WindowsOnArmGuidanceCorpusV1 in effect when the plan was produced. Every guidanceId cited by the plan resolves against this corpus.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}\\.\\d{1,3}$",
+      "examples": ["2026-09-15.1"]
+    },
+    "recommendedPath": {
+      "description": "The single migration path the planner recommends. 'insufficient-evidence' is required when the assessment is provisional or under-covered.",
+      "enum": [
+        "native-arm64",
+        "arm64ec",
+        "staged",
+        "winui3",
+        "insufficient-evidence"
+      ]
+    },
+    "confidence": {
+      "description": "Analyst confidence in the recommendation. Independent of the deterministic readiness score.",
+      "enum": ["high", "medium", "low"]
+    },
+    "executiveSummary": {
+      "description": "One- to three-paragraph plain-language summary for engineering leads.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "scoreInterpretation": {
+      "description": "Plain-language explanation of the deterministic score, including which dimensions drove it and which caps applied.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "facts": {
+      "description": "Statements the planner asserts as directly supported by evidence and/or grounded guidance. Never inferential.",
+      "type": "array",
+      "maxItems": 200,
+      "items": {"$ref": "#/$defs/Statement"}
+    },
+    "inferences": {
+      "description": "Statements the planner infers from evidence. Each carries its own confidence value.",
+      "type": "array",
+      "maxItems": 200,
+      "items": {"$ref": "#/$defs/Inference"}
+    },
+    "alternatives": {
+      "description": "All migration paths the planner considered, with disposition (rejected / deferred / viable) and rationale.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {"$ref": "#/$defs/Alternative"}
+    },
+    "workItems": {
+      "description": "Sequenced, dependency-aware work items. Every work item maps to a reusable agent or skill and requires approval.",
+      "type": "array",
+      "maxItems": 500,
+      "items": {"$ref": "#/$defs/WorkItem"}
+    },
+    "missingSkills": {
+      "description": "Skills the planner would have used but that are not present in RepositoryAssessmentV1.availableSkills. Surfacing gaps is required; hallucinating skills is not.",
+      "type": "array",
+      "maxItems": 100,
+      "items": {"$ref": "#/$defs/MissingSkill"}
+    },
+    "validationPlan": {
+      "description": "How the migrated application will be validated on Windows on Arm.",
+      "$ref": "#/$defs/ValidationPlan"
+    },
+    "risks": {
+      "description": "Migration risks with severity and mitigation guidance.",
+      "type": "array",
+      "maxItems": 200,
+      "items": {"$ref": "#/$defs/Risk"}
+    },
+    "unknowns": {
+      "description": "Explicit unresolved questions the plan surfaces rather than guessing at.",
+      "type": "array",
+      "maxItems": 200,
+      "items": {"$ref": "#/$defs/PlanUnknown"}
+    },
+    "requiredApprovals": {
+      "description": "Coarse-grained human approval gates. Every approval covers one or more workItems.",
+      "type": "array",
+      "maxItems": 200,
+      "items": {"$ref": "#/$defs/Approval"}
+    },
+    "reusableOutputs": {
+      "description": "Framework artifacts the next repository can inherit \u2014 the reusable value beyond the specific recommendation.",
+      "type": "array",
+      "maxItems": 100,
+      "items": {"$ref": "#/$defs/ReusableOutput"}
+    }
+  },
+  "$defs": {
+    "EvidenceId": {
+      "description": "References an evidence record in the source RepositoryAssessmentV1. Resolution is enforced by the plan validator.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,64}$",
+      "maxLength": 64
+    },
+    "GuidanceId": {
+      "description": "References a snippet in the Windows on Arm guidance corpus. Resolution against corpusVersion is enforced by the plan validator.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*-\\d{2,3}$",
+      "maxLength": 100
+    },
+    "SkillReference": {
+      "description": "Kebab-case skill identifier, optionally namespaced with '/'. Must exist in availableSkills[] on the source assessment or be declared in missingSkills[].",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$",
+      "maxLength": 128
+    },
+    "SemanticVersion": {
+      "description": "Semantic Versioning 2.0.0 string.",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+      "maxLength": 100
+    },
+    "Confidence": {
+      "description": "Analyst confidence in an inference on a 0.0 to 1.0 scale.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "ModelProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "name", "version"],
+      "properties": {
+        "provider": {
+          "description": "Model provider identifier (e.g. 'azure-openai', 'foundry', 'fake').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "name": {
+          "description": "Model name as exposed by the provider (e.g. 'gpt-4o-2024-11-20', 'fake-planner').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "version": {"$ref": "#/$defs/SemanticVersion"},
+        "temperature": {
+          "description": "Sampling temperature used, or null when the provider does not expose one.",
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 2
+        },
+        "promptDigest": {
+          "description": "SHA-256 hex digest of the exact prompt sent to the model. Optional; enables prompt reproducibility.",
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "Statement": {
+      "description": "A factual statement grounded in evidence and/or approved guidance.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement", "evidenceIds", "guidanceIds"],
+      "properties": {
+        "statement": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        },
+        "guidanceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/GuidanceId"}
+        }
+      }
+    },
+    "Inference": {
+      "description": "An inferential statement derived from evidence and/or guidance, carrying its own confidence.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement", "evidenceIds", "guidanceIds", "confidence"],
+      "properties": {
+        "statement": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        },
+        "guidanceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/GuidanceId"}
+        },
+        "confidence": {"$ref": "#/$defs/Confidence"}
+      }
+    },
+    "Alternative": {
+      "description": "One migration path the planner considered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "disposition", "rationale", "evidenceIds", "guidanceIds"],
+      "properties": {
+        "path": {
+          "enum": [
+            "native-arm64",
+            "arm64ec",
+            "staged",
+            "winui3",
+            "insufficient-evidence"
+          ]
+        },
+        "disposition": {
+          "enum": ["rejected", "deferred", "viable"]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        },
+        "guidanceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/GuidanceId"}
+        }
+      }
+    },
+    "WorkItem": {
+      "description": "One sequenced, evidence-linked, skill-mapped, approval-gated unit of work.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sequence",
+        "priority",
+        "title",
+        "objective",
+        "agentOrSkill",
+        "inputs",
+        "expectedOutputs",
+        "dependencies",
+        "evidenceIds",
+        "guidanceIds",
+        "acceptanceTests",
+        "approvalRequired",
+        "estimatedEffort",
+        "risk"
+      ],
+      "properties": {
+        "id": {
+          "description": "Stable work item identifier. Kebab-case with 'wi-' prefix.",
+          "type": "string",
+          "pattern": "^wi-[a-z0-9-]{2,60}$",
+          "maxLength": 64
+        },
+        "sequence": {
+          "description": "Ordering hint within the plan (1-based, monotonic). Ties are broken by id.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "priority": {
+          "enum": ["P0", "P1", "P2"]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500
+        },
+        "agentOrSkill": {"$ref": "#/$defs/SkillReference"},
+        "inputs": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 200}
+        },
+        "expectedOutputs": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 200}
+        },
+        "dependencies": {
+          "description": "Ids of other work items that must complete before this one starts. Acyclicity is enforced by the plan validator.",
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^wi-[a-z0-9-]{2,60}$",
+            "maxLength": 64
+          }
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        },
+        "guidanceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/GuidanceId"}
+        },
+        "acceptanceTests": {
+          "description": "Concrete checks that must pass before this work item is considered done.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {"$ref": "#/$defs/AcceptanceTest"}
+        },
+        "approvalRequired": {
+          "$comment": "Schema-enforced safety rule: every work item requires human approval before a write-capable skill runs.",
+          "const": true
+        },
+        "estimatedEffort": {
+          "enum": ["small", "medium", "large", "unknown"]
+        },
+        "risk": {
+          "enum": ["low", "medium", "high", "critical"]
+        }
+      }
+    },
+    "AcceptanceTest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "expectedOutcome"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^at-[a-z0-9-]{2,60}$",
+          "maxLength": 64
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "expectedOutcome": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        },
+        "guidanceIds": {
+          "type": "array",
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/GuidanceId"}
+        }
+      }
+    },
+    "MissingSkill": {
+      "description": "A skill the planner would use but which the assessment did not declare available.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "proposedName",
+        "purpose",
+        "requiredInputs",
+        "expectedOutputs",
+        "justification",
+        "evidenceIds"
+      ],
+      "properties": {
+        "proposedName": {"$ref": "#/$defs/SkillReference"},
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "requiredInputs": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 200}
+        },
+        "expectedOutputs": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 200}
+        },
+        "justification": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        },
+        "writeAccess": {
+          "description": "true if the proposed skill would need write access to the repository or execution surface.",
+          "type": "boolean"
+        }
+      }
+    },
+    "ValidationPlan": {
+      "description": "How the migration will be validated on Windows on Arm hardware and in CI.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetDevices",
+        "buildChecks",
+        "functionalChecks",
+        "reliabilityChecks",
+        "performanceChecks",
+        "powerChecks",
+        "offlineChecks",
+        "accessibilityChecks",
+        "windowsExperienceChecks"
+      ],
+      "properties": {
+        "targetDevices": {
+          "description": "Which device classes the validation will run on.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "snapdragon-x-series",
+              "nvidia-rtx-spark",
+              "arm64-vm",
+              "arm64-generic-hardware",
+              "x64-baseline-for-comparison",
+              "other"
+            ]
+          }
+        },
+        "buildChecks": {"$ref": "#/$defs/CheckList"},
+        "functionalChecks": {"$ref": "#/$defs/CheckList"},
+        "reliabilityChecks": {"$ref": "#/$defs/CheckList"},
+        "performanceChecks": {"$ref": "#/$defs/CheckList"},
+        "powerChecks": {"$ref": "#/$defs/CheckList"},
+        "offlineChecks": {"$ref": "#/$defs/CheckList"},
+        "accessibilityChecks": {"$ref": "#/$defs/CheckList"},
+        "windowsExperienceChecks": {"$ref": "#/$defs/CheckList"}
+      }
+    },
+    "CheckList": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {"$ref": "#/$defs/ValidationCheck"}
+    },
+    "ValidationCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "expectedOutcome"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^vc-[a-z0-9-]{2,60}$",
+          "maxLength": 64
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "expectedOutcome": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        },
+        "guidanceIds": {
+          "type": "array",
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/GuidanceId"}
+        }
+      }
+    },
+    "Risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "severity", "mitigation", "evidenceIds"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^rk-[a-z0-9-]{2,60}$",
+          "maxLength": 64
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "severity": {
+          "enum": ["low", "medium", "high", "critical"]
+        },
+        "mitigation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        },
+        "guidanceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/GuidanceId"}
+        }
+      }
+    },
+    "PlanUnknown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^uk-[a-z0-9-]{2,60}$",
+          "maxLength": 64
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "requiredSkill": {
+          "description": "Suggested read-only skill that could resolve this unknown, or null.",
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/SkillReference"}
+          ]
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        }
+      }
+    },
+    "Approval": {
+      "description": "A coarse-grained human approval gate that covers one or more workItems.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approvalId", "summary", "workItemIds"],
+      "properties": {
+        "approvalId": {
+          "type": "string",
+          "pattern": "^ap-[a-z0-9-]{2,60}$",
+          "maxLength": 64
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "workItemIds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^wi-[a-z0-9-]{2,60}$",
+            "maxLength": 64
+          }
+        }
+      }
+    },
+    "ReusableOutput": {
+      "description": "A reusable artifact this plan produces or proposes. This is the framework value beyond the one-off recommendation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "description"],
+      "properties": {
+        "name": {
+          "description": "Kebab-case identifier of the reusable artifact.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$",
+          "maxLength": 128
+        },
+        "kind": {
+          "enum": [
+            "schema",
+            "skill",
+            "corpus-snippet",
+            "fixture",
+            "template",
+            "prompt",
+            "report",
+            "other"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "artifactRef": {
+          "description": "Optional repository-relative path or URI for the artifact.",
+          "type": ["string", "null"],
+          "maxLength": 500
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        }
+      }
+    }
+  }
+}
