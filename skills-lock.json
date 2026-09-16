@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "codeblend-ai-composite": {
+      "source": "gim-home/CodeBlend",
+      "sourceType": "github",
+      "skillPath": "skills/codeblend-ai-composite/SKILL.md",
+      "computedHash": "360597b808b0297d275bd8b51f2146e2c059f7cb6ea48319bb3312f583fa6391"
+    }
+  }
+}
