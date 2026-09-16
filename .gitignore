@@ -1,0 +1,24 @@
+# Build output
+bin/
+obj/
+
+# Cloned repositories / analysis workspaces (runtime artifacts)
+workspaces/
+.arm-ma/
+.test-output/
+publish/
+publish_*/
+publish-path.txt
+
+# Component-detection tool (downloaded, ~80 MB - do not commit). See tools/README.md.
+tools/component-detection*
+tools/_extract/
+tools/_sample/
+tools/_sample_manifest.json
+
+# User-specific
+*.user
+.vs/
+
+# Local assessment output
+*.v1.json
