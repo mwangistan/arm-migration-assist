@@ -1,16 +1,29 @@
+using System.Reflection;
 using ArmMigrationAssist.RepositoryDiscovery.Models;
 using ArmMigrationAssist.RepositoryDiscovery.Scanning;
-using System.Reflection;
 
 namespace ArmMigrationAssist.RepositoryDiscovery;
 
 public sealed class RepositoryDiscoveryService
 {
-    private static readonly string ProducerVersion =
-        typeof(RepositoryDiscoveryService).Assembly
+    private static readonly string ProducerVersion = ResolveProducerVersion();
+
+    private static string ResolveProducerVersion()
+    {
+        var assembly = typeof(RepositoryDiscoveryService).Assembly;
+        var informationalVersion = assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion
-        ?? "1.0.0";
+            .InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(informationalVersion))
+        {
+            return informationalVersion;
+        }
+
+        var assemblyVersion = assembly.GetName().Version;
+        return assemblyVersion is null
+            ? "1.0.0"
+            : $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{Math.Max(assemblyVersion.Build, 0)}";
+    }
 
     public async Task<RepositoryAssessment> DiscoverAsync(
         string source,

@@ -223,6 +223,45 @@ public sealed class RepositoryDiscoveryServiceTests
             unknown => unknown.Area == "scan-coverage" && unknown.Description.StartsWith("1 tracked file", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task DiscoverAsync_ExtractsCleanVisualCppProjectConfigurationTargets()
+    {
+        using var repository = TestRepository.Create();
+        repository.WriteTrackedFile("native.vcxproj",
+            """
+            <Project>
+              <ItemGroup Label="ProjectConfigurations">
+                <ProjectConfiguration Include="Debug|x64">
+                  <Configuration>Debug</Configuration>
+                  <Platform>x64</Platform>
+                </ProjectConfiguration>
+              </ItemGroup>
+            </Project>
+            """);
+        repository.CommitChanges("add Visual C++ fixture");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.Contains("Debug|x64", assessment.BuildFindings.DetectedTargets);
+        Assert.DoesNotContain(
+            assessment.BuildFindings.DetectedTargets,
+            target => target.Any(char.IsWhiteSpace));
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_ReportsMissingTrackedFileAsUnscannedCoverage()
+    {
+        using var repository = TestRepository.Create();
+        repository.HideAndDeleteTrackedFile("Program.cs");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.Equal(assessment.ScanCoverage.FilesTotal - 1, assessment.ScanCoverage.FilesScanned);
+        Assert.Contains(
+            assessment.Unknowns,
+            unknown => unknown.Area == "scan-coverage" && unknown.Description.StartsWith("1 tracked file", StringComparison.Ordinal));
+    }
+
     private sealed class TestRepository : IDisposable
     {
         private TestRepository(string path)
@@ -301,6 +340,12 @@ public sealed class RepositoryDiscoveryServiceTests
         {
             RunGit(Path, "add", ".");
             RunGit(Path, "commit", "-m", message);
+        }
+
+        public void HideAndDeleteTrackedFile(string relativePath)
+        {
+            RunGit(Path, "update-index", "--assume-unchanged", "--", relativePath);
+            File.Delete(System.IO.Path.Combine(Path, relativePath));
         }
 
         private static void RunGit(string workingDirectory, params string[] arguments)

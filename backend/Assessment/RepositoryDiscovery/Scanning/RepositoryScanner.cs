@@ -556,7 +556,7 @@ internal sealed partial class RepositoryScanner
         {
             var targetElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "RuntimeIdentifier", "RuntimeIdentifiers", "Platform", "Platforms", "PlatformTarget", "ProjectConfiguration",
+                "RuntimeIdentifier", "RuntimeIdentifiers", "Platform", "Platforms", "PlatformTarget",
             };
             foreach (var value in document.Descendants()
                          .Where(element => targetElements.Contains(element.Name.LocalName))

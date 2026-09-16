@@ -130,7 +130,17 @@ internal sealed record RepositoryFileCatalog(
         foreach (var segment in relativePath.Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
             current = Path.Combine(current, segment);
-            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            FileAttributes attributes;
+            try
+            {
+                attributes = File.GetAttributes(current);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
             {
                 return false;
             }
