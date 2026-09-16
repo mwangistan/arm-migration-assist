@@ -1,0 +1,353 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arm-migration-assist:schemas:ReadinessScoreV1",
+  "title": "ReadinessScoreV1",
+  "description": "Deterministic Windows on Arm readiness score produced by the ARM Migration Assist scorer (Feature 2). Consumed by the AI Migration Planner as read-only input. The MigrationPlanV1.scoreDigest field is the lowercase SHA-256 of the canonical JSON serialization (RFC 8785 JCS) of this document; canonicalization is how tampering is detected. Cross-record rules JSON Schema cannot express (dimension weightPct summing to 100, uncapped >= final, cap ceiling honoured, evidenceId resolution against the source assessment, presence of all five dimension keys) are enforced by the scorer and by the plan validator.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "assessmentId",
+    "generatedAt",
+    "producer",
+    "overallScore",
+    "uncappedScore",
+    "band",
+    "confidence",
+    "confidenceScore",
+    "provisional",
+    "provisionalReasons",
+    "dimensions",
+    "capsApplied",
+    "majorBlockers",
+    "rationaleCodes",
+    "evidenceIds"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "description": "Contract version tag. Accepts 1.x minor versions. Unsupported majors are rejected.",
+      "type": "string",
+      "pattern": "^1\\.\\d{1,3}$",
+      "examples": ["1.0"]
+    },
+    "assessmentId": {
+      "description": "The RepositoryAssessmentV1.assessmentId this score was produced from. Byte-identical match is enforced by the plan validator.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,64}$",
+      "maxLength": 64
+    },
+    "generatedAt": {
+      "description": "ISO 8601 / RFC 3339 UTC timestamp when the score was produced.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "maxLength": 40
+    },
+    "producer": {
+      "description": "Metadata about the scorer that produced this document. Recorded in the audit log for reproducibility.",
+      "$ref": "#/$defs/Producer"
+    },
+    "overallScore": {
+      "description": "Final readiness score after caps and deductions, in the closed interval [0, 100].",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "uncappedScore": {
+      "$comment": "overallScore <= uncappedScore is enforced by the scorer and validator, not by JSON Schema.",
+      "description": "Weighted sum before caps are applied. Equal to overallScore when no cap fires.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "band": {
+      "description": "Banded readiness classification. 'insufficient-evidence' is required when provisional AND coverage is too low to place a band.",
+      "enum": [
+        "ready-or-minor-changes",
+        "moderate-migration",
+        "significant-remediation",
+        "blocked-or-major-redesign",
+        "insufficient-evidence"
+      ]
+    },
+    "confidence": {
+      "description": "Banded confidence label, independent of readiness.",
+      "enum": ["high", "medium", "low"]
+    },
+    "confidenceScore": {
+      "$comment": "Numeric precision should stay at 2 decimal places for canonicalization stability.",
+      "description": "Raw confidence in the closed interval [0.0, 1.0] before banding.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "provisional": {
+      "description": "true when scan coverage or scanner failures prevent a fully-supported readiness call.",
+      "type": "boolean"
+    },
+    "provisionalReasons": {
+      "description": "Zero or more reasons why the score is provisional. Empty when provisional is false.",
+      "type": "array",
+      "maxItems": 10,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/ProvisionalReason"}
+    },
+    "dimensions": {
+      "$comment": "Cross-record rules: exactly one entry per dimensionKey; sum of weightPct = 100; sum of weightedContribution approximates uncappedScore.",
+      "description": "Per-dimension breakdown. Exactly five entries, one per DimensionKey.",
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {"$ref": "#/$defs/DimensionScore"}
+    },
+    "capsApplied": {
+      "description": "Blocker caps that fired, in order of application. Empty when no cap fired.",
+      "type": "array",
+      "maxItems": 5,
+      "items": {"$ref": "#/$defs/CapApplication"}
+    },
+    "majorBlockers": {
+      "description": "Named blockers that the score exposes for the planner to reason over.",
+      "type": "array",
+      "maxItems": 50,
+      "items": {"$ref": "#/$defs/MajorBlocker"}
+    },
+    "rationaleCodes": {
+      "description": "Aggregate rationale codes emitted by the scorer, deduplicated across dimensions.",
+      "type": "array",
+      "maxItems": 500,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/RationaleCode"}
+    },
+    "evidenceIds": {
+      "description": "All evidence IDs the scorer touched, deduplicated. The plan validator uses this list to check that every evidenceId in the plan is drawn from evidence the scorer actually observed.",
+      "type": "array",
+      "maxItems": 5000,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/EvidenceId"}
+    }
+  },
+  "$defs": {
+    "EvidenceId": {
+      "description": "References an evidence record in the source RepositoryAssessmentV1. Resolution is enforced by the evidence validator.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{3,64}$",
+      "maxLength": 64
+    },
+    "SemanticVersion": {
+      "description": "Semantic Versioning 2.0.0 string.",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+      "maxLength": 100
+    },
+    "RationaleCode": {
+      "description": "Structured rationale code (e.g. 'DEP-BLOCKED-torch', 'CODE-CRIT-ARM-CODE-SIMD-01', 'BUILD-NO-ARM64').",
+      "type": "string",
+      "pattern": "^[A-Z]{2,10}(-[A-Za-z0-9]+){1,10}$",
+      "maxLength": 200
+    },
+    "DimensionKey": {
+      "description": "Closed enum of the five scored dimensions.",
+      "enum": [
+        "dependency-compatibility",
+        "code-compatibility",
+        "build-and-ci-readiness",
+        "runtime-and-validation-evidence",
+        "windows-experience-and-deployment"
+      ]
+    },
+    "ProvisionalReason": {
+      "description": "Why the score is provisional.",
+      "enum": [
+        "scan-coverage-low",
+        "dependency-resolution-low",
+        "scanner-failed",
+        "dimension-missing-evidence",
+        "insufficient-signals",
+        "other"
+      ]
+    },
+    "CapId": {
+      "description": "Closed enum of known blocker caps.",
+      "enum": [
+        "required-unsupported-driver-le-30",
+        "required-x64-only-native-le-40",
+        "no-arm64-or-arm64ec-target-le-60"
+      ]
+    },
+    "BlockerCategory": {
+      "description": "Which subsystem a major blocker belongs to.",
+      "enum": [
+        "dependency",
+        "code",
+        "build",
+        "runtime",
+        "windows",
+        "coverage"
+      ]
+    },
+    "Producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "ruleset"],
+      "properties": {
+        "name": {
+          "description": "Scorer identifier (e.g. 'arm-migration-assist-scorer').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "version": {"$ref": "#/$defs/SemanticVersion"},
+        "ruleset": {
+          "description": "Scoring ruleset identifier (weights + deductions + cap thresholds) in effect. Must be stable per corpus/ruleset revision.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "DimensionScore": {
+      "description": "Score for one of the five dimensions.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dimensionKey",
+        "weightPct",
+        "rawScore",
+        "weightedContribution",
+        "deductions",
+        "confidence",
+        "rationaleCodes",
+        "evidenceIds"
+      ],
+      "properties": {
+        "dimensionKey": {"$ref": "#/$defs/DimensionKey"},
+        "weightPct": {
+          "$comment": "Sum of weightPct across all five dimensions must be 100. Enforced by the scorer/validator.",
+          "description": "Percentage weight this dimension contributes to the uncapped score.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "rawScore": {
+          "description": "Dimension raw score after per-dimension formula and deductions, in [0, 100].",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "weightedContribution": {
+          "description": "rawScore * weightPct / 100. Two decimal places recommended for canonicalization.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "deductions": {
+          "description": "Deductions applied to reach rawScore.",
+          "type": "array",
+          "maxItems": 100,
+          "items": {"$ref": "#/$defs/Deduction"}
+        },
+        "confidence": {
+          "description": "Dimension confidence in [0.0, 1.0]. Rolled up (weighted mean) into top-level confidenceScore.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "rationaleCodes": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/RationaleCode"}
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 500,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        }
+      }
+    },
+    "Deduction": {
+      "description": "One deduction applied while computing a dimension's raw score.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "magnitude", "description", "evidenceIds"],
+      "properties": {
+        "code": {"$ref": "#/$defs/RationaleCode"},
+        "magnitude": {
+          "description": "Points subtracted (non-negative). Applied to the dimension's raw score.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "evidenceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        }
+      }
+    },
+    "CapApplication": {
+      "$comment": "overallScore <= ceiling is enforced by the scorer/validator.",
+      "description": "One blocker cap that fired.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capId", "ceiling", "description", "triggeredBy"],
+      "properties": {
+        "capId": {"$ref": "#/$defs/CapId"},
+        "ceiling": {
+          "description": "Maximum final score allowed by this cap.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "triggeredBy": {
+          "description": "Evidence IDs that caused this cap to fire.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        }
+      }
+    },
+    "MajorBlocker": {
+      "description": "Named blocker exposed to the planner as a first-class citizen for reasoning and reporting.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockerId", "category", "description", "evidenceIds"],
+      "properties": {
+        "blockerId": {
+          "description": "Kebab-case identifier stable across runs (e.g. 'blocker-torch-x64-only').",
+          "type": "string",
+          "pattern": "^bl-[a-z0-9-]{2,80}$",
+          "maxLength": 100
+        },
+        "category": {"$ref": "#/$defs/BlockerCategory"},
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "evidenceIds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/EvidenceId"}
+        }
+      }
+    }
+  }
+}

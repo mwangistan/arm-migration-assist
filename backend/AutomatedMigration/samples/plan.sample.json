@@ -1,0 +1,175 @@
+{
+  "schemaVersion": "1.0",
+  "planId": "plan-openwebui-arm64-001",
+  "assessmentId": "assess-openwebui-001",
+  "generatedAt": "2026-09-16T12:00:00Z",
+  "modelProvenance": {
+    "provider": "fake",
+    "name": "fake-planner",
+    "version": "1.0.0",
+    "temperature": null,
+    "promptDigest": null
+  },
+  "scoreDigest": "9f8e7d6c5b4a39281706f5e4d3c2b1a0998877665544332211ffeeddccbbaa00",
+  "corpusVersion": "2026-09-15.1",
+  "recommendedPath": "native-arm64",
+  "confidence": "medium",
+  "executiveSummary": "Open WebUI is a Python + Docker web application. There is no native/compiled code to port; ARM64 readiness is a matter of building the container for linux/arm64 and confirming native Python wheels resolve. Recommended path is a native ARM64 container build.",
+  "scoreInterpretation": "The score is driven by the dependency and build dimensions. No architecture-specific source code was found, so the code dimension did not cap the score.",
+  "facts": [
+    {
+      "statement": "The repository ships a Dockerfile and targets container deployment.",
+      "evidenceIds": ["ev-dockerfile-001"],
+      "guidanceIds": []
+    }
+  ],
+  "inferences": [],
+  "alternatives": [
+    {
+      "path": "staged",
+      "disposition": "deferred",
+      "rationale": "A native arm64 container build is straightforward, so a staged path is not needed for the core migration.",
+      "evidenceIds": [],
+      "guidanceIds": []
+    }
+  ],
+  "workItems": [
+    {
+      "id": "wi-dockerfile-arm64",
+      "sequence": 1,
+      "priority": "P0",
+      "title": "Add ARM64 build target to Dockerfile",
+      "objective": "Ensure the container image builds for linux/arm64 by adding an explicit platform to the base image.",
+      "agentOrSkill": "build-config-generator",
+      "inputs": ["Dockerfile"],
+      "expectedOutputs": ["Unified diff adding --platform=linux/arm64 to the Dockerfile FROM line"],
+      "dependencies": [],
+      "evidenceIds": ["ev-dockerfile-001"],
+      "guidanceIds": ["woa-container-arm64-01"],
+      "acceptanceTests": [
+        {
+          "id": "at-buildx-arm64",
+          "description": "docker buildx build --platform linux/arm64 completes",
+          "expectedOutcome": "Image builds successfully for arm64"
+        }
+      ],
+      "approvalRequired": true,
+      "estimatedEffort": "small",
+      "risk": "low"
+    },
+    {
+      "id": "wi-ci-arm64",
+      "sequence": 2,
+      "priority": "P1",
+      "title": "Add ARM64 CI build job",
+      "objective": "Add a CI job that builds the arm64 container so regressions are caught.",
+      "agentOrSkill": "ci-pipeline-generator",
+      "inputs": [".github/workflows"],
+      "expectedOutputs": ["New GitHub Actions workflow building linux/arm64"],
+      "dependencies": ["wi-dockerfile-arm64"],
+      "evidenceIds": ["ev-ci-001"],
+      "guidanceIds": ["woa-ci-arm64-02"],
+      "acceptanceTests": [
+        {
+          "id": "at-ci-job-present",
+          "description": "Workflow contains an arm64 build job",
+          "expectedOutcome": "CI runs docker buildx for linux/arm64"
+        }
+      ],
+      "approvalRequired": true,
+      "estimatedEffort": "small",
+      "risk": "low"
+    },
+    {
+      "id": "wi-csproj-arm64",
+      "sequence": 3,
+      "priority": "P0",
+      "title": "Add win-arm64 runtime identifier to the .NET project",
+      "objective": "Ensure the .NET project can build and publish for Windows on Arm.",
+      "agentOrSkill": "build-config-generator",
+      "inputs": ["src/App.csproj"],
+      "expectedOutputs": ["Diff enabling a Windows on Arm build for the project"],
+      "dependencies": [],
+      "evidenceIds": ["ev-csproj-001"],
+      "guidanceIds": ["woa-dotnet-rid-03"],
+      "acceptanceTests": [
+        {
+          "id": "at-dotnet-arm64",
+          "description": "dotnet publish -r win-arm64 succeeds",
+          "expectedOutcome": "Project publishes for win-arm64"
+        }
+      ],
+      "approvalRequired": true,
+      "estimatedEffort": "small",
+      "risk": "low"
+    },
+    {
+      "id": "wi-vcxproj-arm64",
+      "sequence": 4,
+      "priority": "P0",
+      "title": "Add ARM64 build configurations to the native project",
+      "objective": "Ensure the native C++ project offers ARM64 Debug and Release configurations.",
+      "agentOrSkill": "build-config-generator",
+      "inputs": ["native/App.vcxproj"],
+      "expectedOutputs": ["Diff adding ARM64 project configurations"],
+      "dependencies": [],
+      "evidenceIds": ["ev-vcxproj-001"],
+      "guidanceIds": ["woa-native-arm64-04"],
+      "acceptanceTests": [
+        {
+          "id": "at-msbuild-arm64",
+          "description": "msbuild /p:Platform=ARM64 succeeds",
+          "expectedOutcome": "Project builds for ARM64"
+        }
+      ],
+      "approvalRequired": true,
+      "estimatedEffort": "medium",
+      "risk": "medium"
+    },
+    {
+      "id": "wi-ci-dotnet",
+      "sequence": 5,
+      "priority": "P1",
+      "title": "Add ARM64 CI build job for the .NET project",
+      "objective": "Add a CI job that builds and tests the win-arm64 project.",
+      "agentOrSkill": "ci-pipeline-generator",
+      "inputs": [".github/workflows"],
+      "expectedOutputs": ["New GitHub Actions workflow building win-arm64"],
+      "dependencies": ["wi-csproj-arm64"],
+      "evidenceIds": ["ev-ci-002"],
+      "guidanceIds": ["woa-ci-arm64-02"],
+      "acceptanceTests": [
+        {
+          "id": "at-ci-dotnet",
+          "description": "Workflow builds and tests win-arm64",
+          "expectedOutcome": "CI runs dotnet build and test for win-arm64"
+        }
+      ],
+      "approvalRequired": true,
+      "estimatedEffort": "small",
+      "risk": "low"
+    }
+  ],
+  "missingSkills": [],
+  "validationPlan": {
+    "targetDevices": ["arm64-vm"],
+    "buildChecks": [],
+    "functionalChecks": [],
+    "reliabilityChecks": [],
+    "performanceChecks": [],
+    "powerChecks": [],
+    "offlineChecks": [],
+    "accessibilityChecks": [],
+    "windowsExperienceChecks": []
+  },
+  "risks": [],
+  "unknowns": [],
+  "requiredApprovals": [
+    {
+      "approvalId": "ap-arm64-build",
+      "summary": "Approve ARM64 build and CI changes",
+      "workItemIds": ["wi-dockerfile-arm64", "wi-ci-arm64", "wi-csproj-arm64", "wi-vcxproj-arm64", "wi-ci-dotnet"]
+    }
+  ],
+  "reusableOutputs": []
+}
