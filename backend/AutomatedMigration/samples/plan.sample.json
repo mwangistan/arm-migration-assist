@@ -125,6 +125,29 @@
       "approvalRequired": true,
       "estimatedEffort": "medium",
       "risk": "medium"
+    },
+    {
+      "id": "wi-ci-dotnet",
+      "sequence": 5,
+      "priority": "P1",
+      "title": "Add ARM64 CI build job for the .NET project",
+      "objective": "Add a CI job that builds and tests the win-arm64 project.",
+      "agentOrSkill": "ci-pipeline-generator",
+      "inputs": [".github/workflows"],
+      "expectedOutputs": ["New GitHub Actions workflow building win-arm64"],
+      "dependencies": ["wi-csproj-arm64"],
+      "evidenceIds": ["ev-ci-002"],
+      "guidanceIds": ["woa-ci-arm64-02"],
+      "acceptanceTests": [
+        {
+          "id": "at-ci-dotnet",
+          "description": "Workflow builds and tests win-arm64",
+          "expectedOutcome": "CI runs dotnet build and test for win-arm64"
+        }
+      ],
+      "approvalRequired": true,
+      "estimatedEffort": "small",
+      "risk": "low"
     }
   ],
   "missingSkills": [],
@@ -145,7 +168,7 @@
     {
       "approvalId": "ap-arm64-build",
       "summary": "Approve ARM64 build and CI changes",
-      "workItemIds": ["wi-dockerfile-arm64", "wi-ci-arm64", "wi-csproj-arm64", "wi-vcxproj-arm64"]
+      "workItemIds": ["wi-dockerfile-arm64", "wi-ci-arm64", "wi-csproj-arm64", "wi-vcxproj-arm64", "wi-ci-dotnet"]
     }
   ],
   "reusableOutputs": []

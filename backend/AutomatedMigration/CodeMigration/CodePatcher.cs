@@ -8,5 +8,5 @@ namespace AutomatedMigration.CodeMigration;
 // null. A native (C/C++) work item is where this generator earns its keep.
 public sealed class CodePatcher : IMigrationGenerator
 {
-    public GeneratedPatch? Generate(WorkItem workItem, string repoPath) => null;
+    public GeneratedPatch? Generate(WorkItem workItem, MigrationContext context) => null;
 }

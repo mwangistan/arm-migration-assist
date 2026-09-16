@@ -27,6 +27,10 @@ var plan = JsonSerializer.Deserialize<MigrationPlan>(json, new JsonSerializerOpt
     PropertyNameCaseInsensitive = true,
 }) ?? throw new InvalidOperationException($"Could not parse migration plan: {planPath}");
 
+var context = new MigrationContext(
+    repoPath,
+    plan.WorkItems.ToDictionary(w => w.Id, StringComparer.Ordinal));
+
 var ours = plan.WorkItems
     .Where(w => generators.ContainsKey(w.AgentOrSkill))
     .OrderBy(w => w.Sequence)
@@ -45,7 +49,7 @@ Console.WriteLine($"Found {ours.Count} work item(s) for Feature 3.\n");
 foreach (var item in ours)
 {
     Console.WriteLine($"[{item.Sequence}] {item.Id} -> {item.AgentOrSkill}: {item.Title}");
-    var patch = generators[item.AgentOrSkill].Generate(item, repoPath);
+    var patch = generators[item.AgentOrSkill].Generate(item, context);
     if (patch is null)
     {
         Console.WriteLine("    no change produced\n");

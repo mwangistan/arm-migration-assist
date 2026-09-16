@@ -9,10 +9,10 @@ namespace AutomatedMigration.BuildConfiguration;
 // rule; an unsupported one returns null (no guessing).
 public sealed class BuildConfigGenerator : IMigrationGenerator
 {
-    public GeneratedPatch? Generate(WorkItem workItem, string repoPath)
+    public GeneratedPatch? Generate(WorkItem workItem, MigrationContext context)
     {
         var target = workItem.Inputs?.FirstOrDefault() ?? "Dockerfile";
-        var full = Path.Combine(repoPath, target);
+        var full = Path.Combine(context.RepoPath, target);
         if (!File.Exists(full))
             return null;
 
