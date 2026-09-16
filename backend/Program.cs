@@ -6,17 +6,22 @@ using ArmMigrationAssist.Api.Assessment.Contract;
 using ArmMigrationAssist.Api.Assessment.DependencyScanner;
 using ArmMigrationAssist.Api.Assessment.RepositoryDiscovery;
 
-var builder = WebApplication.CreateBuilder(new WebApplicationOptions
-{
-    Args = args,
-    WebRootPath = ResolveWebRootPath()
-});
+var builder = WebApplication.CreateBuilder(args);
+var frontendOrigins = builder.Configuration.GetSection("FrontendOrigins").Get<string[]>() ?? [];
 
 // Add services to the container.
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        if (frontendOrigins.Length > 0)
+            policy.WithOrigins(frontendOrigins).AllowAnyHeader().AllowAnyMethod();
+    });
+});
 
 // Feature 1 - Repository Assessment Engine (deterministic scanners, no AI).
 builder.Services.AddScoped<RepositoryIngestionService>();
@@ -64,21 +69,9 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseDefaultFiles();
-app.UseStaticFiles();
-
+app.UseCors("Frontend");
 app.UseAuthorization();
 
 app.MapControllers();
 
 app.Run();
-
-static string ResolveWebRootPath()
-{
-    var sourceFrontend = Path.GetFullPath(
-        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "frontend"));
-
-    return Directory.Exists(sourceFrontend)
-        ? sourceFrontend
-        : Path.Combine(AppContext.BaseDirectory, "wwwroot");
-}

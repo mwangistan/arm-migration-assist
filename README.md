@@ -8,7 +8,7 @@ discovers repository technologies, dependencies, binaries, build signals, and
 architecture-sensitive source code. The result is a deterministic JSON
 document conforming to
 [`RepositoryAssessmentV1.schema.json`](backend/RepositoryAssessmentV1.schema.json),
-plus a browser dashboard and printable report.
+plus a standalone React dashboard and printable report.
 
 > **Feature boundary:** this project reports measured facts. It does not
 > invent a readiness score, select a migration strategy, estimate effort, or
@@ -86,10 +86,10 @@ Each skill contributes facts to a shared `ReadinessManifest`. The
 ## Architecture
 
 ```text
-Browser / CLI / API client
+React frontend / CLI / API client
           |
           v
-   POST /assess
+ .NET API: POST /assess
           |
           v
 RepositoryIngestionService
@@ -134,6 +134,7 @@ planner may explain and prioritize these facts, but it should not replace them.
 - Windows 10 or Windows 11
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - Git
+- Node.js 20.19 or newer
 - Network access to public GitHub repositories
 - Access to the configured package proxies
 - Optional: Microsoft
@@ -148,16 +149,26 @@ From the repository root:
 
 ```powershell
 dotnet restore .\ArmMigrationAssist.slnx
-dotnet run --project .\backend
+dotnet run --project .\backend\ArmMigrationAssist.Api.csproj
 ```
 
-Open:
+In a second terminal:
+
+```powershell
+cd .\frontend
+npm install
+npm run dev
+```
+
+Open the React frontend:
 
 ```text
-http://localhost:5285
+http://localhost:5173
 ```
 
-The application serves both the static dashboard and the assessment API.
+The backend API listens on `http://localhost:5285`. Vite proxies `/assess` to
+that API during local development. For an independently hosted frontend, set
+`VITE_API_BASE_URL` to the backend origin before building.
 
 ### Optional short workspace path
 
@@ -168,7 +179,7 @@ writable workspace:
 
 ```powershell
 $env:ARM_MIGRATION_WORKSPACE_ROOT = "C:\arm-ma"
-dotnet run --project .\backend
+dotnet run --project .\backend\ArmMigrationAssist.Api.csproj
 ```
 
 ## Using the dashboard
@@ -467,7 +478,7 @@ The scanner does not fall back directly to `api.nuget.org`.
 Run all tests:
 
 ```powershell
-dotnet test .\tests\ArmMigrationAssist.Tests\ArmMigrationAssist.Tests.csproj
+dotnet test .\tests\Assessment\ArmMigrationAssist.Tests.csproj
 ```
 
 The suite covers:
@@ -568,10 +579,15 @@ Feature 2 should not reinterpret an unknown as ready without new evidence.
 |   `-- RepositoryAssessmentV1.schema.json
 |-- frontend/
 |   |-- index.html
-|   |-- app.js
-|   `-- styles.css
+|   |-- package.json
+|   |-- vite.config.js
+|   `-- src/
+|       |-- api.js
+|       |-- App.jsx
+|       |-- main.jsx
+|       `-- styles.css
 |-- tests/
-|   `-- ArmMigrationAssist.Tests/
+|   `-- Assessment/
 |-- samples/
 |   |-- comfyui/
 |   `-- open-webui/
@@ -582,9 +598,10 @@ Feature 2 should not reinterpret an unknown as ready without new evidence.
 ```
 
 The frontend is a separate top-level application surface so it can grow to
-consume assessment, planning, transformation, and validation endpoints. During
-development, the API serves this directory directly. During `dotnet publish`,
-the frontend files are copied into the published application's `wwwroot`.
+consume assessment, planning, transformation, and validation endpoints. Vite
+serves it during development and produces an independently deployable `dist`
+directory. The backend is API-only and allows configured origins from
+`FrontendOrigins`.
 
 Runtime clone caches, downloaded component-detection binaries, build outputs,
 and generated assessment JSON are intentionally excluded from Git.

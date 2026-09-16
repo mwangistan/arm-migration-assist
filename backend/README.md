@@ -43,11 +43,12 @@ Package restore is routed through Microsoft's CFS NuGet proxy by the repository-
 
 ```powershell
 cd backend
-dotnet run                 # Web dashboard + REST API on http://localhost:5285
+dotnet run                 # REST API on http://localhost:5285
 dotnet run -- assess https://github.com/nothings/stb Arm64Native   # CLI, prints JSON manifest
 ```
 
-Open `http://localhost:5285` to use the web dashboard. It accepts a public GitHub repository
+Run the standalone React application from `../frontend` to use the web dashboard.
+It accepts a public GitHub repository
 URL, displays the technology profile, dependency compatibility matrix, potential blockers,
 architecture-specific code findings, build signals, scanner coverage, and unresolved questions.
 The Report tab provides a print-friendly Feature 1 assessment and the raw schema-conformant JSON

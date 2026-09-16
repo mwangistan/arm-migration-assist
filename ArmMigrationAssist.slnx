@@ -1,4 +1,4 @@
 <Solution>
   <Project Path="backend/ArmMigrationAssist.Api.csproj" />
-  <Project Path="tests/ArmMigrationAssist.Tests/ArmMigrationAssist.Tests.csproj" />
+  <Project Path="tests/Assessment/ArmMigrationAssist.Tests.csproj" />
 </Solution>
