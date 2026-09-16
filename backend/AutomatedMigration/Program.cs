@@ -85,24 +85,17 @@ if (args.Contains("--publish"))
     var remote = GetOpt(args, "--remote");
     var branch = GetOpt(args, "--branch") ?? $"arm64-migration/{plan.PlanId}";
 
-    // Prefer Feature 1's real clone (its own git root, already has a remote).
-    // Fall back to a throwaway git copy when run standalone. The "own root" check
-    // avoids accidentally committing into a parent repo that merely contains the
-    // input folder.
-    string workRepo;
-    string baseBranch;
-    if (IsOwnGitRoot(repoPath))
+    // Feature 1 provides the clone (its own git root, with a remote). Publishing
+    // requires it; there is no fallback.
+    if (!IsOwnGitRoot(repoPath))
     {
-        workRepo = Path.GetFullPath(repoPath);
-        baseBranch = Git.Run(workRepo, "rev-parse", "--abbrev-ref", "HEAD").Trim();
-        Console.WriteLine($"\nPublishing against existing clone: {workRepo} (base: {baseBranch})");
+        Console.Error.WriteLine($"--publish requires a git clone at '{repoPath}' (provided by Feature 1). Aborting.");
+        return;
     }
-    else
-    {
-        workRepo = CreateGitCopy(repoPath);
-        baseBranch = "main";
-        Console.WriteLine($"\nNo standalone git repo at input; using throwaway copy: {workRepo}");
-    }
+
+    var workRepo = Path.GetFullPath(repoPath);
+    var baseBranch = Git.Run(workRepo, "rev-parse", "--abbrev-ref", "HEAD").Trim();
+    Console.WriteLine($"\nPublishing against clone: {workRepo} (base: {baseBranch})");
 
     var result = new PrPublisher().Publish(ours, new PublishOptions(
         RepoPath: workRepo,
@@ -140,26 +133,4 @@ static bool IsOwnGitRoot(string path)
     {
         return false;
     }
-}
-
-static string CreateGitCopy(string sourceRepo)
-{
-    var temp = Path.Combine(Path.GetTempPath(), "arm-mig-" + Guid.NewGuid().ToString("N")[..8]);
-    CopyDirectory(sourceRepo, temp);
-    Git.Run(temp, "init", "-q");
-    Git.Run(temp, "config", "user.email", "demo@example.com");
-    Git.Run(temp, "config", "user.name", "arm-migration-demo");
-    Git.Run(temp, "add", "-A");
-    Git.Run(temp, "commit", "-q", "-m", "baseline");
-    Git.Run(temp, "branch", "-M", "main");
-    return temp;
-}
-
-static void CopyDirectory(string source, string destination)
-{
-    Directory.CreateDirectory(destination);
-    foreach (var dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
-        Directory.CreateDirectory(dir.Replace(source, destination));
-    foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
-        File.Copy(file, file.Replace(source, destination), overwrite: true);
 }
