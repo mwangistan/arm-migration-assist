@@ -28,8 +28,10 @@ public sealed class ProducerV1
 {
     [JsonPropertyName("name")] public required string Name { get; set; }
     [JsonPropertyName("version")] public required string Version { get; set; }
-    [JsonPropertyName("ruleset")] public string? Ruleset { get; set; }
-    [JsonPropertyName("scannerVersions")] public List<ScannerVersionV1>? ScannerVersions { get; set; }
+    [JsonPropertyName("ruleset"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Ruleset { get; set; }
+    [JsonPropertyName("scannerVersions"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ScannerVersionV1>? ScannerVersions { get; set; }
 }
 
 public sealed class ScannerVersionV1
@@ -44,7 +46,8 @@ public sealed class RepositoryV1
     [JsonPropertyName("url")] public required string Url { get; set; }
     [JsonPropertyName("commitSha")] public required string CommitSha { get; set; }
     [JsonPropertyName("defaultBranch")] public required string DefaultBranch { get; set; }
-    [JsonPropertyName("license")] public string? License { get; set; }
+    [JsonPropertyName("license"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? License { get; set; }
 }
 
 public sealed class TechnologyV1
@@ -61,8 +64,10 @@ public sealed class TechnologyV1
 public sealed class EvidenceV1
 {
     [JsonPropertyName("sourceType")] public required string SourceType { get; set; }
-    [JsonPropertyName("path")] public string? Path { get; set; }
-    [JsonPropertyName("artifact")] public string? Artifact { get; set; }
+    [JsonPropertyName("path"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Path { get; set; }
+    [JsonPropertyName("artifact"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Artifact { get; set; }
     [JsonPropertyName("observation")] public required string Observation { get; set; }
 }
 
@@ -70,7 +75,8 @@ public sealed class DependencyFindingV1
 {
     [JsonPropertyName("evidenceId")] public required string EvidenceId { get; set; }
     [JsonPropertyName("name")] public required string Name { get; set; }
-    [JsonPropertyName("version")] public string? Version { get; set; }
+    [JsonPropertyName("version"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Version { get; set; }
     [JsonPropertyName("ecosystem")] public required string Ecosystem { get; set; }
     [JsonPropertyName("type")] public required string Type { get; set; }
     [JsonPropertyName("criticality")] public required string Criticality { get; set; }
@@ -88,8 +94,10 @@ public sealed class CodeFindingV1
     [JsonPropertyName("category")] public required string Category { get; set; }
     [JsonPropertyName("severity")] public required string Severity { get; set; }
     [JsonPropertyName("file")] public required string File { get; set; }
-    [JsonPropertyName("line")] public int? Line { get; set; }
-    [JsonPropertyName("column")] public int? Column { get; set; }
+    [JsonPropertyName("line"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Line { get; set; }
+    [JsonPropertyName("column"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Column { get; set; }
     [JsonPropertyName("description")] public required string Description { get; set; }
     [JsonPropertyName("evidence")] public List<EvidenceV1> Evidence { get; set; } = [];
     [JsonPropertyName("confidence")] public required double Confidence { get; set; }
@@ -114,7 +122,8 @@ public sealed class WindowsExperienceV1
     [JsonPropertyName("installerExists")] public bool InstallerExists { get; set; }
     [JsonPropertyName("offlineCapable")] public bool OfflineCapable { get; set; }
     [JsonPropertyName("accessibilityEvidence")] public string AccessibilityEvidence { get; set; } = "unknown";
-    [JsonPropertyName("accessibilityNotes")] public string? AccessibilityNotes { get; set; }
+    [JsonPropertyName("accessibilityNotes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AccessibilityNotes { get; set; }
     [JsonPropertyName("notificationsIntegrated")] public bool NotificationsIntegrated { get; set; }
     [JsonPropertyName("lifecycleIntegrated")] public bool LifecycleIntegrated { get; set; }
     [JsonPropertyName("evidence")] public List<EvidenceV1> Evidence { get; set; } = [];
@@ -133,8 +142,10 @@ public sealed class UnknownV1
 {
     [JsonPropertyName("description")] public required string Description { get; set; }
     [JsonPropertyName("area")] public required string Area { get; set; }
-    [JsonPropertyName("requiredSkill")] public string? RequiredSkill { get; set; }
-    [JsonPropertyName("evidenceIds")] public List<string>? EvidenceIds { get; set; }
+    [JsonPropertyName("requiredSkill"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RequiredSkill { get; set; }
+    [JsonPropertyName("evidenceIds"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? EvidenceIds { get; set; }
 }
 
 public sealed class SkillV1

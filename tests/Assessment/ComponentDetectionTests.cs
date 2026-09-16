@@ -119,6 +119,20 @@ public sealed class ComponentDetectionTests
     }
 
     [Fact]
+    public void Direct_And_Transitive_Relationships_Are_Preserved_Internally()
+    {
+        var records = ComponentDetectionScanner.ParseManifest(SampleManifest);
+        DependencyFinding[] dependencies =
+        [
+            DependencyScanSkill.MapComponent(records.Single(r => r.Name == "numpy")),
+            DependencyScanSkill.MapComponent(records.Single(r => r.Name == "requests"))
+        ];
+
+        Assert.True(dependencies.Single(d => d.Name == "numpy").IsDirect);
+        Assert.False(dependencies.Single(d => d.Name == "requests").IsDirect);
+    }
+
+    [Fact]
     public void NuGet_Explicit_X86_Version_Maps_To_EmulationOnly()
     {
         var component = new ComponentRecord(

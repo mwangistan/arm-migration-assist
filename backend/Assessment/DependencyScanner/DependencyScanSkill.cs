@@ -187,6 +187,7 @@ public sealed class DependencyScanSkill : IAssessmentSkill
             .GroupBy(f => (f.Source.ToLowerInvariant(), f.Name.ToLowerInvariant()))
             .Select(g => g
                 .OrderByDescending(f => f.Machine != null)          // prefer inspected binaries
+                .ThenByDescending(f => f.IsDirect)                   // preserve a direct declaration over a transitive occurrence
                 .ThenBy(f => f.Classification)                      // then the most decided classification
                 .First())
             .OrderBy(f => f.Classification)
@@ -250,6 +251,7 @@ public sealed class DependencyScanSkill : IAssessmentSkill
             EvidencePath = evidencePath,
             Notes = notes,
             IsDevelopment = c.IsDevelopment,
+            IsDirect = c.IsDirect,
             AvailableArchitectures = declaredArchitecture is null ? null : [declaredArchitecture]
         };
     }

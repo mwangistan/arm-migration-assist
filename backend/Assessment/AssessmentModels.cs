@@ -116,6 +116,9 @@ public sealed record DependencyFinding
     /// <summary>True when the dependency is a development-only dependency (schema criticality: optional).</summary>
     public bool? IsDevelopment { get; init; }
 
+    /// <summary>True for repository-declared dependencies; false for transitive graph dependencies.</summary>
+    public bool IsDirect { get; init; } = true;
+
     /// <summary>Architectures known to be available (registry-verified), schema availableArchitectures tokens.</summary>
     public IReadOnlyList<string>? AvailableArchitectures { get; init; }
 

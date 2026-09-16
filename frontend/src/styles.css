@@ -227,6 +227,7 @@ fieldset { margin: 10px 0 18px; padding: 0; border: 0; }
 .panel-heading, .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .panel-heading { margin-bottom: 19px; }
 .panel-heading h2, .section-heading h2 { margin-bottom: 4px; font-size: 1.35rem; }
+.panel-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 18px; }
 .section-heading { align-items: flex-end; margin: 34px 0 20px; }
 .section-heading > div > p:last-child { margin: 0; color: var(--muted); }
 
@@ -239,6 +240,7 @@ fieldset { margin: 10px 0 18px; padding: 0; border: 0; }
 .blocker-dot.critical, .blocker-dot.blocked { background: var(--red); }
 .blocker-item strong, .blocker-item small { display: block; }
 .blocker-item small { margin-top: 3px; color: var(--muted); }
+.preview-note { margin: 12px 0 0; color: var(--muted); font-size: .82rem; }
 .empty-compact { padding: 18px; border-radius: 10px; background: var(--green-soft); color: var(--green); }
 .badge {
   display: inline-flex; align-items: center; border-radius: 999px; padding: .24rem .55rem;

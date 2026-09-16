@@ -132,6 +132,30 @@ public sealed class SchemaConformanceTests
     }
 
     [Fact]
+    public void Default_Web_Serialization_Omits_Null_Optional_Properties()
+    {
+        var webJson = JsonDocument.Parse(
+            JsonSerializer.Serialize(Doc, new JsonSerializerOptions(JsonSerializerDefaults.Web)))
+            .RootElement;
+
+        Assert.False(webJson.GetProperty("producer").TryGetProperty("ruleset", out _));
+        Assert.False(webJson.GetProperty("repository").TryGetProperty("license", out _));
+
+        foreach (var evidence in AllEvidence(webJson))
+        {
+            bool hasPath = evidence.TryGetProperty("path", out _);
+            bool hasArtifact = evidence.TryGetProperty("artifact", out _);
+            Assert.True(hasPath ^ hasArtifact, "HTTP JSON must emit exactly one evidence source.");
+        }
+
+        foreach (var unknown in webJson.GetProperty("unknowns").EnumerateArray())
+        {
+            if (unknown.TryGetProperty("evidenceIds", out var evidenceIds))
+                Assert.NotEqual(JsonValueKind.Null, evidenceIds.ValueKind);
+        }
+    }
+
+    [Fact]
     public void Skill_Names_Match_Pattern()
     {
         var pattern = Schema.GetProperty("$defs").GetProperty("Skill")
@@ -200,7 +224,7 @@ public sealed class SchemaConformanceTests
         m.Dependencies =
         [
             new DependencyFinding { Id = FindingId.Compute("binary","a.dll","1"), Name = "a.dll", Source = "binary", Machine = "x64", Classification = DependencyClassification.EmulationOnly, EvidencePath = "bin/a.dll" },
-            new DependencyFinding { Id = FindingId.Compute("npm","left-pad","2"), Name = "left-pad", Source = "npm", Classification = DependencyClassification.Arm64Ready, EvidencePath = "package.json" },
+            new DependencyFinding { Id = FindingId.Compute("npm","left-pad","2"), Name = "left-pad", Source = "npm", Classification = DependencyClassification.Arm64Ready, EvidencePath = "package.json", IsDirect = false },
             new DependencyFinding { Id = FindingId.Compute("nuget","Foo","3"), Name = "Foo", Source = "NuGet", Classification = DependencyClassification.Unknown, EvidencePath = "packages.config" },
             new DependencyFinding { Id = FindingId.Compute("binary","d.sys","4"), Name = "d.sys", Source = "binary", Machine = "x64", Classification = DependencyClassification.Blocked, EvidencePath = "drv/d.sys" }
         ];

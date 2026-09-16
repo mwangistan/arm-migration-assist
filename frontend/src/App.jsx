@@ -459,13 +459,26 @@ function Overview({ assessment, onPanelChange }) {
       <div className="overview-grid">
         <article className="panel span-2">
           <PanelHeading eyebrow="Prioritize" title="Potential blockers">
-            <button
-              className="text-button tab-link"
-              type="button"
-              onClick={() => onPanelChange("dependencies")}
-            >
-              View all findings →
-            </button>
+            <div className="panel-actions">
+              {blockers.length > 0 && (
+                <button
+                  className="text-button tab-link"
+                  type="button"
+                  onClick={() => onPanelChange("dependencies")}
+                >
+                  View {blockers.length} dependency {blockers.length === 1 ? "blocker" : "blockers"} →
+                </button>
+              )}
+              {highCode.length > 0 && (
+                <button
+                  className="text-button tab-link"
+                  type="button"
+                  onClick={() => onPanelChange("code")}
+                >
+                  View {highCode.length} code findings →
+                </button>
+              )}
+            </div>
           </PanelHeading>
           <BlockerList dependencies={blockers} findings={highCode} />
         </article>
@@ -529,7 +542,7 @@ function PanelHeading({ eyebrow, title, children }) {
 }
 
 function BlockerList({ dependencies, findings }) {
-  const items = [
+  const allItems = [
     ...dependencies.map((dependency) => ({
       title: dependency.name,
       detail: `${dependency.ecosystem} dependency · ${
@@ -545,7 +558,8 @@ function BlockerList({ dependencies, findings }) {
       }`,
       status: finding.severity
     }))
-  ].slice(0, 6);
+  ];
+  const items = allItems.slice(0, 6);
 
   if (items.length === 0) {
     return (
@@ -557,15 +571,22 @@ function BlockerList({ dependencies, findings }) {
   }
 
   return (
-    <div className="blocker-list">
-      {items.map((item, index) => (
-        <div className="blocker-item" key={`${item.title}-${index}`}>
-          <span className={`blocker-dot ${item.status}`} />
-          <div><strong>{item.title}</strong><small>{item.detail}</small></div>
-          <span className={`badge ${item.status}`}>{item.status}</span>
-        </div>
-      ))}
-    </div>
+    <>
+      <div className="blocker-list">
+        {items.map((item, index) => (
+          <div className="blocker-item" key={`${item.title}-${index}`}>
+            <span className={`blocker-dot ${item.status}`} />
+            <div><strong>{item.title}</strong><small>{item.detail}</small></div>
+            <span className={`badge ${item.status}`}>{item.status}</span>
+          </div>
+        ))}
+      </div>
+      {allItems.length > items.length && (
+        <p className="preview-note">
+          Showing {items.length} of {allItems.length} potential blockers.
+        </p>
+      )}
+    </>
   );
 }
 
