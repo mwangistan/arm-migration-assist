@@ -57,7 +57,8 @@ Given a public GitHub URL such as
    intrinsics, inline assembly, architecture macros, P/Invoke, and pointer-size
    assumptions.
 9. Maps findings to the versioned Feature 1 JSON contract.
-10. Displays the result in a dashboard and print-friendly report.
+10. Displays the result in a React dashboard, a native WinUI 3 client, and a
+    print-friendly report.
 
 The analysis is repeatable for the same repository commit and scanner version.
 Run metadata such as the assessment ID and generation time changes between
@@ -86,7 +87,7 @@ Each skill contributes facts to a shared `ReadinessManifest`. The
 ## Architecture
 
 ```text
-React frontend / CLI / API client
+React frontend / WinUI 3 client / CLI / API client
           |
           v
  .NET API: POST /assess
@@ -164,6 +165,12 @@ Open the React frontend:
 
 ```text
 http://localhost:5173
+```
+
+Or run the native WinUI 3 client in a second terminal:
+
+```powershell
+dotnet run --project .\winui\ArmMigrationAssist.WinUI.csproj -p:Platform=x64
 ```
 
 The backend API listens on `http://localhost:5285`. Vite proxies `/assess` to

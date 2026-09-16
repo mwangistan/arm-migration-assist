@@ -1,0 +1,254 @@
+<Window
+    x:Class="ArmMigrationAssist.WinUI.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:ArmMigrationAssist.WinUI"
+    xmlns:models="using:ArmMigrationAssist.WinUI.Models"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="ARM Migration Assist">
+
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Padding="24,16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <Grid ColumnSpacing="14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border Width="42" Height="42" CornerRadius="10" Background="{ThemeResource AccentFillColorDefaultBrush}">
+                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold" Text="ARM" />
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock FontSize="20" FontWeight="SemiBold" Text="ARM Migration Assist" />
+                    <TextBlock Opacity="0.7" Text="Native Windows repository assessment" />
+                </StackPanel>
+                <Border Grid.Column="2" Padding="10,5" CornerRadius="12" Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                    <TextBlock Text="WinUI 3" />
+                </Border>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="330" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Padding="24" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,1,0">
+                <ScrollViewer>
+                    <StackPanel Spacing="14">
+                        <TextBlock FontSize="28" FontWeight="SemiBold" Text="Assess a repository" TextWrapping="Wrap" />
+                        <TextBlock Opacity="0.75" Text="Connect to the existing assessment API and inspect a public GitHub repository." TextWrapping="Wrap" />
+
+                        <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="API base URL" />
+                        <TextBox x:Name="ApiBaseUrlTextBox" Text="http://localhost:5285/" PlaceholderText="http://localhost:5285/" />
+
+                        <TextBlock Margin="0,8,0,0" FontWeight="SemiBold" Text="GitHub repository URL" />
+                        <TextBox x:Name="RepositoryUrlTextBox" Text="https://github.com/nothings/stb" PlaceholderText="https://github.com/owner/repository" />
+
+                        <TextBlock Margin="0,8,0,0" FontWeight="SemiBold" Text="Assessment target" />
+                        <ComboBox x:Name="TargetComboBox" SelectedIndex="0" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="ARM64 native" Tag="Arm64Native" />
+                            <ComboBoxItem Content="Arm64EC" Tag="Arm64EC" />
+                        </ComboBox>
+
+                        <Button
+                            x:Name="AssessButton"
+                            Margin="0,10,0,0"
+                            HorizontalAlignment="Stretch"
+                            Click="AssessButton_Click"
+                            Content="Analyze repository"
+                            Style="{StaticResource AccentButtonStyle}" />
+                        <Button
+                            x:Name="CancelButton"
+                            HorizontalAlignment="Stretch"
+                            Click="CancelButton_Click"
+                            Content="Cancel"
+                            IsEnabled="False" />
+
+                        <StackPanel x:Name="ProgressPanel" Margin="0,12,0,0" Orientation="Horizontal" Spacing="10" Visibility="Collapsed">
+                            <ProgressRing Width="24" Height="24" IsActive="True" />
+                            <TextBlock VerticalAlignment="Center" Text="Inspecting repository…" />
+                        </StackPanel>
+
+                        <InfoBar
+                            x:Name="ErrorInfoBar"
+                            IsClosable="True"
+                            IsOpen="False"
+                            Severity="Error"
+                            Title="Assessment failed" />
+
+                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="What is scanned" />
+                        <TextBlock Opacity="0.7" Text="Languages and frameworks&#x0a;Build and CI signals&#x0a;Dependencies and binaries&#x0a;Architecture-specific code" TextWrapping="Wrap" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <Grid Grid.Column="1">
+                <Grid x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520">
+                    <StackPanel HorizontalAlignment="Center" Spacing="10">
+                        <FontIcon HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="44" Glyph="&#xE9D2;" />
+                        <TextBlock HorizontalAlignment="Center" FontSize="28" FontWeight="SemiBold" Text="Ready for an assessment" />
+                        <TextBlock HorizontalAlignment="Center" Opacity="0.7" Text="Start the backend, choose a repository, and analyze it here." TextAlignment="Center" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid x:Name="ResultsView" Padding="28,20" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock x:Name="RepositoryNameText" FontSize="30" FontWeight="SemiBold" />
+                            <TextBlock x:Name="RepositoryMetadataText" Opacity="0.7" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Click="ExportButton_Click" Content="Export JSON" />
+                    </Grid>
+
+                    <TabView Grid.Row="1" IsAddTabButtonVisible="False">
+                        <TabViewItem Header="Overview">
+                            <ScrollViewer>
+                                <StackPanel Padding="4,12,16,20" Spacing="18">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Style="{StaticResource MetricCardStyle}" Background="{StaticResource AccentCardBackground}">
+                                            <StackPanel>
+                                                <TextBlock Opacity="0.75" Text="Potential blockers" />
+                                                <TextBlock x:Name="BlockerCountText" FontSize="34" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Grid.Column="1" Style="{StaticResource MetricCardStyle}">
+                                            <StackPanel>
+                                                <TextBlock Opacity="0.75" Text="ARM64-ready dependencies" />
+                                                <TextBlock x:Name="ReadyDependencyCountText" FontSize="34" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Grid.Column="2" Style="{StaticResource MetricCardStyle}">
+                                            <StackPanel>
+                                                <TextBlock Opacity="0.75" Text="Code findings" />
+                                                <TextBlock x:Name="CodeFindingCountText" FontSize="34" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Grid.Column="3" Style="{StaticResource MetricCardStyle}">
+                                            <StackPanel>
+                                                <TextBlock Opacity="0.75" Text="Dependency resolution" />
+                                                <TextBlock x:Name="ResolutionRateText" FontSize="34" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+
+                                    <Border Style="{StaticResource MetricCardStyle}">
+                                        <StackPanel Spacing="8">
+                                            <TextBlock FontSize="20" FontWeight="SemiBold" Text="Detected stack" />
+                                            <TextBlock x:Name="TechnologyText" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Style="{StaticResource MetricCardStyle}">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock FontSize="20" FontWeight="SemiBold" Text="Build signals" />
+                                                <TextBlock x:Name="BuildSignalsText" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Grid.Column="1" Style="{StaticResource MetricCardStyle}">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock FontSize="20" FontWeight="SemiBold" Text="Scanner coverage" />
+                                                <TextBlock x:Name="CoverageText" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabViewItem>
+
+                        <TabViewItem Header="Dependencies">
+                            <ListView x:Name="DependenciesList" Margin="4,12,16,16">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="models:DependencyFinding">
+                                        <Border Margin="0,0,0,8" Padding="14" Style="{StaticResource MetricCardStyle}">
+                                            <Grid ColumnSpacing="16">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="2*" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="3*" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold" Text="{x:Bind Name}" />
+                                                    <TextBlock Opacity="0.65" Text="{x:Bind DisplayVersion}" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock FontWeight="SemiBold" Text="{x:Bind ArchitectureStatus}" />
+                                                    <TextBlock Opacity="0.65" Text="{x:Bind ConfidencePercent}" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock Text="{x:Bind Ecosystem}" />
+                                                    <TextBlock Opacity="0.65" Text="{x:Bind Architectures}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="3" Text="{x:Bind EvidenceSummary}" TextWrapping="Wrap" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </TabViewItem>
+
+                        <TabViewItem Header="Code findings">
+                            <ListView x:Name="CodeFindingsList" Margin="4,12,16,16">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="models:CodeFinding">
+                                        <Border Margin="0,0,0,8" Padding="14" Style="{StaticResource MetricCardStyle}">
+                                            <StackPanel Spacing="4">
+                                                <Grid>
+                                                    <TextBlock FontWeight="SemiBold" Text="{x:Bind Description}" TextWrapping="Wrap" />
+                                                    <TextBlock HorizontalAlignment="Right" FontWeight="SemiBold" Text="{x:Bind Severity}" />
+                                                </Grid>
+                                                <TextBlock Opacity="0.7" Text="{x:Bind Location}" />
+                                                <TextBlock Text="{x:Bind EvidenceSummary}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </TabViewItem>
+
+                        <TabViewItem Header="Raw JSON">
+                            <TextBox
+                                x:Name="RawJsonTextBox"
+                                Margin="4,12,16,16"
+                                AcceptsReturn="True"
+                                FontFamily="Cascadia Mono"
+                                IsReadOnly="True"
+                                ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                TextWrapping="NoWrap"
+                                />
+                        </TabViewItem>
+                    </TabView>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
