@@ -1,6 +1,8 @@
 # Build output
 bin/
 obj/
+frontend/node_modules/
+frontend/dist/
 
 # Cloned repositories / analysis workspaces (runtime artifacts)
 workspaces/

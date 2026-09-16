@@ -42,7 +42,7 @@ Package restore is routed through Microsoft's CFS NuGet proxy by the repository-
 `NuGet.config`; no direct `nuget.org` package source is configured.
 
 ```powershell
-cd ArmMigrationAssist.Api
+cd backend
 dotnet run                 # Web dashboard + REST API on http://localhost:5285
 dotnet run -- assess https://github.com/nothings/stb Arm64Native   # CLI, prints JSON manifest
 ```

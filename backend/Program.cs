@@ -6,7 +6,11 @@ using ArmMigrationAssist.Api.Assessment.Contract;
 using ArmMigrationAssist.Api.Assessment.DependencyScanner;
 using ArmMigrationAssist.Api.Assessment.RepositoryDiscovery;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    WebRootPath = ResolveWebRootPath()
+});
 
 // Add services to the container.
 builder.Services.AddControllers()
@@ -68,3 +72,13 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+static string ResolveWebRootPath()
+{
+    var sourceFrontend = Path.GetFullPath(
+        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "frontend"));
+
+    return Directory.Exists(sourceFrontend)
+        ? sourceFrontend
+        : Path.Combine(AppContext.BaseDirectory, "wwwroot");
+}

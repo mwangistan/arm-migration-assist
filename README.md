@@ -7,7 +7,7 @@ This repository implements **Feature 1: Repository Assessment Engine**. It
 discovers repository technologies, dependencies, binaries, build signals, and
 architecture-sensitive source code. The result is a deterministic JSON
 document conforming to
-[`RepositoryAssessmentV1.schema.json`](ArmMigrationAssist.Api/RepositoryAssessmentV1.schema.json),
+[`RepositoryAssessmentV1.schema.json`](backend/RepositoryAssessmentV1.schema.json),
 plus a browser dashboard and printable report.
 
 > **Feature boundary:** this project reports measured facts. It does not
@@ -148,7 +148,7 @@ From the repository root:
 
 ```powershell
 dotnet restore .\ArmMigrationAssist.slnx
-dotnet run --project .\ArmMigrationAssist.Api
+dotnet run --project .\backend
 ```
 
 Open:
@@ -168,7 +168,7 @@ writable workspace:
 
 ```powershell
 $env:ARM_MIGRATION_WORKSPACE_ROOT = "C:\arm-ma"
-dotnet run --project .\ArmMigrationAssist.Api
+dotnet run --project .\backend
 ```
 
 ## Using the dashboard
@@ -249,7 +249,7 @@ SSH URLs, and other hosts are rejected.
 The same assessment pipeline can run without the web UI:
 
 ```powershell
-cd .\ArmMigrationAssist.Api
+cd .\backend
 dotnet run -- assess https://github.com/ww898/utf-cpp Arm64Native
 ```
 
@@ -440,7 +440,7 @@ the literal string `ARM64`.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `ARM_MIGRATION_WORKSPACE_ROOT` | Clone/cache root | `ArmMigrationAssist.Api\.arm-ma` |
+| `ARM_MIGRATION_WORKSPACE_ROOT` | Clone/cache root | `backend\.arm-ma` |
 | `COMPONENT_DETECTION_PATH` | Explicit component-detection executable | Auto-discover under `tools` or `PATH` |
 | `NUGET_FLAT_CONTAINER` | Authorized NuGet V3 flat-container base | Microsoft CFS flat container |
 | `NPM_REGISTRY` | Preferred npm registry base | Microsoft PackageFeedProxy |
@@ -467,7 +467,7 @@ The scanner does not fall back directly to `api.nuget.org`.
 Run all tests:
 
 ```powershell
-dotnet test .\ArmMigrationAssist.Tests\ArmMigrationAssist.Tests.csproj
+dotnet test .\tests\ArmMigrationAssist.Tests\ArmMigrationAssist.Tests.csproj
 ```
 
 The suite covers:
@@ -546,22 +546,45 @@ Feature 2 should not reinterpret an unknown as ready without new evidence.
 
 ```text
 .
-|-- ArmMigrationAssist.Api/
+|-- backend/
 |   |-- Assessment/
 |   |   |-- CodeCompatibility/
 |   |   |-- Contract/
 |   |   |-- DependencyScanner/
 |   |   `-- RepositoryDiscovery/
+|   |-- MigrationPlanner/
+|   |   |-- ReadinessScoring/
+|   |   |-- ReportGeneration/
+|   |   `-- StrategyGenerator/
+|   |-- AutomatedMigration/
+|   |   |-- BuildConfiguration/
+|   |   |-- CodeMigration/
+|   |   `-- PipelineUpdates/
+|   |-- Validation/
+|   |   |-- BuildValidation/
+|   |   `-- Dashboard/
 |   |-- Controllers/
-|   |-- wwwroot/
 |   |-- Program.cs
 |   `-- RepositoryAssessmentV1.schema.json
-|-- ArmMigrationAssist.Tests/
+|-- frontend/
+|   |-- index.html
+|   |-- app.js
+|   `-- styles.css
+|-- tests/
+|   `-- ArmMigrationAssist.Tests/
+|-- samples/
+|   |-- comfyui/
+|   `-- open-webui/
 |-- tools/
 |-- NuGet.config
 |-- ArmMigrationAssist.slnx
 `-- README.md
 ```
+
+The frontend is a separate top-level application surface so it can grow to
+consume assessment, planning, transformation, and validation endpoints. During
+development, the API serves this directory directly. During `dotnet publish`,
+the frontend files are copied into the published application's `wwwroot`.
 
 Runtime clone caches, downloaded component-detection binaries, build outputs,
 and generated assessment JSON are intentionally excluded from Git.

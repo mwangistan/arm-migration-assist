@@ -1,6 +1,0 @@
-@ArmMigrationAssist.Api_HostAddress = http://localhost:5285
-
-GET {{ArmMigrationAssist.Api_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
