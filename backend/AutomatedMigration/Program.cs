@@ -85,14 +85,30 @@ if (args.Contains("--publish"))
     var remote = GetOpt(args, "--remote");
     var branch = GetOpt(args, "--branch") ?? "arm64-migration";
 
-    // Work on a throwaway git copy so the source stays clean and doesn't need to
-    // be a git repo. Feature 1 would supply a real clone here.
-    var workRepo = CreateGitCopy(repoPath);
+    // Prefer Feature 1's real clone (its own git root, already has a remote).
+    // Fall back to a throwaway git copy when run standalone. The "own root" check
+    // avoids accidentally committing into a parent repo that merely contains the
+    // input folder.
+    string workRepo;
+    string baseBranch;
+    if (IsOwnGitRoot(repoPath))
+    {
+        workRepo = Path.GetFullPath(repoPath);
+        baseBranch = Git.Run(workRepo, "rev-parse", "--abbrev-ref", "HEAD").Trim();
+        Console.WriteLine($"\nPublishing against existing clone: {workRepo} (base: {baseBranch})");
+    }
+    else
+    {
+        workRepo = CreateGitCopy(repoPath);
+        baseBranch = "main";
+        Console.WriteLine($"\nNo standalone git repo at input; using throwaway copy: {workRepo}");
+    }
+
     var result = new PrPublisher().Publish(ours, new PublishOptions(
         RepoPath: workRepo,
         OutputDir: Path.GetFullPath(outputDir),
         BranchName: branch,
-        BaseBranch: "main",
+        BaseBranch: baseBranch,
         DryRun: dryRun,
         Remote: remote,
         OpenPr: true));
@@ -102,7 +118,7 @@ if (args.Contains("--publish"))
         ? $"Pushed to {remote}. PR: {result.PrUrl ?? "(gh not available)"}"
         : "Dry run: commits made locally, nothing pushed.");
     Console.WriteLine("\nCommits:");
-    Console.WriteLine(Git.Run(workRepo, "log", "--oneline", "main..HEAD"));
+    Console.WriteLine(Git.Run(workRepo, "log", "--oneline", $"{baseBranch}..HEAD"));
     Console.WriteLine($"Workspace: {workRepo}");
 }
 
@@ -110,6 +126,20 @@ static string? GetOpt(string[] args, string name)
 {
     int i = Array.IndexOf(args, name);
     return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+}
+
+// True only when 'path' is the top level of its own git repo (not merely inside one).
+static bool IsOwnGitRoot(string path)
+{
+    try
+    {
+        var top = Git.Run(path, "rev-parse", "--show-toplevel").Trim();
+        return string.Equals(Path.GetFullPath(top), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
+    }
+    catch
+    {
+        return false;
+    }
 }
 
 static string CreateGitCopy(string sourceRepo)
