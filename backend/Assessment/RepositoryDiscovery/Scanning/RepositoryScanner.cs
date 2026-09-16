@@ -44,21 +44,25 @@ internal sealed partial class RepositoryScanner
         ".tsx", ".vb", ".vue", ".xaml",
     };
 
-    public DiscoveryScan Scan(RepositoryFileCatalog catalog)
+    public DiscoveryScan Scan(
+        RepositoryFileCatalog catalog,
+        CancellationToken cancellationToken = default)
     {
-        var technology = ScanTechnology(catalog.Files);
-        var build = ScanBuild(catalog.Files);
-        var windows = ScanWindowsExperience(catalog.Files, technology);
+        var technology = ScanTechnology(catalog.Files, cancellationToken);
+        var build = ScanBuild(catalog.Files, cancellationToken);
+        var windows = ScanWindowsExperience(catalog.Files, technology, cancellationToken);
 
         return new DiscoveryScan(
             technology.Inventory,
             build,
             windows.Experience,
             windows.OfflineCapabilityEstablished,
-            DetectLicense(catalog.Files));
+            DetectLicense(catalog.Files, cancellationToken));
     }
 
-    private static TechnologyScan ScanTechnology(IReadOnlyList<RepositoryFile> files)
+    private static TechnologyScan ScanTechnology(
+        IReadOnlyList<RepositoryFile> files,
+        CancellationToken cancellationToken)
     {
         var languages = new HashSet<string>(StringComparer.Ordinal);
         var frameworks = new HashSet<string>(StringComparer.Ordinal);
@@ -71,6 +75,7 @@ internal sealed partial class RepositoryScanner
 
         foreach (var file in files)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var path = file.RelativePath;
             var lowerPath = path.ToLowerInvariant();
             if (LanguageByExtension.TryGetValue(file.Extension, out var language))
@@ -296,6 +301,11 @@ internal sealed partial class RepositoryScanner
         try
         {
             using var document = JsonDocument.Parse(file.Content, new JsonDocumentOptions { MaxDepth = 32 });
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return;
+            }
+
             foreach (var sectionName in new[] { "dependencies", "devDependencies", "peerDependencies" })
             {
                 if (!document.RootElement.TryGetProperty(sectionName, out var section)
@@ -349,7 +359,9 @@ internal sealed partial class RepositoryScanner
         }
     }
 
-    private static BuildFindings ScanBuild(IReadOnlyList<RepositoryFile> files)
+    private static BuildFindings ScanBuild(
+        IReadOnlyList<RepositoryFile> files,
+        CancellationToken cancellationToken)
     {
         var targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var evidence = new List<Evidence>();
@@ -361,6 +373,7 @@ internal sealed partial class RepositoryScanner
 
         foreach (var file in files)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var isBuildConfiguration = IsBuildConfiguration(file);
             var isCi = IsCiConfiguration(file.RelativePath);
             var isPackaging = IsPackagingConfiguration(file);
@@ -419,9 +432,11 @@ internal sealed partial class RepositoryScanner
 
     private static WindowsScan ScanWindowsExperience(
         IReadOnlyList<RepositoryFile> files,
-        TechnologyScan technology)
+        TechnologyScan technology,
+        CancellationToken cancellationToken)
     {
         var evidence = new List<Evidence>();
+        cancellationToken.ThrowIfCancellationRequested();
         var windowsFile = files.FirstOrDefault(file =>
             file.Extension.Equals(".vcxproj", StringComparison.OrdinalIgnoreCase)
             || IsBuildConfiguration(file)
@@ -438,16 +453,19 @@ internal sealed partial class RepositoryScanner
         var uiTechnology = SelectUiTechnology(technology.Inventory.Frameworks, technology.Inventory.ProjectTypes);
         if (technology.FrameworkSources.TryGetValue(uiTechnology, out var uiPath))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var uiFile = files.First(file => file.RelativePath == uiPath);
             evidence.Add(FileEvidence(uiFile, $"Detected the {uiTechnology} UI technology."));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var installerFile = files.FirstOrDefault(IsInstallerFile);
         if (installerFile is not null)
         {
             evidence.Add(FileEvidence(installerFile, "Detected Windows installer or package configuration."));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var offlineFile = files.FirstOrDefault(file =>
             IsSourceCodeFile(file)
             && (Contains(file.Content, "serviceWorker.register")
@@ -457,6 +475,7 @@ internal sealed partial class RepositoryScanner
             evidence.Add(FileEvidence(offlineFile, "Detected an application-managed offline cache or service worker."));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var accessibilityFile = files.FirstOrDefault(file =>
             IsSourceCodeFile(file)
             && (Contains(file.Content, "aria-")
@@ -468,6 +487,7 @@ internal sealed partial class RepositoryScanner
             evidence.Add(FileEvidence(accessibilityFile, "Detected an accessibility annotation or automation property."));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var notificationsFile = files.FirstOrDefault(file =>
             IsSourceCodeFile(file)
             && (Contains(file.Content, "ToastNotificationManager")
@@ -478,6 +498,7 @@ internal sealed partial class RepositoryScanner
             evidence.Add(FileEvidence(notificationsFile, "Detected Windows notification API integration."));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var lifecycleFile = files.FirstOrDefault(file =>
             IsSourceCodeFile(file)
             && (Contains(file.Content, "EnteredBackground")
@@ -512,13 +533,16 @@ internal sealed partial class RepositoryScanner
             offlineFile is not null);
     }
 
-    private static string? DetectLicense(IReadOnlyList<RepositoryFile> files)
+    private static string? DetectLicense(
+        IReadOnlyList<RepositoryFile> files,
+        CancellationToken cancellationToken)
     {
         foreach (var file in files.Where(file =>
                      file.FileName.StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase)
                      || file.FileName.StartsWith("COPYING", StringComparison.OrdinalIgnoreCase)
                      || file.RelativePath.EndsWith("package.json", StringComparison.OrdinalIgnoreCase)))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (file.Content is null) continue;
             if (Contains(file.Content, "MIT License") || ContainsJsonLicense(file.Content, "MIT")) return "MIT";
             if (Contains(file.Content, "Apache License") && Contains(file.Content, "Version 2.0")) return "Apache-2.0";
@@ -535,7 +559,8 @@ internal sealed partial class RepositoryScanner
         try
         {
             using var document = JsonDocument.Parse(content, new JsonDocumentOptions { MaxDepth = 16 });
-            return document.RootElement.TryGetProperty("license", out var license)
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("license", out var license)
                 && license.ValueKind == JsonValueKind.String
                 && string.Equals(license.GetString(), expected, StringComparison.OrdinalIgnoreCase);
         }
@@ -548,8 +573,8 @@ internal sealed partial class RepositoryScanner
     private static IReadOnlyList<string> ExtractTargets(string content)
     {
         var targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (Match match in RuntimeIdentifierRegex().Matches(content)) targets.Add(match.Value.ToLowerInvariant().Replace('/', '-'));
-        foreach (Match match in ProjectConfigurationRegex().Matches(content)) targets.Add(match.Value.Replace('\\', '|'));
+        foreach (Match match in RuntimeIdentifierRegex().Matches(content)) AddTarget(targets, match.Value.ToLowerInvariant().Replace('/', '-'));
+        foreach (Match match in ProjectConfigurationRegex().Matches(content)) AddTarget(targets, match.Value.Replace('\\', '|'));
 
         var document = TryParseXml(content);
         if (document is not null)
@@ -562,7 +587,7 @@ internal sealed partial class RepositoryScanner
                          .Where(element => targetElements.Contains(element.Name.LocalName))
                          .SelectMany(element => element.Value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)))
             {
-                if (ArchitectureTokenRegex().IsMatch(value)) targets.Add(value);
+                if (ArchitectureTokenRegex().IsMatch(value)) AddTarget(targets, value);
             }
 
             foreach (var include in document.Descendants()
@@ -570,11 +595,25 @@ internal sealed partial class RepositoryScanner
                          .Select(element => element.Attribute("Include")?.Value)
                          .OfType<string>())
             {
-                if (ArchitectureTokenRegex().IsMatch(include)) targets.Add(include);
+                if (ArchitectureTokenRegex().IsMatch(include)) AddTarget(targets, include);
             }
         }
 
         return Sorted(targets);
+    }
+
+    private static void AddTarget(ISet<string> targets, string value)
+    {
+        var sanitized = new string(value.Trim().Where(character => !char.IsControl(character)).ToArray());
+        if (sanitized.Length > 200)
+        {
+            sanitized = sanitized[..200];
+        }
+
+        if (sanitized.Length > 0)
+        {
+            targets.Add(sanitized);
+        }
     }
 
     private static XDocument? TryParseXml(string content)
@@ -678,7 +717,11 @@ internal sealed partial class RepositoryScanner
         target.Contains("arm64ec", StringComparison.OrdinalIgnoreCase);
 
     private static Evidence FileEvidence(RepositoryFile file, string observation) =>
-        new(IsConfigurationFile(file) ? "config" : "file", file.RelativePath, null, observation);
+        new(
+            IsConfigurationFile(file) ? "config" : "file",
+            file.RelativePath,
+            null,
+            observation.Length <= 2_000 ? observation : $"{observation[..1_997]}...");
 
     private static bool IsConfigurationFile(RepositoryFile file) =>
         IsBuildConfiguration(file)

@@ -2,7 +2,12 @@ using System.Text;
 
 namespace ArmMigrationAssist.RepositoryDiscovery.Scanning;
 
-internal sealed record RepositoryFile(string RelativePath, string FileName, string Extension, string? Content);
+internal sealed record RepositoryFile(
+    string RelativePath,
+    string FullPath,
+    string FileName,
+    string Extension,
+    string? Content);
 
 internal sealed record RepositoryFileCatalog(
     IReadOnlyList<RepositoryFile> Files,
@@ -24,7 +29,7 @@ internal sealed record RepositoryFileCatalog(
     private static readonly HashSet<string> TextFileNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "CMakeLists.txt", "Dockerfile", "Gemfile", "LICENSE", "Makefile", "NOTICE", "Pipfile",
-        "requirements.txt",
+        "packages.config", "requirements.txt",
     };
 
     public static async Task<RepositoryFileCatalog> CreateAsync(
@@ -79,6 +84,7 @@ internal sealed record RepositoryFileCatalog(
 
             files.Add(new RepositoryFile(
                 entry.Path.Replace('\\', '/'),
+                fullPath,
                 fileInfo.Name,
                 fileInfo.Extension.ToLowerInvariant(),
                 content));

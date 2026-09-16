@@ -23,6 +23,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\..\MigrationPlanner\contracts\RepositoryAssessmentV1.schema.json"
           Link="RepositoryAssessmentV1.schema.json"
           CopyToOutputDirectory="PreserveNewest" />

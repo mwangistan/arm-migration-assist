@@ -9,8 +9,8 @@ public sealed record RepositoryAssessment(
     [property: JsonPropertyName("producer")] AssessmentProducer Producer,
     [property: JsonPropertyName("repository")] RepositoryIdentity Repository,
     [property: JsonPropertyName("technology")] TechnologyInventory Technology,
-    [property: JsonPropertyName("dependencies")] IReadOnlyList<object> Dependencies,
-    [property: JsonPropertyName("codeFindings")] IReadOnlyList<object> CodeFindings,
+    [property: JsonPropertyName("dependencies")] IReadOnlyList<DependencyFinding> Dependencies,
+    [property: JsonPropertyName("codeFindings")] IReadOnlyList<CodeFinding> CodeFindings,
     [property: JsonPropertyName("buildFindings")] BuildFindings BuildFindings,
     [property: JsonPropertyName("windowsExperience")] WindowsExperience WindowsExperience,
     [property: JsonPropertyName("scanCoverage")] ScanCoverage ScanCoverage,
@@ -42,6 +42,31 @@ public sealed record TechnologyInventory(
     [property: JsonPropertyName("packageManagers")] IReadOnlyList<string> PackageManagers,
     [property: JsonPropertyName("installers")] IReadOnlyList<string> Installers,
     [property: JsonPropertyName("ciSystems")] IReadOnlyList<string> CiSystems);
+
+public sealed record DependencyFinding(
+    [property: JsonPropertyName("evidenceId")] string EvidenceId,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("version")] string? Version,
+    [property: JsonPropertyName("ecosystem")] string Ecosystem,
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("criticality")] string Criticality,
+    [property: JsonPropertyName("architectureStatus")] string ArchitectureStatus,
+    [property: JsonPropertyName("availableArchitectures")] IReadOnlyList<string> AvailableArchitectures,
+    [property: JsonPropertyName("replacementCandidates")] IReadOnlyList<string> ReplacementCandidates,
+    [property: JsonPropertyName("evidence")] IReadOnlyList<Evidence> Evidence,
+    [property: JsonPropertyName("confidence")] decimal Confidence);
+
+public sealed record CodeFinding(
+    [property: JsonPropertyName("evidenceId")] string EvidenceId,
+    [property: JsonPropertyName("ruleId")] string RuleId,
+    [property: JsonPropertyName("category")] string Category,
+    [property: JsonPropertyName("severity")] string Severity,
+    [property: JsonPropertyName("file")] string File,
+    [property: JsonPropertyName("line")] int? Line,
+    [property: JsonPropertyName("column")] int? Column,
+    [property: JsonPropertyName("description")] string Description,
+    [property: JsonPropertyName("evidence")] IReadOnlyList<Evidence> Evidence,
+    [property: JsonPropertyName("confidence")] decimal Confidence);
 
 public sealed record BuildFindings(
     [property: JsonPropertyName("evidenceId")] string EvidenceId,

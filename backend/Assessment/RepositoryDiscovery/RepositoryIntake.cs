@@ -79,6 +79,10 @@ internal sealed partial class RepositoryIntake(GitClient git)
             }
 
             var name = new Uri(repositoryUrl).Segments[^1].Trim('/');
+            if (name.Length > 200)
+            {
+                throw new RepositoryDiscoveryException("The repository name exceeds the assessment contract limit.");
+            }
 
             return new RepositoryWorkspace(
                 rootPath,
@@ -129,7 +133,13 @@ internal sealed partial class RepositoryIntake(GitClient git)
             throw new RepositoryDiscoveryException("The GitHub owner or repository name is invalid.");
         }
 
-        return $"https://github.com/{owner}/{repository}";
+        var normalizedUrl = $"https://github.com/{owner}/{repository}";
+        if (repository.Length > 200 || normalizedUrl.Length > 2048)
+        {
+            throw new RepositoryDiscoveryException("The GitHub repository identity exceeds the assessment contract limit.");
+        }
+
+        return normalizedUrl;
     }
 
     private async Task<string> ReadLocalRepositoryUrlAsync(

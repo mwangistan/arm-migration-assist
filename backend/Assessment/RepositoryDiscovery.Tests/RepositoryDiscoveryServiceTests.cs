@@ -34,7 +34,8 @@ public sealed class RepositoryDiscoveryServiceTests
         Assert.True(assessment.BuildFindings.Arm64CiJobExists);
         Assert.True(assessment.BuildFindings.TestsExist);
         Assert.Equal("electron", assessment.WindowsExperience.UiTechnology);
-        Assert.Empty(assessment.Dependencies);
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "electron" && dependency.Ecosystem == "npm");
         Assert.Empty(assessment.CodeFindings);
         Assert.Equal(assessment.ScanCoverage.FilesTotal, assessment.ScanCoverage.FilesScanned);
         Assert.DoesNotContain(
@@ -52,6 +53,274 @@ public sealed class RepositoryDiscoveryServiceTests
                     Assert.DoesNotContain(repository.Path, evidence.Observation, StringComparison.OrdinalIgnoreCase);
                 }
             });
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_ProducesDependencyAndCodeCompatibilityFindings()
+    {
+        using var repository = TestRepository.Create();
+        repository.WriteTrackedFile("SampleApp.csproj",
+            """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <ItemGroup>
+                <PackageReference Include="Contoso.Managed" Version="2.1.0" />
+                <PackageReference Include="Contoso.Native.win-x64" Version="4.0.0" />
+              </ItemGroup>
+            </Project>
+            """);
+        repository.WriteTrackedFile("package.json",
+            """
+            {
+              "dependencies": { "react": "^19.0.0" },
+              "devDependencies": { "vite": "^7.0.0" }
+            }
+            """);
+        repository.WriteTrackedFile("requirements.txt", "requests==2.32.3\n");
+        repository.WriteTrackedFile("NativeMethods.cs",
+            """
+            using System.Runtime.InteropServices;
+
+            internal static class NativeMethods
+            {
+                [DllImport("legacy-x64.dll")]
+                internal static extern int Initialize();
+            }
+            """);
+        repository.WriteTrackedFile("native.cpp",
+            """
+            #include <immintrin.h>
+            int read_value() { return __asm { mov eax, 1 } }
+            """);
+        repository.CommitChanges("add dependency and compatibility fixtures");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "Contoso.Managed" && dependency.Ecosystem == "nuget");
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "Contoso.Native.win-x64"
+                && dependency.ArchitectureStatus == "emulation-only"
+                && dependency.AvailableArchitectures.Contains("x64"));
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "react" && dependency.Criticality == "required");
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "vite" && dependency.Criticality == "optional");
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "requests" && dependency.Ecosystem == "pypi");
+        Assert.Contains(assessment.CodeFindings,
+            finding => finding.RuleId == "ARM-CODE-PINVOKE-01" && finding.File == "NativeMethods.cs");
+        Assert.Contains(assessment.CodeFindings,
+            finding => finding.RuleId == "ARM-CODE-INLINE-ASM-01" && finding.File == "native.cpp");
+        Assert.Contains(assessment.CodeFindings,
+            finding => finding.RuleId == "ARM-CODE-SIMD-01" && finding.File == "native.cpp");
+        Assert.Contains("dependency-scanner", assessment.ScanCoverage.ScannersCompleted);
+        Assert.Contains("code-compatibility-scanner", assessment.ScanCoverage.ScannersCompleted);
+        Assert.DoesNotContain(assessment.Unknowns, unknown => unknown.RequiredSkill == "assessment/dependency-scanner");
+        Assert.DoesNotContain(assessment.Unknowns, unknown => unknown.RequiredSkill == "assessment/code-compatibility-scanner");
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_ParsesTrackedPackagesConfig()
+    {
+        using var repository = TestRepository.Create();
+        repository.WriteTrackedFile("packages.config",
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <packages>
+              <package id="Contoso.Legacy" version="3.2.1" targetFramework="net48" />
+            </packages>
+            """);
+        repository.CommitChanges("add packages config");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.Contains(
+            assessment.Dependencies,
+            dependency => dependency.Name == "Contoso.Legacy"
+                && dependency.Version == "3.2.1"
+                && dependency.Ecosystem == "nuget");
+        Assert.Equal(assessment.ScanCoverage.FilesTotal, assessment.ScanCoverage.FilesScanned);
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_ProducesStableAssessmentIdForRepositoryCommitAndRuleset()
+    {
+        using var repository = TestRepository.Create();
+        var service = new RepositoryDiscoveryService();
+
+        var first = await service.DiscoverAsync(repository.Path);
+        var second = await service.DiscoverAsync(repository.Path);
+
+        Assert.StartsWith("assessment-", first.AssessmentId, StringComparison.Ordinal);
+        Assert.Equal(first.AssessmentId, second.AssessmentId);
+
+        repository.WriteTrackedFile("Program.cs", "Console.WriteLine(\"next commit\");");
+        repository.CommitChanges("change assessed commit");
+        var changed = await service.DiscoverAsync(repository.Path);
+
+        Assert.NotEqual(first.AssessmentId, changed.AssessmentId);
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_ReportsEveryCodeRuleOccurrenceWithUniqueEvidenceIds()
+    {
+        using var repository = TestRepository.Create();
+        repository.WriteTrackedFile("NativeMethods.cs",
+            """
+            using System.Runtime.InteropServices;
+
+            internal static class NativeMethods
+            {
+                [DllImport("first.dll")]
+                internal static extern int First();
+
+                [DllImport("second.dll")]
+                internal static extern int Second();
+            }
+            """);
+        repository.CommitChanges("add repeated compatibility findings");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+        var findings = assessment.CodeFindings
+            .Where(finding => finding.RuleId == "ARM-CODE-PINVOKE-01")
+            .ToArray();
+
+        Assert.Equal(2, findings.Length);
+        Assert.Equal(2, findings.Select(finding => finding.EvidenceId).Distinct().Count());
+        Assert.Equal([5, 8], findings.Select(finding => finding.Line));
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_CapsCodeFindingsAtContractLimit()
+    {
+        using var repository = TestRepository.Create();
+        var matchingLine =
+            "[DllImport(\"x\")] __asm _mm256_add _M_X64 .ToInt32() NativeLibrary.Load(\"x\");";
+        repository.WriteTrackedFile(
+            "dense.cpp",
+            string.Join('\n', Enumerable.Repeat(matchingLine, 3_334)));
+        repository.CommitChanges("add dense compatibility fixture");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.Equal(20_000, assessment.CodeFindings.Count);
+        Assert.Equal(
+            assessment.CodeFindings.Count,
+            assessment.CodeFindings.Select(finding => finding.EvidenceId).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_ParsesMultilineManifestsAndNativeBinaryArchitecture()
+    {
+        using var repository = TestRepository.Create();
+        repository.WriteTrackedFile("pyproject.toml",
+            """
+            [project]
+            dependencies = [
+              "fastapi>=0.115",
+              "onnxruntime==1.19.0"
+            ]
+
+            [project.optional-dependencies]
+            test = ["pytest==8.3.0"]
+            """);
+        repository.WriteTrackedFile("vcpkg.json",
+            """{"dependencies":["qtbase",{"name":"openssl","version>=":"3.3.0"}]}""");
+        repository.WriteTrackedBytes("runtimes/win-x64/native/legacy.dll", CreatePeImage(0x8664));
+        repository.CommitChanges("add multiline and native dependency fixtures");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "fastapi" && dependency.Criticality == "required");
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "pytest" && dependency.Criticality == "optional");
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "qtbase" && dependency.Type == "native");
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "legacy.dll"
+                && dependency.Ecosystem == "native-binary"
+                && dependency.ArchitectureStatus == "emulation-only"
+                && dependency.AvailableArchitectures.Contains("x64"));
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_DoesNotInferNativeTypeFromGenericPackageNames()
+    {
+        using var repository = TestRepository.Create();
+        repository.WriteTrackedFile("SampleApp.csproj",
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <PackageReference Include="Contoso.Runtime" Version="1.0.0" />
+                <PackageReference Include="Contoso.Interop" Version="2.0.0" />
+                                <PackageReference Include="Contoso.Native.Utilities" Version="3.0.0" />
+              </ItemGroup>
+            </Project>
+            """);
+        repository.CommitChanges("add generic managed package names");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.Equal(
+            ["managed", "managed", "managed"],
+            assessment.Dependencies
+                .Where(dependency => dependency.Name is "Contoso.Runtime"
+                    or "Contoso.Interop"
+                    or "Contoso.Native.Utilities")
+                .OrderBy(dependency => dependency.Name, StringComparer.Ordinal)
+                .Select(dependency => dependency.Type));
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_ReportsMalformedDependencyManifestAsUnknown()
+    {
+        using var repository = TestRepository.Create();
+        repository.WriteTrackedFile("package.json", "{ \"dependencies\": {");
+        repository.CommitChanges("add malformed dependency manifest");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.Contains(
+            assessment.Unknowns,
+            unknown => unknown.Area == "dependency"
+                && unknown.Description.Contains("could not be parsed", StringComparison.Ordinal)
+                && unknown.Description.Contains("package.json", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("package.json", "[]")]
+    [InlineData("vcpkg.json", "\"not an object\"")]
+    public async Task DiscoverAsync_ReportsNonObjectJsonManifestAsUnknown(
+        string manifestPath,
+        string content)
+    {
+        using var repository = TestRepository.Create();
+        repository.WriteTrackedFile(manifestPath, content);
+        repository.CommitChanges("add non-object dependency manifest");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.Contains(
+            assessment.Unknowns,
+            unknown => unknown.Area == "dependency"
+                && unknown.Description.Contains("could not be parsed", StringComparison.Ordinal)
+                && unknown.Description.Contains(manifestPath, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_RejectsPeHeaderOffsetInsideDosHeader()
+    {
+        using var repository = TestRepository.Create();
+        repository.WriteTrackedBytes("native/forged.dll", CreatePeImage(0x8664, peOffset: 4));
+        repository.CommitChanges("add malformed PE fixture");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.DoesNotContain(
+            assessment.Dependencies,
+            dependency => dependency.Ecosystem == "native-binary"
+                && dependency.Name == "forged.dll");
     }
 
     [Fact]
@@ -89,6 +358,45 @@ public sealed class RepositoryDiscoveryServiceTests
                 Directory.Delete(outputDirectory, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_BoundsRepositoryControlledTextToContractLimits()
+    {
+        using var repository = TestRepository.Create();
+        repository.WriteTrackedFile("SampleApp.csproj",
+            $"""
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <Platforms>ARM64-{new string('x', 2_100)}</Platforms>
+              </PropertyGroup>
+            </Project>
+            """);
+        repository.CommitChanges("add oversized target text");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.All(assessment.BuildFindings.DetectedTargets, target => Assert.InRange(target.Length, 1, 200));
+        Assert.All(assessment.BuildFindings.Evidence, evidence => Assert.InRange(evidence.Observation.Length, 1, 2_000));
+
+        var schema = JsonSchema.FromText(await File.ReadAllTextAsync(
+            System.IO.Path.Combine(AppContext.BaseDirectory, "RepositoryAssessmentV1.schema.json")));
+        var instance = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(assessment));
+        Assert.NotNull(instance);
+        var result = schema.Evaluate(instance, new EvaluationOptions { OutputFormat = OutputFormat.List });
+        Assert.True(result.IsValid, result.ToString());
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_RejectsRepositoryNameBeyondContractLimit()
+    {
+        using var repository = TestRepository.Create(
+            $"https://github.com/example/{new string('r', 201)}.git");
+
+        var exception = await Assert.ThrowsAsync<RepositoryDiscoveryException>(
+            () => new RepositoryDiscoveryService().DiscoverAsync(repository.Path));
+
+        Assert.Contains("contract limit", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -328,7 +636,16 @@ public sealed class RepositoryDiscoveryServiceTests
 
         public void WriteTrackedFile(string relativePath, string content)
         {
-            File.WriteAllText(System.IO.Path.Combine(Path, relativePath), content);
+            var fullPath = System.IO.Path.Combine(Path, relativePath);
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(fullPath)!);
+            File.WriteAllText(fullPath, content);
+        }
+
+        public void WriteTrackedBytes(string relativePath, byte[] content)
+        {
+            var fullPath = System.IO.Path.Combine(Path, relativePath);
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(fullPath)!);
+            File.WriteAllBytes(fullPath, content);
         }
 
         public void WriteUntrackedFile(string relativePath, string content)
@@ -374,5 +691,17 @@ public sealed class RepositoryDiscoveryServiceTests
             process.WaitForExit();
             Assert.True(process.ExitCode == 0, standardError);
         }
+    }
+
+    private static byte[] CreatePeImage(ushort machine, int peOffset = 128)
+    {
+        var image = new byte[256];
+        image[0] = (byte)'M';
+        image[1] = (byte)'Z';
+        BitConverter.GetBytes(peOffset).CopyTo(image, 0x3c);
+        image[peOffset] = (byte)'P';
+        image[peOffset + 1] = (byte)'E';
+        BitConverter.GetBytes(machine).CopyTo(image, peOffset + 4);
+        return image;
     }
 }
