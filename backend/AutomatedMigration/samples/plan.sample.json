@@ -79,6 +79,52 @@
       "approvalRequired": true,
       "estimatedEffort": "small",
       "risk": "low"
+    },
+    {
+      "id": "wi-csproj-arm64",
+      "sequence": 3,
+      "priority": "P0",
+      "title": "Add win-arm64 runtime identifier to the .NET project",
+      "objective": "Ensure the .NET project can build and publish for Windows on Arm.",
+      "agentOrSkill": "build-config-generator",
+      "inputs": ["src/App.csproj"],
+      "expectedOutputs": ["Diff enabling a Windows on Arm build for the project"],
+      "dependencies": [],
+      "evidenceIds": ["ev-csproj-001"],
+      "guidanceIds": ["woa-dotnet-rid-03"],
+      "acceptanceTests": [
+        {
+          "id": "at-dotnet-arm64",
+          "description": "dotnet publish -r win-arm64 succeeds",
+          "expectedOutcome": "Project publishes for win-arm64"
+        }
+      ],
+      "approvalRequired": true,
+      "estimatedEffort": "small",
+      "risk": "low"
+    },
+    {
+      "id": "wi-vcxproj-arm64",
+      "sequence": 4,
+      "priority": "P0",
+      "title": "Add ARM64 build configurations to the native project",
+      "objective": "Ensure the native C++ project offers ARM64 Debug and Release configurations.",
+      "agentOrSkill": "build-config-generator",
+      "inputs": ["native/App.vcxproj"],
+      "expectedOutputs": ["Diff adding ARM64 project configurations"],
+      "dependencies": [],
+      "evidenceIds": ["ev-vcxproj-001"],
+      "guidanceIds": ["woa-native-arm64-04"],
+      "acceptanceTests": [
+        {
+          "id": "at-msbuild-arm64",
+          "description": "msbuild /p:Platform=ARM64 succeeds",
+          "expectedOutcome": "Project builds for ARM64"
+        }
+      ],
+      "approvalRequired": true,
+      "estimatedEffort": "medium",
+      "risk": "medium"
     }
   ],
   "missingSkills": [],
@@ -99,7 +145,7 @@
     {
       "approvalId": "ap-arm64-build",
       "summary": "Approve ARM64 build and CI changes",
-      "workItemIds": ["wi-dockerfile-arm64", "wi-ci-arm64"]
+      "workItemIds": ["wi-dockerfile-arm64", "wi-ci-arm64", "wi-csproj-arm64", "wi-vcxproj-arm64"]
     }
   ],
   "reusableOutputs": []

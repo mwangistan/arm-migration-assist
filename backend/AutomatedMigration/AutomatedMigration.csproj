@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>AutomatedMigration</RootNamespace>
+    <!-- Fixtures under samples/ are test data, not part of this project's build. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);samples/**</DefaultItemExcludes>
   </PropertyGroup>
 
 </Project>
