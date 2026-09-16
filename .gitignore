@@ -12,6 +12,7 @@ build/
 
 # Generated artifacts (reports, patches, analysis output)
 artifacts/
+output/
 
 # IDE
 .vs/
