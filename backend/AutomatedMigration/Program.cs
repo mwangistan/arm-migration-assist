@@ -83,7 +83,7 @@ if (args.Contains("--publish"))
 {
     var dryRun = !args.Contains("--push");
     var remote = GetOpt(args, "--remote");
-    var branch = GetOpt(args, "--branch") ?? "arm64-migration";
+    var branch = GetOpt(args, "--branch") ?? $"arm64-migration/{plan.PlanId}";
 
     // Prefer Feature 1's real clone (its own git root, already has a remote).
     // Fall back to a throwaway git copy when run standalone. The "own root" check
