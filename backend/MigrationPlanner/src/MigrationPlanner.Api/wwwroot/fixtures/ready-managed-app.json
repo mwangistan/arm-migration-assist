@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0",
+  "assessmentId": "demo-ready-managed-app",
+  "generatedAt": "2026-09-15T00:00:00Z",
+  "producer": {
+    "name": "arm-migration-assist-feature1",
+    "version": "0.1.0",
+    "ruleset": null,
+    "scannerVersions": []
+  },
+  "repository": {
+    "name": "ContosoNotesApp",
+    "url": "https://example.com/contoso/notes-app",
+    "commitSha": "b9e2d1c4a5f60718293a4b5c6d7e8f9012340001",
+    "defaultBranch": "main",
+    "license": "MIT"
+  },
+  "technology": {
+    "languages": ["csharp"],
+    "frameworks": ["wpf"],
+    "projectTypes": ["desktop"],
+    "buildSystems": ["msbuild"],
+    "packageManagers": ["nuget"],
+    "installers": ["msix"],
+    "ciSystems": ["github-actions"]
+  },
+  "dependencies": [
+    {
+      "evidenceId": "dep-newtonsoft",
+      "name": "Newtonsoft.Json",
+      "version": "13.0.3",
+      "ecosystem": "nuget",
+      "type": "managed",
+      "criticality": "required",
+      "architectureStatus": "ready",
+      "availableArchitectures": ["any-cpu"],
+      "replacementCandidates": [],
+      "evidence": [
+        { "sourceType": "manifest", "observation": "Newtonsoft.Json 13.0.3 referenced in ContosoNotesApp.csproj.", "path": "src/ContosoNotesApp/ContosoNotesApp.csproj" }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "dep-sqlite",
+      "name": "Microsoft.Data.Sqlite",
+      "version": "8.0.10",
+      "ecosystem": "nuget",
+      "type": "managed",
+      "criticality": "required",
+      "architectureStatus": "ready",
+      "availableArchitectures": ["any-cpu", "arm64", "x64"],
+      "replacementCandidates": [],
+      "evidence": [
+        { "sourceType": "manifest", "observation": "Microsoft.Data.Sqlite 8.0.10 references native SQLitePCLRaw arm64 assets.", "path": "src/ContosoNotesApp/ContosoNotesApp.csproj" }
+      ],
+      "confidence": 0.9
+    }
+  ],
+  "codeFindings": [
+    {
+      "evidenceId": "code-anycpu",
+      "ruleId": "ARM-BUILD-ANYCPU-01",
+      "category": "build-configuration",
+      "severity": "informational",
+      "file": "src/ContosoNotesApp/ContosoNotesApp.csproj",
+      "description": "PlatformTarget is AnyCPU with Prefer32Bit disabled.",
+      "evidence": [
+        { "sourceType": "manifest", "observation": "<PlatformTarget>AnyCPU</PlatformTarget><Prefer32Bit>false</Prefer32Bit>", "path": "src/ContosoNotesApp/ContosoNotesApp.csproj" }
+      ],
+      "confidence": 0.95
+    }
+  ],
+  "buildFindings": {
+    "evidenceId": "build-contoso",
+    "arm64TargetExists": true,
+    "arm64EcTargetExists": false,
+    "arm64CiJobExists": true,
+    "packagingSupportsArm64": true,
+    "testsExist": true,
+    "detectedTargets": ["AnyCPU/Release", "ARM64/Release", "x64/Release"],
+    "evidence": [
+      { "sourceType": "config", "observation": "GitHub Actions matrix builds x64 and ARM64 configurations.", "path": ".github/workflows/build.yml" },
+      { "sourceType": "manifest", "observation": "Package.appxmanifest declares processor architectures ARM64 and x64.", "path": "src/ContosoNotesApp/Package.appxmanifest" }
+    ]
+  },
+  "windowsExperience": {
+    "windowsVersionExists": true,
+    "uiTechnology": "wpf",
+    "installerExists": true,
+    "offlineCapable": true,
+    "accessibilityEvidence": "partial",
+    "accessibilityNotes": "AutomationProperties.Name set on primary buttons; keyboard shortcuts configured.",
+    "notificationsIntegrated": true,
+    "lifecycleIntegrated": false,
+    "evidence": [
+      { "sourceType": "manifest", "observation": "MSIX manifest references ToastNotifications capability.", "path": "src/ContosoNotesApp/Package.appxmanifest" },
+      { "sourceType": "file", "observation": "AutomationProperties.Name usage detected in 12 XAML files.", "path": "src/ContosoNotesApp/Views/" }
+    ]
+  },
+  "scanCoverage": {
+    "filesScanned": 245,
+    "filesTotal": 248,
+    "dependencyResolutionRate": 1.0,
+    "scannersCompleted": ["dep", "code", "build", "windows-experience"],
+    "scannersFailed": []
+  },
+  "unknowns": [],
+  "availableSkills": [
+    { "name": "assessment/repository-discovery", "version": "0.1.0", "description": "Discovers repository structure and scanner inputs.", "writeAccess": false, "supportedInputs": ["repository"], "supportedOutputs": ["assessment"] },
+    { "name": "build/add-arm64-target",         "version": "0.1.0", "description": "Adds ARM64 configurations to MSBuild + CI pipelines.", "writeAccess": true, "supportedInputs": ["csproj", "yaml"], "supportedOutputs": ["patch"] },
+    { "name": "validation/build-and-smoke-test","version": "0.1.0", "description": "Builds ARM64 and runs the smoke test suite.", "writeAccess": true, "supportedInputs": ["repository"], "supportedOutputs": ["build-log", "test-report"] }
+  ]
+}

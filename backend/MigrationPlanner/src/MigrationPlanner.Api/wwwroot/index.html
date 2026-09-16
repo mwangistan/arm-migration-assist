@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARM Migration Assist &mdash; Planner Demo</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --border: #374151;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --accent-2: #34d399;
+      --warn: #fbbf24;
+      --err: #f87171;
+      --code: #0b1220;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    header { padding: 20px 24px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+    header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+    header .sub { color: var(--muted); font-size: 13px; }
+    main { max-width: 1200px; margin: 0 auto; padding: 24px; display: grid;
+      gap: 24px; grid-template-columns: 380px 1fr; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+    .panel { background: var(--panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 20px; }
+    .panel h2 { margin: 0 0 12px 0; font-size: 15px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+    .fixture-list { display: grid; gap: 10px; }
+    .fixture-btn { text-align: left; padding: 12px 14px;
+      background: var(--panel-2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+      font: inherit; transition: border-color .12s, transform .05s; }
+    .fixture-btn:hover { border-color: var(--accent); }
+    .fixture-btn:active { transform: scale(0.99); }
+    .fixture-btn.active { border-color: var(--accent); background: #1e293b; }
+    .fixture-btn .title { font-weight: 600; }
+    .fixture-btn .desc { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+    .action-row { display: flex; gap: 10px; align-items: center; margin-top: 16px; }
+    .btn { padding: 10px 16px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--accent); color: #0b1220; font-weight: 600; cursor: pointer; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn.secondary { background: transparent; color: var(--text); }
+
+    .status { font-size: 13px; color: var(--muted); }
+    .status.err { color: var(--err); }
+    .status.ok { color: var(--accent-2); }
+
+    .kv { display: grid; grid-template-columns: 180px 1fr; gap: 6px 16px;
+      margin-top: 4px; }
+    .kv .k { color: var(--muted); font-size: 13px; }
+    .kv .v { font-weight: 500; }
+
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 600; border: 1px solid var(--border);
+      background: var(--panel-2); }
+    .pill.native-arm64 { border-color: var(--accent-2); color: var(--accent-2); }
+    .pill.arm64ec { border-color: var(--warn); color: var(--warn); }
+    .pill.staged { border-color: var(--warn); color: var(--warn); }
+    .pill.winui3 { border-color: var(--accent); color: var(--accent); }
+    .pill.insufficient-evidence { border-color: var(--muted); color: var(--muted); }
+    .pill.high { border-color: var(--accent-2); color: var(--accent-2); }
+    .pill.medium { border-color: var(--warn); color: var(--warn); }
+    .pill.low { border-color: var(--err); color: var(--err); }
+
+    .card { background: var(--panel-2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 14px; margin-top: 10px; }
+    .card h3 { margin: 0 0 6px 0; font-size: 14px; font-weight: 600; }
+    .card p { margin: 0; color: var(--text); }
+    .card .meta { margin-top: 8px; font-size: 12px; color: var(--muted); }
+
+    details { margin-top: 12px; }
+    details > summary { cursor: pointer; color: var(--muted);
+      font-size: 13px; user-select: none; }
+    pre { background: var(--code); padding: 12px 14px; border-radius: 6px;
+      overflow: auto; font: 12px/1.5 "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+      color: #cbd5e1; margin: 8px 0 0 0; max-height: 480px; }
+    code.inline { background: var(--code); padding: 1px 6px; border-radius: 4px;
+      font: 12px "Cascadia Code", ui-monospace, monospace; color: #cbd5e1; }
+
+    .tag { display: inline-block; background: var(--code); color: #cbd5e1;
+      font: 11px "Cascadia Code", ui-monospace, monospace;
+      padding: 1px 6px; border-radius: 4px; margin: 2px 4px 2px 0; }
+    .empty { color: var(--muted); font-style: italic; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ARM Migration Assist &mdash; Planner Demo</h1>
+    <span class="sub">Feature 2: reasoned migration plan from a repository assessment.</span>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>1. Pick a scenario</h2>
+      <div class="fixture-list" id="fixtures"></div>
+
+      <div style="margin-top: 16px;">
+        <label class="btn secondary" for="upload" style="display:inline-block;">
+          Upload your own JSON…
+        </label>
+        <input id="upload" type="file" accept="application/json,.json" hidden />
+        <span class="status" id="upload-status"></span>
+      </div>
+
+      <details style="margin-top: 16px;" open>
+        <summary>View / edit the RepositoryAssessmentV1 JSON</summary>
+        <textarea id="assessment-editor" spellcheck="false"
+          placeholder="(pick a scenario, upload a file, or paste a RepositoryAssessmentV1 JSON here)"
+          style="width:100%; min-height:280px; margin-top:8px;
+                 background: var(--code); color: #cbd5e1; border: 1px solid var(--border);
+                 border-radius: 6px; padding: 12px 14px;
+                 font: 12px/1.5 'Cascadia Code', ui-monospace, Menlo, Consolas, monospace;
+                 resize: vertical;"></textarea>
+      </details>
+
+      <div class="action-row">
+        <button class="btn" id="submit" disabled>Generate plan</button>
+        <span class="status" id="status"></span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>2. Planner output</h2>
+      <div id="plan-output">
+        <p class="empty">Pick a scenario and click <b>Generate plan</b>.</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const FIXTURES = [
+      { id: "ready-managed-app",   file: "fixtures/ready-managed-app.json",
+        title: "Ready managed app",
+        desc: "Managed .NET / WPF, ARM64-ready deps, ARM64 build target exists." },
+      { id: "moderate-build-gap",  file: "fixtures/moderate-build-gap.json",
+        title: "Moderate build gap",
+        desc: "Managed .NET / WinForms, ARM64-ready deps, but only x64 build targets." },
+      { id: "blocked-native-app",  file: "fixtures/blocked-native-app.json",
+        title: "Blocked native app",
+        desc: "WPF + native x64-only DLL, SSE intrinsics, uncertain camera driver." }
+    ];
+
+    const $status = document.getElementById("status");
+    const $editor = document.getElementById("assessment-editor");
+    const $submit = document.getElementById("submit");
+    const $output = document.getElementById("plan-output");
+    const $list = document.getElementById("fixtures");
+    const $upload = document.getElementById("upload");
+    const $uploadStatus = document.getElementById("upload-status");
+
+    let currentId = null;
+
+    for (const f of FIXTURES) {
+      const btn = document.createElement("button");
+      btn.className = "fixture-btn";
+      btn.dataset.id = f.id;
+      btn.innerHTML = `<div class="title">${f.title}</div><div class="desc">${f.desc}</div>`;
+      btn.addEventListener("click", () => selectFixture(f));
+      $list.appendChild(btn);
+    }
+
+    $editor.addEventListener("input", () => {
+      currentId = "custom";
+      $submit.disabled = $editor.value.trim().length === 0;
+      for (const b of document.querySelectorAll(".fixture-btn"))
+        b.classList.remove("active");
+      setStatus("Using edited JSON (not validated yet).");
+    });
+
+    $upload.addEventListener("change", async () => {
+      const file = $upload.files && $upload.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        JSON.parse(text); // fail fast if not JSON
+        $editor.value = text;
+        currentId = "upload:" + file.name;
+        $submit.disabled = false;
+        for (const b of document.querySelectorAll(".fixture-btn"))
+          b.classList.remove("active");
+        $uploadStatus.className = "status ok";
+        $uploadStatus.textContent = `Loaded ${file.name} (${file.size} bytes).`;
+        setStatus("Custom JSON loaded from file.", "ok");
+      } catch (e) {
+        $uploadStatus.className = "status err";
+        $uploadStatus.textContent = `Not valid JSON: ${e.message}`;
+      } finally {
+        $upload.value = "";
+      }
+    });
+
+    async function selectFixture(f) {
+      setStatus("Loading fixture…");
+      try {
+        const res = await fetch(f.file, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Fixture fetch failed: ${res.status}`);
+        const json = await res.json();
+        currentId = f.id;
+        $editor.value = JSON.stringify(json, null, 2);
+        $submit.disabled = false;
+        for (const b of document.querySelectorAll(".fixture-btn"))
+          b.classList.toggle("active", b.dataset.id === f.id);
+        setStatus(`Loaded ${f.title}.`, "ok");
+      } catch (e) {
+        setStatus(String(e), "err");
+      }
+    }
+
+    $submit.addEventListener("click", generatePlan);
+
+    async function generatePlan() {
+      const raw = $editor.value.trim();
+      if (!raw) return;
+      let assessment;
+      try {
+        assessment = JSON.parse(raw);
+      } catch (e) {
+        setStatus(`JSON parse error: ${e.message}`, "err");
+        return;
+      }
+      $submit.disabled = true;
+      setStatus("Calling planner… (Phi-4 on Foundry)");
+      $output.innerHTML = "<p class='empty'>Generating…</p>";
+      const t0 = performance.now();
+      try {
+        const res = await fetch("/api/migration-plans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(assessment)
+        });
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+        if (!res.ok) {
+          const problem = await res.json().catch(() => ({}));
+          renderError(problem, res.status, elapsed);
+          setStatus(`Failed after ${elapsed}s.`, "err");
+          return;
+        }
+        const payload = await res.json();
+        renderPlan(payload, elapsed);
+        setStatus(`Plan produced in ${elapsed}s.`, "ok");
+      } catch (e) {
+        setStatus(`Network error: ${e}`, "err");
+        $output.innerHTML = `<div class="card"><p>${e}</p></div>`;
+      } finally {
+        $submit.disabled = false;
+      }
+    }
+
+    function setStatus(text, cls) {
+      $status.className = "status" + (cls ? " " + cls : "");
+      $status.textContent = text;
+    }
+
+    function renderError(problem, http, elapsed) {
+      const rows = [
+        ["HTTP", http],
+        ["Elapsed", `${elapsed}s`],
+        ["Code", problem.code ?? "(none)"],
+        ["Title", problem.title ?? "(none)"]
+      ];
+      const errors = (problem.errors ?? []).map(e => `<li>${escapeHtml(e)}</li>`).join("");
+      $output.innerHTML = `
+        <div class="card">
+          <h3 style="color: var(--err);">Request failed</h3>
+          <div class="kv">${rows.map(([k,v]) => `<div class="k">${k}</div><div class="v">${escapeHtml(String(v))}</div>`).join("")}</div>
+          ${errors ? `<ul>${errors}</ul>` : ""}
+          <details>
+            <summary>Raw problem+JSON</summary>
+            <pre>${escapeHtml(JSON.stringify(problem, null, 2))}</pre>
+          </details>
+        </div>`;
+    }
+
+    function renderPlan({ runId, plan, score, warnings }, elapsed) {
+      const path = plan.recommendedPath ?? "(unknown)";
+      const conf = plan.confidence ?? "(unknown)";
+      const summary = plan.executiveSummary ?? "";
+      const interp = plan.scoreInterpretation ?? "";
+      const facts = plan.facts ?? [];
+      const workItems = plan.workItems ?? [];
+      const alternatives = plan.alternatives ?? [];
+      const citedGuidance = collectGuidanceIds(plan);
+      const risks = plan.risks ?? [];
+      const unknowns = plan.unknowns ?? [];
+
+      const headerKv = [
+        ["Recommended path", `<span class="pill ${escapeHtml(path)}">${escapeHtml(path)}</span>`],
+        ["Confidence",       `<span class="pill ${escapeHtml(conf)}">${escapeHtml(conf)}</span>`],
+        ["Elapsed",          `${elapsed}s`],
+        ["runId",            `<code class="inline">${escapeHtml(runId)}</code>`],
+        ["Model",            `<code class="inline">${escapeHtml(plan.modelProvenance?.provider ?? "?")}/${escapeHtml(plan.modelProvenance?.name ?? "?")}</code>`],
+        ["Corpus version",   `<code class="inline">${escapeHtml(plan.corpusVersion ?? "?")}</code>`]
+      ];
+
+      const factList = facts.length
+        ? facts.map(f => `<li>${escapeHtml(f.statement ?? f.description ?? "")}</li>`).join("")
+        : `<li class="empty">(none)</li>`;
+
+      const workList = workItems.length
+        ? workItems.map(w => {
+            const title = w.title ?? w.description ?? "(untitled work item)";
+            const priority = w.priority ? `<span class="tag">${escapeHtml(w.priority)}</span>` : "";
+            const skill = w.agentOrSkill ? `<span class="tag">${escapeHtml(w.agentOrSkill)}</span>` : "";
+            return `<li>${priority}${skill}${escapeHtml(title)}</li>`;
+          }).join("")
+        : `<li class="empty">(none)</li>`;
+
+      const altList = alternatives.length
+        ? alternatives.map(a => `<li><span class="pill ${escapeHtml(a.path)}">${escapeHtml(a.path)}</span> &mdash; <b>${escapeHtml(a.disposition)}</b>: ${escapeHtml(a.rationale ?? "")}</li>`).join("")
+        : `<li class="empty">(none)</li>`;
+
+      const guidanceTags = citedGuidance.length
+        ? citedGuidance.map(g => `<span class="tag">${escapeHtml(g)}</span>`).join("")
+        : `<span class="empty">(none)</span>`;
+
+      const warnHtml = (warnings && warnings.length)
+        ? `<div class="card"><h3 style="color: var(--warn);">Warnings</h3><ul>${warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("")}</ul></div>`
+        : "";
+
+      $output.innerHTML = `
+        <div class="card">
+          <h3>Verdict</h3>
+          <div class="kv">
+            ${headerKv.map(([k,v]) => `<div class="k">${k}</div><div class="v">${v}</div>`).join("")}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Executive summary</h3>
+          <p>${escapeHtml(summary)}</p>
+          <div class="meta">${escapeHtml(interp)}</div>
+        </div>
+
+        <div class="card">
+          <h3>Grounded guidance</h3>
+          <div>${guidanceTags}</div>
+        </div>
+
+        <div class="card">
+          <h3>Facts (${facts.length})</h3>
+          <ul>${factList}</ul>
+        </div>
+
+        <div class="card">
+          <h3>Work items (${workItems.length})</h3>
+          <ul>${workList}</ul>
+        </div>
+
+        <div class="card">
+          <h3>Alternatives considered (${alternatives.length})</h3>
+          <ul>${altList}</ul>
+        </div>
+
+        ${risks.length ? `<div class="card"><h3>Risks (${risks.length})</h3><ul>${risks.map(r => `<li>${escapeHtml(r.description ?? JSON.stringify(r))}</li>`).join("")}</ul></div>` : ""}
+
+        ${unknowns.length ? `<div class="card"><h3>Unknowns (${unknowns.length})</h3><ul>${unknowns.map(u => `<li>${escapeHtml(u.description ?? JSON.stringify(u))}</li>`).join("")}</ul></div>` : ""}
+
+        ${warnHtml}
+
+        <details>
+          <summary>Full plan JSON</summary>
+          <pre>${escapeHtml(JSON.stringify(plan, null, 2))}</pre>
+        </details>
+
+        <details>
+          <summary>Deterministic score JSON</summary>
+          <pre>${escapeHtml(JSON.stringify(score, null, 2))}</pre>
+        </details>`;
+    }
+
+    function collectGuidanceIds(plan) {
+      const set = new Set();
+      const push = arr => (arr ?? []).forEach(x => (x.guidanceIds ?? []).forEach(g => set.add(g)));
+      push(plan.facts); push(plan.inferences); push(plan.alternatives);
+      push(plan.workItems);
+      return [...set];
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? "").replace(/[&<>"']/g, c =>
+        ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+    }
+  </script>
+</body>
+</html>

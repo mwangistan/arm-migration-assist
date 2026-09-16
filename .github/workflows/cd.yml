@@ -1,0 +1,99 @@
+name: cd
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/MigrationPlanner/**'
+      - 'knowledge/windows-on-arm/**'
+      - '.github/workflows/cd.yml'
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (defaults to git SHA)'
+        required: false
+        type: string
+
+permissions:
+  id-token: write   # required for OIDC federated login to Azure
+  contents: read
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  ACR_NAME:             ${{ vars.ACR_NAME }}
+  CONTAINER_APP_NAME:   ${{ vars.CONTAINER_APP_NAME }}
+  IMAGE_REPO:           migration-planner-api
+  DOCKERFILE:           backend/MigrationPlanner/Dockerfile
+
+jobs:
+  build-and-deploy:
+    name: Build image & deploy Container App
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: meta
+        run: |
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_SHA::12}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build image in ACR
+        run: |
+          az acr build \
+            --registry "$ACR_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --image "$IMAGE_REPO:${{ steps.meta.outputs.tag }}" \
+            --image "$IMAGE_REPO:latest" \
+            --file "$DOCKERFILE" \
+            .
+
+      - name: Update Container App
+        run: |
+          IMAGE="$ACR_NAME.azurecr.io/$IMAGE_REPO:${{ steps.meta.outputs.tag }}"
+          az containerapp update \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --image "$IMAGE" \
+            --output table
+
+      - name: Smoke test /health
+        run: |
+          FQDN=$(az containerapp show \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "Probing https://$FQDN/health"
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "https://$FQDN/health" || echo 000)
+            echo "attempt $i -> $code"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 5
+          done
+          echo "Health check failed"; exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deployment"
+            echo ""
+            echo "- Image: \`$ACR_NAME.azurecr.io/$IMAGE_REPO:${{ steps.meta.outputs.tag }}\`"
+            echo "- Container App: \`$CONTAINER_APP_NAME\`"
+            echo "- Resource group: \`$AZURE_RESOURCE_GROUP\`"
+          } >> "$GITHUB_STEP_SUMMARY"
