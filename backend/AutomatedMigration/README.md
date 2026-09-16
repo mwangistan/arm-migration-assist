@@ -40,9 +40,21 @@ We run a work item only when its `agentOrSkill` matches one of these:
 
 | Skill | Story | Subfolder | Produces |
 |-------|-------|-----------|----------|
-| `build-config-generator` | 3.1 | `BuildConfiguration/` | ARM64 build/packaging diff (`.csproj`, `.vcxproj`, CMake, or Dockerfile) |
+| `build-config-generator` | 3.1 | `BuildConfiguration/` | ARM64 build/packaging diff (Dockerfile, `.csproj`, or `.vcxproj`) |
 | `ci-pipeline-generator` | 3.2 | `PipelineUpdates/` | ARM64 CI job diff (GitHub Actions / Azure Pipelines) |
 | `code-transformer` | 3.3 | `CodeMigration/` | One architecture-specific code diff, with rationale (stretch) |
+
+### Build systems supported by `build-config-generator`
+
+The target file comes from the work item's `inputs`; the generator picks the rule
+by file type. Unsupported build systems produce no change (no guessing).
+
+| Build file | Rule applied |
+|-----------|--------------|
+| `Dockerfile` | Add `--platform=linux/arm64` to the `FROM` line |
+| `*.csproj` | Add `win-arm64` to `<RuntimeIdentifiers>` |
+| `*.vcxproj` | Add `Debug\|ARM64` and `Release\|ARM64` project configurations |
+| CMake / others | Not yet supported → returns no change |
 
 ## How it runs
 
