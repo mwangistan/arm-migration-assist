@@ -74,10 +74,11 @@ public sealed class MigrationPlanningService
         {
             EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha, assessment.SchemaVersion,
                 guidanceLookup.RetrievedGuidanceIds, "cache-hit", errorCode: null);
-            var warnings = new[]
+            var warnings = new List<string>
             {
                 $"Cache hit: returned validated plan produced at {cached.StoredAt:O} for the same scoreDigest.",
             };
+            warnings.AddRange(cached.Observations);
             return PlanResult.Ok(cached.Plan, cached.Score, runId, warnings);
         }
 
@@ -108,7 +109,7 @@ public sealed class MigrationPlanningService
         {
             EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha, assessment.SchemaVersion,
                 guidanceLookup.RetrievedGuidanceIds, "success", errorCode: null);
-            _planCache.Store(digest, plan, score);
+            _planCache.Store(digest, plan, score, attempt1.Observations);
             return PlanResult.Ok(plan, score, runId, attempt1.Observations);
         }
 
@@ -128,10 +129,10 @@ public sealed class MigrationPlanningService
             {
                 EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha, assessment.SchemaVersion,
                     guidanceLookup.RetrievedGuidanceIds, "success-after-retry", errorCode: null);
-                _planCache.Store(digest, plan2, score);
                 var warnings = new List<string> { BuildRetryWarning(retryHint) };
                 warnings.AddRange(attempt1.Observations);
                 warnings.AddRange(attempt2.Observations);
+                _planCache.Store(digest, plan2, score, warnings);
                 return PlanResult.Ok(plan2, score, runId, warnings);
             }
 

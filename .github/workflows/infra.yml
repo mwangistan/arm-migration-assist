@@ -38,7 +38,11 @@ env:
 
 jobs:
   what-if:
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'what-if')
+    # Skip when Azure is not yet configured on this repo/fork so PRs don't fail on missing secrets.
+    if: >-
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'what-if'))
+      && vars.AZURE_RESOURCE_GROUP != ''
+      && vars.AZURE_LOCATION != ''
     name: What-if
     runs-on: ubuntu-latest
     steps:
@@ -57,7 +61,10 @@ jobs:
             --parameters location="$AZURE_LOCATION"
 
   deploy:
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+    if: >-
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy'))
+      && vars.AZURE_RESOURCE_GROUP != ''
+      && vars.AZURE_LOCATION != ''
     name: Deploy
     runs-on: ubuntu-latest
     environment: production

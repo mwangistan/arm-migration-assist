@@ -70,6 +70,12 @@ public class Program
 
             var keyEnv = Environment.GetEnvironmentVariable("MIGRATIONPLANNER_HOSTED_API_KEY");
             if (!string.IsNullOrWhiteSpace(keyEnv)) hostedOptions.ApiKey = keyEnv;
+
+            var toolEnv = Environment.GetEnvironmentVariable("MIGRATIONPLANNER_HOSTED_ENABLE_GUIDANCE_LOOKUP_TOOL");
+            if (!string.IsNullOrWhiteSpace(toolEnv) && bool.TryParse(toolEnv, out var toolFlag))
+            {
+                hostedOptions.EnableGuidanceLookupTool = toolFlag;
+            }
         }
 
         builder.Services.AddSingleton(options);

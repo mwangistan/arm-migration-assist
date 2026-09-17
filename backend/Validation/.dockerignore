@@ -1,0 +1,59 @@
+# .dockerignore for build context backend/Validation
+# (used by backend/Validation/Api/Dockerfile:
+#    docker build -f backend/Validation/Api/Dockerfile -t <tag> backend/Validation)
+#
+# Allowlist strategy: ignore everything first, then re-include only the files the
+# build actually needs (Validation.csproj, Api/*.csproj + source, appsettings, and
+# Dockerfile-adjacent files). This keeps secrets, credentials, tests, samples, git
+# metadata, and build output out of the image layer cache and final context by
+# construction, rather than by trying to enumerate every sensitive filename.
+*
+
+# --- Validation engine project (referenced by Api/Validation.Api.csproj) ---
+!Validation.csproj
+!/*.cs
+!BuildValidation/
+!BuildValidation/**/*.cs
+!Dashboard/
+!Dashboard/**/*.cs
+
+# --- Api project ---
+!Api/
+!Api/Validation.Api.csproj
+!Api/*.cs
+!Api/appsettings.json
+!Api/Dockerfile
+!.dockerignore
+
+# Explicitly re-excluded even though the globs above could otherwise match them.
+BuildValidation/**/bin/
+BuildValidation/**/obj/
+Dashboard/**/bin/
+Dashboard/**/obj/
+
+# Never include build output, IDE state, git metadata, tests, samples, or secrets/env
+# files, even under directories re-included above.
+**/bin/
+**/obj/
+**/*.user
+**/.vs/
+**/.vscode/
+**/.git/
+**/.gitignore
+**/tests/
+**/samples/
+**/Api.Tests/
+**/*.Tests/
+**/*.Tests.csproj
+**/appsettings.*.local.json
+**/appsettings.Development.json
+**/*.env
+**/.env
+**/.env.*
+**/*.pfx
+**/*.key
+**/*.pem
+**/*secret*
+**/*credential*
+**/*.user.json
+**/launchSettings.*.local.json

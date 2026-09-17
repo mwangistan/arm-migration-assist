@@ -120,3 +120,7 @@ Set-Location frontend; npm install; npm run dev
 
 Open `http://127.0.0.1:5173`, enter a GitHub repository URL, and keep the page
 open while live assessment events and the automatic migration plan arrive.
+
+The approval-gated validation CLI, asynchronous API, deterministic evidence
+engine, and optional Foundry-assisted diagnosis are documented in
+[backend/Validation/README.md](backend/Validation/README.md).
