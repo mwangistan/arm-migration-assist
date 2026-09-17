@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="backend/Assessment/ArmMigrationAssist.Api.csproj" />
+  <Project Path="tests/Assessment/ArmMigrationAssist.Tests.csproj" />
+  <Project Path="winui/ArmMigrationAssist.WinUI.csproj" />
+</Solution>

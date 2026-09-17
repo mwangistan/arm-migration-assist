@@ -1,0 +1,20 @@
+@ArmMigrationAssist.Api_HostAddress = http://localhost:5285
+
+POST {{ArmMigrationAssist.Api_HostAddress}}/assess
+Content-Type: application/json
+Accept: application/json
+
+{
+  "repoUrl": "https://github.com/ww898/utf-cpp",
+  "target": "Arm64Native"
+}
+
+###
+
+POST {{ArmMigrationAssist.Api_HostAddress}}/api/migration-plans
+Content-Type: application/json
+Accept: application/json
+
+< ./sample-assessment.json
+
+###

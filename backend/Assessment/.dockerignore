@@ -1,0 +1,13 @@
+# Keep the build context small and deterministic.
+**/bin/
+**/obj/
+# Runtime assessment caches / clones (can contain >260-char paths that break tar packing).
+.arm-ma
+.arm-ma/
+**/.arm-ma/
+workspaces
+workspaces/
+**/workspaces/
+Dockerfile
+.dockerignore
+*.user
