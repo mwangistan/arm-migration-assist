@@ -52,7 +52,7 @@
       ]
     },
     "Skill": {
-      "description": "One reusable skill. Write-capable skills always require approval before Feature 3 executes them.",
+      "description": "One reusable skill. Write-capable skills always require approval before Feature 3 executes them. implementationStatus is set by the catalog audit and gates whether the planner may emit a work item citing this skill.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -62,7 +62,18 @@
         "description",
         "writeAccess",
         "supportedInputs",
-        "supportedOutputs"
+        "supportedOutputs",
+        "implementationStatus"
+      ],
+      "allOf": [
+        {
+          "if": {"properties": {"implementationStatus": {"const": "runnable"}}, "required": ["implementationStatus"]},
+          "then": {"required": ["implementedBy"]}
+        },
+        {
+          "if": {"properties": {"implementationStatus": {"enum": ["declared-only", "proposed"]}}, "required": ["implementationStatus"]},
+          "then": {"not": {"required": ["implementedBy"]}}
+        }
       ],
       "properties": {
         "name": {
@@ -106,6 +117,16 @@
             "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*-\\d{2,3}$",
             "maxLength": 100
           }
+        },
+        "implementationStatus": {
+          "description": "Honest state of the skill's executor in this repository at catalogVersion time. Set by the catalog audit. 'runnable' means concrete C# code executes this skill end-to-end today. 'declared-only' means the skill is documented but no runner exists; the planner must route such skills into alternatives[] or proposedMissingSkills[], not workItems[]. 'proposed' means the skill is being added in the current iteration and is not yet runnable.",
+          "enum": ["runnable", "declared-only", "proposed"]
+        },
+        "implementedBy": {
+          "description": "Fully qualified C# type or file path that executes the skill end-to-end. Required when implementationStatus is 'runnable'; must be omitted for 'declared-only' and 'proposed'. Not machine-parsed; auditors use it to verify the claim.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
         }
       }
     }
