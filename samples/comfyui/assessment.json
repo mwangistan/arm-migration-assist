@@ -1,27 +1,27 @@
 {
   "schemaVersion": "1.0",
   "assessmentId": "assessment-b5a29c9cc32e432cc9338f9b",
-  "generatedAt": "2026-09-17T14:48:04.138429+00:00",
+  "generatedAt": "2026-09-17T15:23:48.1269469+00:00",
   "producer": {
     "name": "arm-migration-assist-repository-discovery",
-    "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72",
+    "version": "1.2.0\u002B3765849a19e175f004bbc4a044a8aa5bdcd26a84",
     "ruleset": "repository-discovery-1.2",
     "scannerVersions": [
       {
         "name": "repository-intake",
-        "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72"
+        "version": "1.2.0\u002B3765849a19e175f004bbc4a044a8aa5bdcd26a84"
       },
       {
         "name": "technology-discovery",
-        "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72"
+        "version": "1.2.0\u002B3765849a19e175f004bbc4a044a8aa5bdcd26a84"
       },
       {
         "name": "dependency-scanner",
-        "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72"
+        "version": "1.2.0\u002B3765849a19e175f004bbc4a044a8aa5bdcd26a84"
       },
       {
         "name": "code-compatibility-scanner",
-        "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72"
+        "version": "1.2.0\u002B3765849a19e175f004bbc4a044a8aa5bdcd26a84"
       }
     ]
   },
@@ -1423,7 +1423,7 @@
   "availableSkills": [
     {
       "name": "assessment/repository-discovery",
-      "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72",
+      "version": "1.2.0\u002B3765849a19e175f004bbc4a044a8aa5bdcd26a84",
       "description": "Discovers repository identity and static technology, build, CI, and Windows experience signals.",
       "writeAccess": false,
       "supportedInputs": [
@@ -1436,8 +1436,8 @@
       ]
     },
     {
-      "name": "assessment/dependency-scanner",
-      "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72",
+      "name": "assessment/dependency-scan",
+      "version": "1.2.0\u002B3765849a19e175f004bbc4a044a8aa5bdcd26a84",
       "description": "Inventories declared dependencies and classifies repository-visible architecture signals.",
       "writeAccess": false,
       "supportedInputs": [
@@ -1448,8 +1448,8 @@
       ]
     },
     {
-      "name": "assessment/code-compatibility-scanner",
-      "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72",
+      "name": "assessment/code-compatibility-scan",
+      "version": "1.2.0\u002B3765849a19e175f004bbc4a044a8aa5bdcd26a84",
       "description": "Detects architecture-sensitive source patterns with file and line evidence.",
       "writeAccess": false,
       "supportedInputs": [
@@ -1460,29 +1460,12 @@
       ]
     },
     {
-      "name": "ci-pipeline-generator",
-      "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72",
+      "name": "pipeline/github-actions-arm64-job",
+      "version": "1.2.0\u002B3765849a19e175f004bbc4a044a8aa5bdcd26a84",
       "description": "Generates reviewable ARM64 GitHub Actions or Azure Pipelines changes.",
       "writeAccess": true,
       "supportedInputs": [
         "repository"
-      ],
-      "supportedOutputs": [
-        "patch"
-      ]
-    },
-    {
-      "name": "code-transformer",
-      "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72",
-      "description": "Generates approval-gated architecture compatibility patches for identified source files.",
-      "writeAccess": true,
-      "supportedInputs": [
-        "comfy/ops.py",
-        "comfy_api_nodes/nodes_minimax.py",
-        "comfy_extras/nodes_glsl.py",
-        "tests-unit/comfy_extras_test/test_seedvr2_nodes.py",
-        "tests-unit/comfy_quant/test_mixed_precision.py",
-        "tests-unit/comfy_test/model_detection_test.py"
       ],
       "supportedOutputs": [
         "patch"

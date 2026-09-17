@@ -1,7 +1,315 @@
+# ComfyUI migration report
+
+- Repository: https://github.com/comfyanonymous/ComfyUI
+- Commit: `387f98aa2822f684b8597959a52a467d88cc4806`
+- Branch: `master`
+- Run: `baeca60e2e19484abe72925257ce3968`
+- Generated: 2026-09-17T15:32:04.6096043+00:00
+
+## Verdict
+
+**14/100 - BlockedOrMajorRedesign**
+
+Recommended path: **native-arm64** 
+Confidence: **low**
+
+## Executive summary
+
+Deterministic band 'blocked-or-major-redesign' at overall 14/100 (uncapped 14). Cap(s) applied: no-arm64-or-arm64ec-target-le-60. Assessment flagged provisional (dependency-resolution-low, dimension-missing-evidence).
+
+## Readiness dimensions
+
+| Dimension | Score | Weight | Contribution |
+|---|---:|---:|---:|
+| DependencyCompatibility | 0 | 33% | 0 |
+| CodeCompatibility | 0 | 28% | 0 |
+| BuildAndCiReadiness | 15 | 22% | 3.3 |
+| RuntimeAndValidationEvidence | 60 | 17% | 10.2 |
+| WindowsExperienceAndDeployment | 22 | 0% | 0 |
+
+## Migration work
+
+### 1. Add an ARM64 or Arm64EC build target.
+
+- Priority: P0
+- Skill: `build/add-arm64-target`
+- Approval required: True
+- Evidence: build-a411db87a55ff51b5b35
+
+Add an ARM64 or Arm64EC build target. Produce the concrete change and validate on ARM64.
+
+Acceptance criteria:
+- Change builds and integrates with existing pipelines. Expected: Green build on ARM64.
+- Functional smoke test passes on ARM64. Expected: No crash or regression against the x64 baseline.
+
+### 2. Add an ARM64 CI job.
+
+- Priority: P0
+- Skill: `pipeline/github-actions-arm64-job`
+- Approval required: True
+- Evidence: build-a411db87a55ff51b5b35
+
+Add an ARM64 CI job. Produce the concrete change and validate on ARM64.
+
+Acceptance criteria:
+- Change builds and integrates with existing pipelines. Expected: Green build on ARM64.
+- Functional smoke test passes on ARM64. Expected: No crash or regression against the x64 baseline.
+
+## Alternatives considered
+
+- **native-arm64** (viable): Deterministic score band 'blocked-or-major-redesign' (overall 14) drives this recommendation.
+
+## Risks and unknowns
+
+- **high:** Build does not produce an ARM64 or Arm64EC target. Mitigation: Resolve the linked evidence through an approval-gated work item and rerun ARM64 validation.
+- **Unknown:** ARM64 availability could not be established from repository evidence for 39 declared dependency or dependencies.
+- **Unknown:** Meaningful offline capability could not be established from static repository signals.
+- **Unknown:** Accessibility coverage could not be established from static repository signals.
+- **Unknown:** 5 tracked file(s) were not scanned because they were unsafe, missing, or exceeded scan limits.
+
+## Validation plan
+
+Target devices: arm64-vm
+- **buildChecks:** Build the planned target in Release configuration for ARM64. Expected: The ARM64 build completes without errors.
+- **functionalChecks:** Run the repository's primary functional smoke path on ARM64. Expected: The ARM64 result matches the established x64 baseline.
+
+## Capability and approval gates
+
+- **Missing skill `build/add-arm64-target`:** Migration capability required for 'Add an ARM64 or Arm64EC build target.'
+- **Approval required:** Approve review-only migration changes before patch generation. (wi-build-add-an-arm64-or-arm64ec-build-target, wi-build-add-an-arm64-ci-job)
+
+## Appendix
+
+### Plan JSON
+```json
 {
   "schemaVersion": "1.0",
   "assessmentId": "assessment-b5a29c9cc32e432cc9338f9b",
-  "generatedAt": "2026-09-17T15:23:48.1269469\u002B00:00",
+  "planId": "plan-assessment-b5a29c9cc32e432cc9338f9b",
+  "generatedAt": "2026-09-17T15:32:04.6096043\u002B00:00",
+  "modelProvenance": {
+    "provider": "fake",
+    "name": "fake-planner",
+    "version": "0.1.0"
+  },
+  "scoreDigest": "138fa8ba73d726ff4e5c6f0f6dcc8d42e30a8fff6e82a1072e93062a8a34c3dd",
+  "corpusVersion": "2026-09-15.1",
+  "recommendedPath": "native-arm64",
+  "confidence": "low",
+  "executiveSummary": "Deterministic band \u0027blocked-or-major-redesign\u0027 at overall 14/100 (uncapped 14). Cap(s) applied: no-arm64-or-arm64ec-target-le-60. Assessment flagged provisional (dependency-resolution-low, dimension-missing-evidence).",
+  "scoreInterpretation": "Dimension breakdown (dependency-compatibility: raw 0 \u00D7 33% = 0; code-compatibility: raw 0 \u00D7 28% = 0; build-and-ci-readiness: raw 15 \u00D7 22% = 3.3; runtime-and-validation-evidence: raw 60 \u00D7 17% = 10.2; windows-experience-and-deployment: raw 22 \u00D7 0% = 0). Evidence completeness 0.60 (medium).",
+  "facts": [
+    {
+      "statement": "Deterministic scorer observed 67 evidence record(s) across five dimensions.",
+      "evidenceIds": [
+        "build-a411db87a55ff51b5b35",
+        "code-01f32f628a3a8c71316e",
+        "code-07d36ddd828c6778134a",
+        "code-0f09bccdb35f2acfa408",
+        "code-173d76fa57352bb22a57"
+      ],
+      "guidanceIds": []
+    }
+  ],
+  "inferences": [],
+  "alternatives": [
+    {
+      "path": "native-arm64",
+      "disposition": "viable",
+      "rationale": "Deterministic score band \u0027blocked-or-major-redesign\u0027 (overall 14) drives this recommendation.",
+      "evidenceIds": [
+        "build-a411db87a55ff51b5b35",
+        "code-01f32f628a3a8c71316e",
+        "code-07d36ddd828c6778134a",
+        "code-0f09bccdb35f2acfa408",
+        "code-173d76fa57352bb22a57"
+      ],
+      "guidanceIds": []
+    }
+  ],
+  "workItems": [
+    {
+      "id": "wi-build-add-an-arm64-or-arm64ec-build-target",
+      "sequence": 1,
+      "priority": "P0",
+      "title": "Add an ARM64 or Arm64EC build target.",
+      "objective": "Add an ARM64 or Arm64EC build target. Produce the concrete change and validate on ARM64.",
+      "agentOrSkill": "build/add-arm64-target",
+      "inputs": [],
+      "expectedOutputs": [
+        "patch"
+      ],
+      "dependencies": [],
+      "evidenceIds": [
+        "build-a411db87a55ff51b5b35"
+      ],
+      "guidanceIds": [],
+      "acceptanceTests": [
+        {
+          "id": "at-build-2-builds",
+          "description": "Change builds and integrates with existing pipelines.",
+          "expectedOutcome": "Green build on ARM64."
+        },
+        {
+          "id": "at-build-2-functional",
+          "description": "Functional smoke test passes on ARM64.",
+          "expectedOutcome": "No crash or regression against the x64 baseline."
+        }
+      ],
+      "approvalRequired": true,
+      "estimatedEffort": "medium",
+      "risk": "low"
+    },
+    {
+      "id": "wi-build-add-an-arm64-ci-job",
+      "sequence": 2,
+      "priority": "P0",
+      "title": "Add an ARM64 CI job.",
+      "objective": "Add an ARM64 CI job. Produce the concrete change and validate on ARM64.",
+      "agentOrSkill": "pipeline/github-actions-arm64-job",
+      "inputs": [],
+      "expectedOutputs": [
+        "patch"
+      ],
+      "dependencies": [
+        "wi-build-add-an-arm64-or-arm64ec-build-target"
+      ],
+      "evidenceIds": [
+        "build-a411db87a55ff51b5b35"
+      ],
+      "guidanceIds": [],
+      "acceptanceTests": [
+        {
+          "id": "at-build-3-builds",
+          "description": "Change builds and integrates with existing pipelines.",
+          "expectedOutcome": "Green build on ARM64."
+        },
+        {
+          "id": "at-build-3-functional",
+          "description": "Functional smoke test passes on ARM64.",
+          "expectedOutcome": "No crash or regression against the x64 baseline."
+        }
+      ],
+      "approvalRequired": true,
+      "estimatedEffort": "medium",
+      "risk": "low"
+    }
+  ],
+  "missingSkills": [
+    {
+      "proposedName": "build/add-arm64-target",
+      "purpose": "Migration capability required for \u0027Add an ARM64 or Arm64EC build target.\u0027",
+      "requiredInputs": [],
+      "expectedOutputs": [
+        "patch"
+      ],
+      "justification": "The required migration generator is not present in the assessment skill catalog.",
+      "evidenceIds": [
+        "build-a411db87a55ff51b5b35"
+      ],
+      "writeAccess": true
+    }
+  ],
+  "validationPlan": {
+    "targetDevices": [
+      "arm64-vm"
+    ],
+    "buildChecks": [
+      {
+        "id": "vc-arm64-release-build",
+        "description": "Build the planned target in Release configuration for ARM64.",
+        "expectedOutcome": "The ARM64 build completes without errors."
+      }
+    ],
+    "functionalChecks": [
+      {
+        "id": "vc-arm64-functional-smoke",
+        "description": "Run the repository\u0027s primary functional smoke path on ARM64.",
+        "expectedOutcome": "The ARM64 result matches the established x64 baseline."
+      }
+    ],
+    "reliabilityChecks": [],
+    "performanceChecks": [],
+    "powerChecks": [],
+    "offlineChecks": [],
+    "accessibilityChecks": [],
+    "windowsExperienceChecks": []
+  },
+  "risks": [
+    {
+      "id": "rk-blocker-1",
+      "description": "Build does not produce an ARM64 or Arm64EC target.",
+      "severity": "high",
+      "mitigation": "Resolve the linked evidence through an approval-gated work item and rerun ARM64 validation.",
+      "evidenceIds": [
+        "build-a411db87a55ff51b5b35"
+      ],
+      "guidanceIds": []
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "uk-assessment-1",
+      "description": "ARM64 availability could not be established from repository evidence for 39 declared dependency or dependencies.",
+      "evidenceIds": [
+        "dependency-843725321ce800b7823d",
+        "dependency-fc3843ea62fb3fc3910f",
+        "dependency-bf40c841f26a3c63e523",
+        "dependency-7875e31caf01e0572bb3",
+        "dependency-e22fb8cd8caa1567977b",
+        "dependency-5efcd0aec421efcfafcd",
+        "dependency-3ec1150f155b8fd5051a",
+        "dependency-fc08762b6dd930acda43",
+        "dependency-86bb1c22b8b9e6529c7a",
+        "dependency-0209a8d233443e4ad955",
+        "dependency-651f6c9fa1f5f9f6799c",
+        "dependency-e6c283166f5ddec2238a",
+        "dependency-c199703bd4a2c639ef88",
+        "dependency-9f5278f94de0f2330fdb",
+        "dependency-5cc12dab4268dcbe3700",
+        "dependency-8b2625ff7ee1d1d30a53",
+        "dependency-cd069dc8547bbbb1c498",
+        "dependency-805f2565a46f25f6dd7a",
+        "dependency-b1e184a7144f74db052a",
+        "dependency-7f9bd7f2a7df7f5a7391"
+      ]
+    },
+    {
+      "id": "uk-assessment-2",
+      "description": "Meaningful offline capability could not be established from static repository signals.",
+      "evidenceIds": []
+    },
+    {
+      "id": "uk-assessment-3",
+      "description": "Accessibility coverage could not be established from static repository signals.",
+      "evidenceIds": []
+    },
+    {
+      "id": "uk-assessment-4",
+      "description": "5 tracked file(s) were not scanned because they were unsafe, missing, or exceeded scan limits.",
+      "evidenceIds": []
+    }
+  ],
+  "requiredApprovals": [
+    {
+      "approvalId": "ap-migration-work-1",
+      "summary": "Approve review-only migration changes before patch generation.",
+      "workItemIds": [
+        "wi-build-add-an-arm64-or-arm64ec-build-target",
+        "wi-build-add-an-arm64-ci-job"
+      ]
+    }
+  ],
+  "reusableOutputs": []
+}
+```
+
+### Score JSON
+```json
+{
+  "schemaVersion": "1.0",
+  "assessmentId": "assessment-b5a29c9cc32e432cc9338f9b",
+  "generatedAt": "2026-09-17T15:23:48.1269469+00:00",
   "producer": {
     "name": "arm-migration-assist-scorer",
     "version": "0.2.0",
@@ -884,3 +1192,6 @@
     "dependency-ff049b7c4a994e34bedb"
   ]
 }
+```
+
+Score digest: `138fa8ba73d726ff4e5c6f0f6dcc8d42e30a8fff6e82a1072e93062a8a34c3dd`
