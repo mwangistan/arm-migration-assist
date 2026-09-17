@@ -7,6 +7,7 @@ using ArmMigrationAssist.RepositoryDiscovery.Models;
 using ArmMigrationAssist.RepositoryDiscovery.Jobs;
 using ArmMigrationAssist.RepositoryDiscovery.GitHub;
 using ArmMigrationAssist.RepositoryDiscovery.Scanning;
+using ArmMigrationAssist.RepositoryDiscovery.Skills;
 using ArmMigrationAssist.RepositoryDiscovery.Validation;
 
 namespace ArmMigrationAssist.RepositoryDiscovery;
@@ -209,7 +210,11 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
         RepositoryFileCatalog catalog,
         IReadOnlyList<CodeFinding> codeFindings)
     {
-        var skills = new List<AvailableSkill>
+        // Every candidate skill uses the catalog's namespaced name. We then keep
+        // only those the catalog marks 'runnable'. Skills declared here but not
+        // runnable in the catalog would let the planner emit work items no
+        // runner in this repo can execute; drop them at the source.
+        var candidates = new List<AvailableSkill>
         {
                 new AvailableSkill(
                     "assessment/repository-discovery",
@@ -219,14 +224,14 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
                     ["github-url", "local-git-repository"],
                     ["repository-assessment-v1", "technology-inventory"]),
                 new AvailableSkill(
-                    "assessment/dependency-scanner",
+                    "assessment/dependency-scan",
                     ProducerVersion,
                     "Inventories declared dependencies and classifies repository-visible architecture signals.",
                     false,
                     ["repository-file-catalog"],
                     ["dependency-findings"]),
                 new AvailableSkill(
-                    "assessment/code-compatibility-scanner",
+                    "assessment/code-compatibility-scan",
                     ProducerVersion,
                     "Detects architecture-sensitive source patterns with file and line evidence.",
                     false,
@@ -241,9 +246,9 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
             .ToArray();
         if (buildInputs.Length > 0)
         {
-            skills.Add(
+            candidates.Add(
                 new AvailableSkill(
-                    "build-config-generator",
+                    "build/add-arm64-target",
                     ProducerVersion,
                     "Generates reviewable ARM64 changes for supported Docker, .NET, and Visual C++ build files.",
                     true,
@@ -251,9 +256,9 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
                     ["patch"]));
         }
 
-        skills.Add(
+        candidates.Add(
                 new AvailableSkill(
-                    "ci-pipeline-generator",
+                    "pipeline/github-actions-arm64-job",
                     ProducerVersion,
                     "Generates reviewable ARM64 GitHub Actions or Azure Pipelines changes.",
                     true,
@@ -266,9 +271,9 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
             .ToArray();
         if (codeInputs.Length > 0)
         {
-            skills.Add(
+            candidates.Add(
                 new AvailableSkill(
-                    "code-transformer",
+                    "code/arch-conditional-cleanup",
                     ProducerVersion,
                     "Generates approval-gated architecture compatibility patches for identified source files.",
                     true,
@@ -276,7 +281,10 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
                     ["patch"]));
         }
 
-        return skills;
+        var runnable = SkillCatalog.Default;
+        return candidates
+            .Where(skill => runnable.IsRunnable(skill.Name))
+            .ToList();
     }
 
     private static bool IsSupportedBuildInput(string path)

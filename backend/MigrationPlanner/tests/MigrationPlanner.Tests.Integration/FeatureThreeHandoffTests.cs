@@ -37,8 +37,8 @@ public sealed class FeatureThreeHandoffTests : IClassFixture<PlannerWebApplicati
 
         plan.Should().NotBeNull();
         var selected = new MigrationActionsRunner().SelectWorkItems(plan!);
-        selected.Select(item => item.AgentOrSkill).Should().Contain("build-config-generator");
-        selected.Select(item => item.AgentOrSkill).Should().Contain("ci-pipeline-generator");
+        selected.Select(item => item.AgentOrSkill).Should().Contain("build/add-arm64-target");
+        selected.Select(item => item.AgentOrSkill).Should().Contain("pipeline/github-actions-arm64-job");
         selected.Should().OnlyContain(item => item.ApprovalRequired);
     }
 }

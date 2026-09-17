@@ -17,7 +17,7 @@ public sealed class CodePatcher : IMigrationGenerator
     {
         if (_model is null)
         {
-            Console.WriteLine("    code-transformer skipped: set GITHUB_TOKEN to enable the AI transformer.");
+            Console.WriteLine("    code/arch-conditional-cleanup skipped: set GITHUB_TOKEN to enable the AI transformer.");
             return null;
         }
 

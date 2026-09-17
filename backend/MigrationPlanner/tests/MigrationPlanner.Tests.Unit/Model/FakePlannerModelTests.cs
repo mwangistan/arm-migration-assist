@@ -111,9 +111,9 @@ public sealed class FakePlannerModelTests
         using var document = JsonDocument.Parse(modelResult.PlanJson);
         var workItems = document.RootElement.GetProperty("workItems").EnumerateArray().ToArray();
         var buildItem = workItems.Single(item =>
-            item.GetProperty("agentOrSkill").GetString() == "build-config-generator");
+            item.GetProperty("agentOrSkill").GetString() == "build/add-arm64-target");
         var pipelineItem = workItems.Single(item =>
-            item.GetProperty("agentOrSkill").GetString() == "ci-pipeline-generator");
+            item.GetProperty("agentOrSkill").GetString() == "pipeline/github-actions-arm64-job");
 
         buildItem.GetProperty("inputs")[0].GetString().Should().Be("src/App.csproj");
         pipelineItem.GetProperty("dependencies")[0].GetString()

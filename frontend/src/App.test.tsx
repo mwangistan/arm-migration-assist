@@ -108,7 +108,7 @@ const planningResult: MigrationPlanningResult = {
         priority: 'P0',
         title: 'Add an ARM64 build target',
         objective: 'Produce and validate the ARM64 build configuration.',
-        agentOrSkill: 'build-config-generator',
+        agentOrSkill: 'build/add-arm64-target',
         inputs: ['src/App.csproj'],
         expectedOutputs: ['patch'],
         dependencies: [],

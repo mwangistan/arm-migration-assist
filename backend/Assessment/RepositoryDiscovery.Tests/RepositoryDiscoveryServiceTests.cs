@@ -264,8 +264,8 @@ public sealed class RepositoryDiscoveryServiceTests
             finding => finding.RuleId == "ARM-CODE-SIMD-01" && finding.File == "native.cpp");
         Assert.Contains("dependency-scanner", assessment.ScanCoverage.ScannersCompleted);
         Assert.Contains("code-compatibility-scanner", assessment.ScanCoverage.ScannersCompleted);
-        Assert.DoesNotContain(assessment.Unknowns, unknown => unknown.RequiredSkill == "assessment/dependency-scanner");
-        Assert.DoesNotContain(assessment.Unknowns, unknown => unknown.RequiredSkill == "assessment/code-compatibility-scanner");
+        Assert.DoesNotContain(assessment.Unknowns, unknown => unknown.RequiredSkill == "assessment/dependency-scan");
+        Assert.DoesNotContain(assessment.Unknowns, unknown => unknown.RequiredSkill == "assessment/code-compatibility-scan");
     }
 
     [Fact]
