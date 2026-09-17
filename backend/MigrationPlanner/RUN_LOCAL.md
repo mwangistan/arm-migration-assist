@@ -51,7 +51,12 @@ MIGRATIONPLANNER_MODEL_PROVIDER
 | `Hosted` | OpenAI-compatible hosted model with function calling. Requires the `Planner:Hosted` config or env overrides.         |
 | `Phi`    | Azure AI Foundry Phi deployment via `Azure.AI.Inference`. Requires the `Planner:Phi` config or env overrides below.  |
 
-Default when unset: `Fake`.
+The provider must be set explicitly — either via the environment variable above
+or via `Planner:ModelProvider` in configuration. The API refuses to start
+without a selector, and it does not fall back to `Fake` silently. Local dev
+that wants canned output must set `MIGRATIONPLANNER_MODEL_PROVIDER=Fake`
+(already the value in `launchSettings.json`, so `dotnet run` from Visual
+Studio / VS Code just works).
 
 ### Using the `Phi` provider (Azure AI Foundry)
 

@@ -18,6 +18,9 @@ public enum Topic
     [EnumMember(Value = "windows-app-sdk")] WindowsAppSdk,
     [EnumMember(Value = "performance-optimization")] PerformanceOptimization,
     [EnumMember(Value = "compatibility-troubleshooting")] CompatibilityTroubleshooting,
+    [EnumMember(Value = "python-packaging")] PythonPackaging,
+    [EnumMember(Value = "windows-arm-ci-runners")] WindowsArmCiRunners,
+    [EnumMember(Value = "ai-inference-arm64")] AiInferenceArm64,
 }
 
 [JsonConverter(typeof(EnumMemberJsonConverter<SourceKind>))]

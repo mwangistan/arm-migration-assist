@@ -86,7 +86,7 @@
       }
     },
     "Topic": {
-      "$comment": "Closed enum shared with the MCP lookup_windows_arm_guidance tool. Add topics deliberately; do not accept free-text.",
+      "$comment": "Closed enum shared with the MCP lookup_windows_arm_guidance tool. Add topics deliberately; do not accept free-text. Must stay in sync with MigrationPlanner.Domain.Guidance.Topic.",
       "description": "Topic tag. Every snippet is tagged with one or more topics; the MCP tool queries by topic.",
       "enum": [
         "woa-overview",
@@ -99,7 +99,10 @@
         "msix-arm64-packaging",
         "windows-app-sdk",
         "performance-optimization",
-        "compatibility-troubleshooting"
+        "compatibility-troubleshooting",
+        "python-packaging",
+        "windows-arm-ci-runners",
+        "ai-inference-arm64"
       ]
     },
     "Snippet": {
@@ -126,10 +129,10 @@
           "maxLength": 100
         },
         "sourceUrl": {
-          "description": "Canonical HTTPS Microsoft Learn URL the snippet was derived from.",
+          "description": "Canonical HTTPS URL the snippet was derived from. Restricted to a curated allowlist of trusted Windows-on-Arm / Arm-ecosystem sources: Microsoft Learn, Arm Learning Paths, PyTorch, GitHub docs and blog, ONNX Runtime.",
           "type": "string",
           "format": "uri",
-          "pattern": "^https://learn\\.microsoft\\.com/",
+          "pattern": "^https://(learn\\.microsoft\\.com|learn\\.arm\\.com|pytorch\\.org|docs\\.github\\.com|github\\.blog|onnxruntime\\.ai)/",
           "maxLength": 2048
         },
         "title": {

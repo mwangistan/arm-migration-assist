@@ -9,6 +9,7 @@
     <ProjectReference Include="..\..\src\MigrationPlanner.Domain\MigrationPlanner.Domain.csproj" />
     <ProjectReference Include="..\..\src\MigrationPlanner.Application\MigrationPlanner.Application.csproj" />
     <ProjectReference Include="..\..\src\MigrationPlanner.Infrastructure\MigrationPlanner.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\MigrationPlanner.Api\MigrationPlanner.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
