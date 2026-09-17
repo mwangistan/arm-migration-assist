@@ -108,10 +108,20 @@ public class Program
         app.Run();
     }
 
-    private static string ResolveDefaultCorpusRoot(string contentRoot)
+    internal static string ResolveDefaultCorpusRoot(string contentRoot)
     {
-        // src/MigrationPlanner.Api -> ../../../knowledge/windows-on-arm
-        var candidate = Path.GetFullPath(Path.Combine(contentRoot, "..", "..", "..", "knowledge", "windows-on-arm"));
-        return Directory.Exists(candidate) ? candidate : Path.Combine(contentRoot, "knowledge", "windows-on-arm");
+        var current = new DirectoryInfo(contentRoot);
+        while (current is not null)
+        {
+            var candidate = Path.Combine(current.FullName, "knowledge", "windows-on-arm");
+            if (File.Exists(Path.Combine(candidate, "corpus.json")))
+            {
+                return candidate;
+            }
+
+            current = current.Parent;
+        }
+
+        return Path.Combine(contentRoot, "knowledge", "windows-on-arm");
     }
 }
