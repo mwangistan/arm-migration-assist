@@ -27,7 +27,7 @@ SNIPPETS_DIR = CORPUS_ROOT / "snippets"
 MANIFEST_PATH = CORPUS_ROOT / "corpus.json"
 
 
-CORPUS_VERSION = "2026-09-15.1"
+CORPUS_VERSION = "2026-09-17.1"
 SCHEMA_VERSION = "1.0"
 PRODUCER = {
     "name": "arm-migration-assist-corpus",
@@ -77,6 +77,59 @@ METADATA = [
             "compatibility-troubleshooting",
         ],
         "summary": "Four-stage workflow (assess, plan, build, validate) for adding ARM64 support to an existing Windows app.",
+    },
+    {
+        "guidanceId": "python-woa-wheels-01",
+        "sourceUrl": "https://learn.arm.com/learning-paths/laptops-and-desktops/win_python/how-to-1/",
+        "title": "Platform-specificity of Python packages on Windows on Arm",
+        "section": "Native wheels, source builds, and repo-level patterns",
+        "retrievedAt": "2026-09-17T00:00:00Z",
+        "relativePath": "snippets/python-woa-wheels-01.md",
+        "topics": [
+            "python-packaging",
+            "compatibility-troubleshooting",
+        ],
+        "summary": "Python packages with compiled extensions need win_arm64 wheels; without them pip falls back to source builds requiring MSVC and often Rust.",
+    },
+    {
+        "guidanceId": "pytorch-woa-status-01",
+        "sourceUrl": "https://pytorch.org/",
+        "title": "PyTorch on Windows on Arm \u2014 install status and GPU-parity gap",
+        "section": "CPU wheels, CUDA gap, DirectML, ONNX fallback",
+        "retrievedAt": "2026-09-17T00:00:00Z",
+        "relativePath": "snippets/pytorch-woa-status-01.md",
+        "topics": [
+            "python-packaging",
+            "ai-inference-arm64",
+            "compatibility-troubleshooting",
+        ],
+        "summary": "PyTorch ships CPU-only win_arm64 wheels; CUDA is unavailable on Windows on Arm, so GPU parity requires torch-directml or ONNX Runtime.",
+    },
+    {
+        "guidanceId": "github-actions-windows-arm-runner-01",
+        "sourceUrl": "https://docs.github.com/en/actions",
+        "title": "GitHub Actions windows-11-arm runner and setup-python on ARM64",
+        "section": "CI matrix patterns and common failure modes",
+        "retrievedAt": "2026-09-17T00:00:00Z",
+        "relativePath": "snippets/github-actions-windows-arm-runner-01.md",
+        "topics": [
+            "windows-arm-ci-runners",
+            "native-arm64-build",
+        ],
+        "summary": "Use runs-on: windows-11-arm with actions/setup-python architecture: arm64; watch for source-build fallbacks and cache-key architecture collisions.",
+    },
+    {
+        "guidanceId": "onnxruntime-arm64-01",
+        "sourceUrl": "https://onnxruntime.ai/",
+        "title": "ONNX Runtime on Windows on Arm \u2014 the primary native-ARM64 inference path",
+        "section": "Export, serve, and warnings",
+        "retrievedAt": "2026-09-17T00:00:00Z",
+        "relativePath": "snippets/onnxruntime-arm64-01.md",
+        "topics": [
+            "ai-inference-arm64",
+            "native-arm64-build",
+        ],
+        "summary": "ONNX Runtime is the default native-ARM64 inference fallback for CUDA-dependent workloads on Windows on Arm; QNN provider targets Snapdragon X NPUs.",
     },
 ]
 
