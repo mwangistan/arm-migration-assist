@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ArmMigrationAssist.Api</RootNamespace>
+    <AssemblyName>ArmMigrationAssist.Api</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Assessment\RepositoryDiscovery\RepositoryDiscovery.csproj" />
+    <ProjectReference Include="..\AutomatedMigration.Api\AutomatedMigration.Api.csproj" />
+    <ProjectReference Include="..\MigrationPlanner\src\MigrationPlanner.Api\MigrationPlanner.Api.csproj" />
+    <ProjectReference Include="..\Validation\Api\Validation.Api.csproj" />
+  </ItemGroup>
+
+</Project>
