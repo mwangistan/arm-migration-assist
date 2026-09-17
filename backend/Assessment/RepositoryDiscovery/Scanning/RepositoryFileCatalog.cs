@@ -20,10 +20,11 @@ internal sealed record RepositoryFileCatalog(
 
     private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".c", ".cc", ".cpp", ".cs", ".csproj", ".css", ".fs", ".fsproj", ".go", ".gradle",
-        ".h", ".hpp", ".html", ".java", ".js", ".json", ".jsx", ".kt", ".props", ".py",
-        ".razor", ".rb", ".rs", ".sh", ".sln", ".svelte", ".targets", ".toml", ".ts", ".tsx",
-        ".vb", ".vbproj", ".vcxproj", ".vue", ".xml", ".xaml", ".yaml", ".yml",
+        ".appxmanifest", ".asm", ".c", ".cc", ".cjs", ".cpp", ".cs", ".csproj", ".css",
+        ".fs", ".fsproj", ".go", ".gradle", ".h", ".hpp", ".html", ".iss", ".java", ".js",
+        ".json", ".jsx", ".kt", ".m", ".mjs", ".msixproj", ".nsi", ".props", ".py", ".razor",
+        ".rb", ".rs", ".s", ".sh", ".sln", ".svelte", ".targets", ".toml", ".ts", ".tsx",
+        ".vb", ".vbproj", ".vcxproj", ".vue", ".wixproj", ".wxs", ".xml", ".xaml", ".yaml", ".yml",
     };
 
     private static readonly HashSet<string> TextFileNames = new(StringComparer.OrdinalIgnoreCase)

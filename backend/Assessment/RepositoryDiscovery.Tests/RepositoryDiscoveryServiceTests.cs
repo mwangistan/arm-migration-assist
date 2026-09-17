@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 using ArmMigrationAssist.RepositoryDiscovery;
+using ArmMigrationAssist.RepositoryDiscovery.Models;
+using ArmMigrationAssist.RepositoryDiscovery.Validation;
 using Json.Schema;
 using Xunit;
 
@@ -8,6 +10,37 @@ namespace ArmMigrationAssist.RepositoryDiscovery.Tests;
 
 public sealed class RepositoryDiscoveryServiceTests
 {
+    [Fact]
+    public async Task AssessmentValidator_ReportsCrossRecordContractViolations()
+    {
+        using var repository = TestRepository.Create();
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+        var dependency = Assert.Single(assessment.Dependencies);
+        var invalid = assessment with
+        {
+            Dependencies = [dependency, dependency],
+            ScanCoverage = assessment.ScanCoverage with
+            {
+                FilesScanned = assessment.ScanCoverage.FilesTotal + 1,
+            },
+            Unknowns =
+            [
+                new AssessmentUnknown(
+                    "References missing evidence.",
+                    "dependency",
+                    null,
+                    ["dependency-missing"]),
+            ],
+        };
+
+        var errors = RepositoryAssessmentValidator.Validate(invalid);
+
+        Assert.Contains(errors, error => error.StartsWith("Duplicate evidenceId", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.StartsWith("filesScanned", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("dependency-missing", StringComparison.Ordinal));
+        Assert.Throws<InvalidOperationException>(() => RepositoryAssessmentValidator.EnsureValid(invalid));
+    }
+
     [Fact]
     public async Task DiscoverAsync_ProducesEvidenceBasedAssessmentForTrackedFiles()
     {
@@ -35,7 +68,9 @@ public sealed class RepositoryDiscoveryServiceTests
         Assert.True(assessment.BuildFindings.TestsExist);
         Assert.Equal("electron", assessment.WindowsExperience.UiTechnology);
         Assert.Contains(assessment.Dependencies,
-            dependency => dependency.Name == "electron" && dependency.Ecosystem == "npm");
+            dependency => dependency.Name == "electron"
+                && dependency.Ecosystem == "npm"
+                && dependency.Type == "native");
         Assert.Empty(assessment.CodeFindings);
         Assert.Equal(assessment.ScanCoverage.FilesTotal, assessment.ScanCoverage.FilesScanned);
         Assert.DoesNotContain(
@@ -191,6 +226,39 @@ public sealed class RepositoryDiscoveryServiceTests
     }
 
     [Fact]
+    public async Task DiscoverAsync_ReportsBorrowedSourceAndInstallerSignals()
+    {
+        using var repository = TestRepository.Create();
+        repository.WriteTrackedFile("native/startup.asm", "mov eax, 1");
+        repository.WriteTrackedFile("native/bridge.m", "int bridge(void) { return 0; }");
+        repository.WriteTrackedFile("native/simd.cpp",
+            """
+            #include <nmmintrin.h>
+            #if defined(_M_AMD64)
+            __m128 value;
+            #endif
+            """);
+        repository.WriteTrackedFile("installer/setup.nsi", "Name ARM64");
+        repository.CommitChanges("add borrowed scanner signals");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.Contains("assembly", assessment.Technology.Languages);
+        Assert.Contains("objective-c", assessment.Technology.Languages);
+        Assert.Contains("nsis", assessment.Technology.Installers);
+        Assert.Contains(assessment.CodeFindings,
+            finding => finding.RuleId == "ARM-CODE-ASSEMBLY-SOURCE-01"
+                && finding.File == "native/startup.asm");
+        Assert.Contains(assessment.CodeFindings,
+            finding => finding.RuleId == "ARM-CODE-SIMD-01"
+                && finding.File == "native/simd.cpp");
+        Assert.Contains(assessment.CodeFindings,
+            finding => finding.RuleId == "ARM-CODE-ARCH-MACRO-01"
+                && finding.File == "native/simd.cpp");
+        Assert.Equal(assessment.ScanCoverage.FilesTotal, assessment.ScanCoverage.FilesScanned);
+    }
+
+    [Fact]
     public async Task DiscoverAsync_CapsCodeFindingsAtContractLimit()
     {
         using var repository = TestRepository.Create();
@@ -199,6 +267,7 @@ public sealed class RepositoryDiscoveryServiceTests
         repository.WriteTrackedFile(
             "dense.cpp",
             string.Join('\n', Enumerable.Repeat(matchingLine, 3_334)));
+        repository.WriteTrackedFile("zz-last.asm", "mov eax, 1");
         repository.CommitChanges("add dense compatibility fixture");
 
         var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
@@ -227,6 +296,11 @@ public sealed class RepositoryDiscoveryServiceTests
         repository.WriteTrackedFile("vcpkg.json",
             """{"dependencies":["qtbase",{"name":"openssl","version>=":"3.3.0"}]}""");
         repository.WriteTrackedBytes("runtimes/win-x64/native/legacy.dll", CreatePeImage(0x8664));
+        repository.WriteTrackedBytes("python/native_extension.pyd", CreatePeImage(0xaa64));
+        repository.WriteTrackedBytes("drivers/legacy.sys", CreatePeImage(0x8664));
+        repository.WriteTrackedBytes("native/legacy-arm.dll", CreatePeImage(0x01c4));
+        repository.WriteTrackedFile("package.json", """{"dependencies":{"esbuild":"0.25.0"}}""");
+        repository.WriteTrackedFile("requirements.txt", "cryptography==44.0.0\n");
         repository.CommitChanges("add multiline and native dependency fixtures");
 
         var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
@@ -242,6 +316,24 @@ public sealed class RepositoryDiscoveryServiceTests
                 && dependency.Ecosystem == "native-binary"
                 && dependency.ArchitectureStatus == "emulation-only"
                 && dependency.AvailableArchitectures.Contains("x64"));
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "native_extension.pyd"
+                && dependency.Ecosystem == "native-binary"
+                && dependency.ArchitectureStatus == "ready"
+                && dependency.AvailableArchitectures.Contains("arm64"));
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "legacy.sys"
+                && dependency.Type == "driver"
+                && dependency.ArchitectureStatus == "blocked"
+                && dependency.AvailableArchitectures.Contains("x64"));
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "legacy-arm.dll"
+                && dependency.ArchitectureStatus == "blocked"
+                && dependency.AvailableArchitectures.Contains("arm"));
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "esbuild" && dependency.Type == "native");
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "cryptography" && dependency.Type == "native");
     }
 
     [Fact]

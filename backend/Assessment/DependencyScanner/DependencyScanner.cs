@@ -14,15 +14,25 @@ internal sealed partial class DependencyScanner
 {
     private const int MaximumDependencies = 10_000;
 
-    private static readonly HashSet<string> NativePackageNames = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> NativeNpmPackageNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "better-sqlite3", "canvas", "grpc", "numpy", "onnxruntime", "opencv-python", "pillow",
-        "sharp", "sqlite3", "tensorflow", "torch",
+        "@swc/core", "bcrypt", "better-sqlite3", "canvas", "esbuild", "fsevents", "grpc",
+        "electron", "node-gyp", "node-sass", "playwright", "puppeteer", "robotjs", "serialport",
+        "sharp", "sqlite3", "usb",
+    };
+
+    private static readonly HashSet<string> NativePythonPackageNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bcrypt", "brotli", "cffi", "coincurve", "cryptography", "greenlet", "grpcio", "h5py",
+        "lxml", "markupsafe", "matplotlib", "msgpack", "numba", "numpy", "onnxruntime",
+        "opencv-python", "orjson", "pandas", "pillow", "psycopg2", "psycopg2-binary", "pyarrow",
+        "pycryptodome", "pynacl", "pywin32", "pyzmq", "regex", "scikit-learn", "scipy",
+        "tensorflow", "torch", "ujson", "wrapt", "zstandard",
     };
 
     private static readonly HashSet<string> NativeBinaryExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".dll", ".dylib", ".exe", ".node", ".so", ".sys",
+        ".dll", ".dylib", ".exe", ".node", ".pyd", ".so", ".sys",
     };
 
     public DependencyScanResult Scan(
@@ -146,7 +156,8 @@ internal sealed partial class DependencyScanner
     {
         var normalized = name.ToLowerInvariant();
         var isNative = ecosystem is "vcpkg" or "conan" or "native-binary"
-            || NativePackageNames.Contains(name);
+            || ecosystem == "npm" && NativeNpmPackageNames.Contains(name)
+            || ecosystem == "pypi" && NativePythonPackageNames.Contains(normalized.Replace('_', '-').Replace('.', '-'));
         var type = ecosystem == "nuget" && !isNative ? "managed" : isNative ? "native" : "unknown";
 
         if (Arm64EcTokenRegex().IsMatch(normalized))
@@ -453,6 +464,10 @@ internal sealed partial class DependencyScanner
             var type = file.Extension.Equals(".sys", StringComparison.OrdinalIgnoreCase)
                 ? "driver"
                 : "native";
+            if (type == "driver" && status != "ready")
+            {
+                status = "blocked";
+            }
             var evidence = new Evidence(
                 "binary",
                 file.RelativePath,
@@ -505,7 +520,7 @@ internal sealed partial class DependencyScanner
             {
                 0x014c => ("PE", "emulation-only", "x86"),
                 0x8664 => ("PE", "emulation-only", "x64"),
-                0x01c0 or 0x01c4 => ("PE", "unknown", "arm"),
+                0x01c0 or 0x01c4 => ("PE", "blocked", "arm"),
                 0xaa64 => ("PE", "ready", "arm64"),
                 0xa641 => ("PE", "ready", "arm64ec"),
                 _ => null,
@@ -521,7 +536,7 @@ internal sealed partial class DependencyScanner
             return machine switch
             {
                 3 => ("ELF", "emulation-only", "x86"),
-                40 => ("ELF", "unknown", "arm"),
+                40 => ("ELF", "blocked", "arm"),
                 62 => ("ELF", "emulation-only", "x64"),
                 183 => ("ELF", "ready", "arm64"),
                 _ => null,

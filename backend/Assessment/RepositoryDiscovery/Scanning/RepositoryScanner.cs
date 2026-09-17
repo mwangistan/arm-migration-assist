@@ -13,8 +13,10 @@ internal sealed partial class RepositoryScanner
     private static readonly IReadOnlyDictionary<string, string> LanguageByExtension =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
+            [".asm"] = "assembly",
             [".c"] = "c",
             [".cc"] = "cpp",
+            [".cjs"] = "javascript",
             [".cpp"] = "cpp",
             [".cxx"] = "cpp",
             [".cs"] = "csharp",
@@ -25,11 +27,14 @@ internal sealed partial class RepositoryScanner
             [".js"] = "javascript",
             [".jsx"] = "javascript",
             [".kt"] = "kotlin",
+            [".m"] = "objective-c",
+            [".mjs"] = "javascript",
             [".php"] = "php",
             [".ps1"] = "powershell",
             [".py"] = "python",
             [".rb"] = "ruby",
             [".rs"] = "rust",
+            [".s"] = "assembly",
             [".sh"] = "shell",
             [".swift"] = "swift",
             [".ts"] = "typescript",
@@ -39,9 +44,9 @@ internal sealed partial class RepositoryScanner
 
     private static readonly HashSet<string> SourceCodeExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".c", ".cc", ".cpp", ".cs", ".css", ".fs", ".go", ".h", ".hpp", ".html", ".java",
-        ".js", ".jsx", ".kt", ".py", ".razor", ".rb", ".rs", ".svelte", ".swift", ".ts",
-        ".tsx", ".vb", ".vue", ".xaml",
+        ".asm", ".c", ".cc", ".cjs", ".cpp", ".cs", ".css", ".fs", ".go", ".h", ".hpp",
+        ".html", ".java", ".js", ".jsx", ".kt", ".m", ".mjs", ".py", ".razor", ".rb", ".rs",
+        ".s", ".svelte", ".swift", ".ts", ".tsx", ".vb", ".vue", ".xaml",
     };
 
     public DiscoveryScan Scan(
@@ -232,6 +237,21 @@ internal sealed partial class RepositoryScanner
         if (file.Extension.Equals(".iss", StringComparison.OrdinalIgnoreCase))
         {
             installers.Add("inno-setup");
+        }
+
+        if (file.Extension.Equals(".nsi", StringComparison.OrdinalIgnoreCase))
+        {
+            installers.Add("nsis");
+        }
+
+        if (file.Extension is ".msix" or ".appx")
+        {
+            installers.Add("msix");
+        }
+
+        if (file.Extension.Equals(".msi", StringComparison.OrdinalIgnoreCase))
+        {
+            installers.Add("msi");
         }
 
         if (lowerPath.EndsWith("package.json", StringComparison.Ordinal)
@@ -649,6 +669,10 @@ internal sealed partial class RepositoryScanner
         || file.Extension.Equals(".wxs", StringComparison.OrdinalIgnoreCase)
         || file.Extension.Equals(".msixproj", StringComparison.OrdinalIgnoreCase)
         || file.Extension.Equals(".iss", StringComparison.OrdinalIgnoreCase)
+        || file.Extension.Equals(".nsi", StringComparison.OrdinalIgnoreCase)
+        || file.Extension.Equals(".msix", StringComparison.OrdinalIgnoreCase)
+        || file.Extension.Equals(".appx", StringComparison.OrdinalIgnoreCase)
+        || file.Extension.Equals(".msi", StringComparison.OrdinalIgnoreCase)
         || file.RelativePath.EndsWith("package.appxmanifest", StringComparison.OrdinalIgnoreCase)
         || (file.RelativePath.EndsWith("package.json", StringComparison.OrdinalIgnoreCase) && Contains(file.Content, "squirrel.windows"));
 

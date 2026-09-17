@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import type { RepositoryAssessment } from './types';
@@ -10,7 +10,7 @@ const assessment: RepositoryAssessment = {
   producer: {
     name: 'repository-discovery',
     version: '1.0.0',
-    ruleset: 'repository-discovery-1.0',
+    ruleset: 'repository-discovery-1.1',
     scannerVersions: [],
   },
   repository: {
@@ -92,6 +92,7 @@ const assessment: RepositoryAssessment = {
 describe('App', () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -188,5 +189,98 @@ describe('App', () => {
 
     expect(await screen.findByText('Assessment failed.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Awaiting repository' })).toBeInTheDocument();
+  });
+
+  it('authenticates and resumes a protected repository assessment', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        title: 'GitHub authentication required',
+        detail: 'This repository requires GitHub sign-in.',
+        authenticationRequired: true,
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/problem+json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        sessionId: 'a'.repeat(32),
+        status: 'pending',
+        expiresAt: '2026-09-16T01:00:00Z',
+        message: 'Complete GitHub sign-in in the browser window.',
+      }), {
+        status: 202,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        sessionId: 'a'.repeat(32),
+        status: 'succeeded',
+        expiresAt: '2026-09-16T01:00:00Z',
+        message: 'GitHub sign-in completed.',
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(assessment), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
+      target: { value: 'https://github.com/example/private-app' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Run assessment' }));
+
+    expect(await screen.findByRole('heading', { name: 'sample-app' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(JSON.parse(String(fetchMock.mock.calls[3][1]?.body))).toEqual({
+      source: 'https://github.com/example/private-app',
+      authenticationSessionId: 'a'.repeat(32),
+    });
+  });
+
+  it('cancels an in-progress GitHub sign-in poll', async () => {
+    const pendingSession = {
+      sessionId: 'b'.repeat(32),
+      status: 'pending',
+      expiresAt: '2026-09-16T01:00:00Z',
+      message: 'Complete GitHub sign-in in the browser window.',
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        detail: 'This repository requires GitHub sign-in.',
+        authenticationRequired: true,
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/problem+json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(pendingSession), {
+        status: 202,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(pendingSession), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
+      target: { value: 'https://github.com/example/private-app' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Run assessment' }));
+    expect(await screen.findByText('Waiting for GitHub sign-in')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(await screen.findByRole('heading', { name: 'Awaiting repository' })).toBeInTheDocument();
+    expect(screen.queryByText('Waiting for GitHub sign-in')).not.toBeInTheDocument();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect(fetchMock.mock.calls[3][0]).toBe(`/api/auth/github/sessions/${'b'.repeat(32)}`);
+    expect(fetchMock.mock.calls[3][1]).toMatchObject({
+      method: 'DELETE',
+      headers: { 'X-Arm-Migration-Client': 'dashboard' },
+    });
   });
 });

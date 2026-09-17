@@ -2,7 +2,9 @@
 
 Turns a repository into a reproducible, evidence-backed inventory for Windows on
 Arm planning. The `RepositoryDiscovery` executable orchestrates all four stories
-and produces the `RepositoryAssessmentV1` contract consumed by Feature 2.
+and produces the `RepositoryAssessmentV1` contract consumed by Feature 2. It
+exposes direct .NET, synchronous HTTP, queued HTTP, and Server-Sent Events (SSE)
+integration paths while retaining one React and Fluent UI dashboard.
 
 | Subfolder | User story |
 |-----------|------------|

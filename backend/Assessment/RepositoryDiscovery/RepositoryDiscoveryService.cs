@@ -4,7 +4,9 @@ using System.Text;
 using ArmMigrationAssist.Assessment.CodeCompatibility;
 using ArmMigrationAssist.Assessment.DependencyScanner;
 using ArmMigrationAssist.RepositoryDiscovery.Models;
+using ArmMigrationAssist.RepositoryDiscovery.Jobs;
 using ArmMigrationAssist.RepositoryDiscovery.Scanning;
+using ArmMigrationAssist.RepositoryDiscovery.Validation;
 
 namespace ArmMigrationAssist.RepositoryDiscovery;
 
@@ -12,12 +14,16 @@ public interface IRepositoryAssessmentService
 {
     Task<RepositoryAssessment> DiscoverAsync(
         string source,
-        CancellationToken cancellationToken = default);
+    CancellationToken cancellationToken = default,
+        RepositoryAccessOptions? accessOptions = null,
+        IProgress<AssessmentProgress>? progress = null);
 }
+
+public sealed record RepositoryAccessOptions(bool UseStoredGitHubCredentials = false);
 
 public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
 {
-    private const string Ruleset = "repository-discovery-1.0";
+    private const string Ruleset = "repository-discovery-1.1";
     private static readonly string ProducerVersion = ResolveProducerVersion();
 
     private static string ResolveProducerVersion()
@@ -39,20 +45,28 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
 
     public async Task<RepositoryAssessment> DiscoverAsync(
         string source,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        RepositoryAccessOptions? accessOptions = null,
+        IProgress<AssessmentProgress>? progress = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
 
-        var git = new GitClient();
+        progress?.Report(new AssessmentProgress("repository-intake", 5, "Opening the repository."));
+        var git = new GitClient(accessOptions?.UseStoredGitHubCredentials == true);
         using var workspace = await new RepositoryIntake(git)
             .OpenAsync(source, cancellationToken);
+        progress?.Report(new AssessmentProgress("file-catalog", 20, "Cataloging tracked repository files."));
         var catalog = await RepositoryFileCatalog.CreateAsync(
             workspace.RootPath,
             git,
             cancellationToken);
+        progress?.Report(new AssessmentProgress("technology-discovery", 40, "Discovering technology and build signals."));
         var scan = new RepositoryScanner().Scan(catalog, cancellationToken);
+        progress?.Report(new AssessmentProgress("dependency-scanner", 60, "Scanning dependency manifests and binaries."));
         var dependencyScan = new DependencyScanner().Scan(catalog.Files, cancellationToken);
+        progress?.Report(new AssessmentProgress("code-compatibility-scanner", 80, "Scanning architecture-sensitive source code."));
         var codeFindings = new CodeCompatibilityScanner().Scan(catalog.Files, cancellationToken);
+        progress?.Report(new AssessmentProgress("finalizing", 95, "Validating assessment evidence."));
 
         var unknowns = new List<AssessmentUnknown>();
 
@@ -107,7 +121,7 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
                 []));
         }
 
-        return new RepositoryAssessment(
+        var assessment = new RepositoryAssessment(
             SchemaVersion: "1.0",
             AssessmentId: CreateAssessmentId(
                 workspace.RepositoryUrl,
@@ -166,6 +180,9 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
                     ["repository-file-catalog"],
                     ["code-findings"]),
             ]);
+
+                RepositoryAssessmentValidator.EnsureValid(assessment);
+                return assessment;
     }
 
     private static string CreateAssessmentId(

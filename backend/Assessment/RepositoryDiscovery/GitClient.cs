@@ -3,7 +3,7 @@ using System.Text;
 
 namespace ArmMigrationAssist.RepositoryDiscovery;
 
-internal sealed class GitClient
+internal sealed class GitClient(bool useStoredGitHubCredentials = false)
 {
     public async Task<string> RunAsync(
         string workingDirectory,
@@ -13,6 +13,12 @@ internal sealed class GitClient
         var result = await TryRunAsync(workingDirectory, arguments, cancellationToken);
         if (result.ExitCode != 0)
         {
+            if (IsAuthenticationFailure(result.StandardError))
+            {
+                throw new RepositoryAuthenticationRequiredException(
+                    "GitHub authentication is required or repository access could not be verified.");
+            }
+
             throw new RepositoryDiscoveryException("Git could not inspect the repository.");
         }
 
@@ -71,7 +77,7 @@ internal sealed class GitClient
             await standardError);
     }
 
-    private static ProcessStartInfo CreateStartInfo(
+    private ProcessStartInfo CreateStartInfo(
         string workingDirectory,
         IReadOnlyList<string> arguments)
     {
@@ -89,8 +95,11 @@ internal sealed class GitClient
         startInfo.Environment["GIT_CONFIG_NOSYSTEM"] = "1";
         startInfo.Environment["GIT_CONFIG_GLOBAL"] = OperatingSystem.IsWindows() ? "NUL" : "/dev/null";
         startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        startInfo.Environment["GCM_INTERACTIVE"] = "Never";
         startInfo.ArgumentList.Add("-c");
-        startInfo.ArgumentList.Add("credential.helper=");
+        startInfo.ArgumentList.Add(useStoredGitHubCredentials
+            ? "credential.helper=manager"
+            : "credential.helper=");
         startInfo.ArgumentList.Add("-c");
         startInfo.ArgumentList.Add($"core.hooksPath={(OperatingSystem.IsWindows() ? "NUL" : "/dev/null")}");
         startInfo.ArgumentList.Add("-c");
@@ -102,11 +111,20 @@ internal sealed class GitClient
 
         return startInfo;
     }
+
+    private static bool IsAuthenticationFailure(string standardError) =>
+        standardError.Contains("authentication failed", StringComparison.OrdinalIgnoreCase)
+        || standardError.Contains("could not read Username", StringComparison.OrdinalIgnoreCase)
+        || standardError.Contains("terminal prompts disabled", StringComparison.OrdinalIgnoreCase)
+        || standardError.Contains("repository not found", StringComparison.OrdinalIgnoreCase)
+        || standardError.Contains("returned error: 401", StringComparison.OrdinalIgnoreCase)
+        || standardError.Contains("returned error: 403", StringComparison.OrdinalIgnoreCase)
+        || standardError.Contains("access denied", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed record GitResult(int ExitCode, string StandardOutput, string StandardError);
 
-public sealed class RepositoryDiscoveryException : Exception
+public class RepositoryDiscoveryException : Exception
 {
     public RepositoryDiscoveryException(string message)
         : base(message)
@@ -115,6 +133,14 @@ public sealed class RepositoryDiscoveryException : Exception
 
     public RepositoryDiscoveryException(string message, Exception innerException)
         : base(message, innerException)
+    {
+    }
+}
+
+public sealed class RepositoryAuthenticationRequiredException : RepositoryDiscoveryException
+{
+    public RepositoryAuthenticationRequiredException(string message)
+        : base(message)
     {
     }
 }

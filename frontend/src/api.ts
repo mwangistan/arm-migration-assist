@@ -188,20 +188,55 @@ function problemMessage(value: unknown) {
   return typeof value.title === 'string' ? value.title : 'Assessment failed.';
 }
 
+export class AssessmentApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly authenticationRequired: boolean,
+  ) {
+    super(message);
+    this.name = 'AssessmentApiError';
+  }
+}
+
+export interface GitHubAuthenticationSession {
+  sessionId: string;
+  status: 'pending' | 'succeeded' | 'failed';
+  expiresAt: string;
+  message: string | null;
+}
+
+function isAuthenticationSession(value: unknown): value is GitHubAuthenticationSession {
+  return isRecord(value)
+    && typeof value.sessionId === 'string'
+    && (value.status === 'pending' || value.status === 'succeeded' || value.status === 'failed')
+    && typeof value.expiresAt === 'string'
+    && isOptionalString(value.message);
+}
+
+function hasAuthenticationRequirement(value: unknown) {
+  return isRecord(value) && value.authenticationRequired === true;
+}
+
 export async function assessRepository(
   source: string,
   signal?: AbortSignal,
+  authenticationSessionId?: string,
 ): Promise<RepositoryAssessment> {
   const response = await fetch('/api/assessments', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ source }),
+    body: JSON.stringify({ source, authenticationSessionId }),
     signal,
   });
 
   const payload = await readJson(response);
   if (!response.ok) {
-    throw new Error(problemMessage(payload));
+    throw new AssessmentApiError(
+      problemMessage(payload),
+      response.status,
+      hasAuthenticationRequirement(payload),
+    );
   }
 
   if (!isRepositoryAssessment(payload)) {
@@ -209,4 +244,51 @@ export async function assessRepository(
   }
 
   return payload;
+}
+
+export async function startGitHubAuthentication(
+  signal?: AbortSignal,
+): Promise<GitHubAuthenticationSession> {
+  const response = await fetch('/api/auth/github/sessions', {
+    method: 'POST',
+    headers: { 'X-Arm-Migration-Client': 'dashboard' },
+    signal,
+  });
+  const payload = await readJson(response);
+  if (!response.ok || !isAuthenticationSession(payload)) {
+    throw new Error(response.ok
+      ? 'The authentication service returned an invalid response.'
+      : problemMessage(payload));
+  }
+
+  return payload;
+}
+
+export async function getGitHubAuthentication(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<GitHubAuthenticationSession> {
+  const response = await fetch(`/api/auth/github/sessions/${encodeURIComponent(sessionId)}`, {
+    signal,
+  });
+  const payload = await readJson(response);
+  if (!response.ok || !isAuthenticationSession(payload)) {
+    throw new Error(response.status === 404
+      ? 'The GitHub sign-in session expired.'
+      : response.ok
+        ? 'The authentication service returned an invalid response.'
+        : problemMessage(payload));
+  }
+
+  return payload;
+}
+
+export async function cancelGitHubAuthentication(sessionId: string): Promise<void> {
+  const response = await fetch(`/api/auth/github/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+    headers: { 'X-Arm-Migration-Client': 'dashboard' },
+  });
+  if (!response.ok && response.status !== 404) {
+    throw new Error('GitHub sign-in could not be canceled.');
+  }
 }

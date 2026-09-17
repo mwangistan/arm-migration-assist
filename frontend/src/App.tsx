@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import {
   Badge,
   Button,
@@ -17,7 +17,13 @@ import {
   Dismiss20Regular,
   Search20Regular,
 } from '@fluentui/react-icons';
-import { assessRepository } from './api';
+import {
+  AssessmentApiError,
+  assessRepository,
+  cancelGitHubAuthentication,
+  getGitHubAuthentication,
+  startGitHubAuthentication,
+} from './api';
 import type { CodeFinding, DependencyFinding, RepositoryAssessment } from './types';
 
 type BadgeColor =
@@ -67,6 +73,25 @@ function formatDate(value: string) {
         dateStyle: 'medium',
         timeStyle: 'short',
       }).format(date);
+}
+
+function waitForPoll(signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+      return;
+    }
+
+    const handleAbort = () => {
+      window.clearTimeout(timeout);
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+    };
+    const timeout = window.setTimeout(() => {
+      signal.removeEventListener('abort', handleAbort);
+      resolve();
+    }, 1_000);
+    signal.addEventListener('abort', handleAbort, { once: true });
+  });
 }
 
 function architectureMeta(status: DependencyFinding['architectureStatus']): StatusMeta {
@@ -454,26 +479,70 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [controller, setController] = useState<AbortController | null>(null);
+  const [authenticationMessage, setAuthenticationMessage] = useState<string | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
+  const authenticationSessionRef = useRef<string | null>(null);
+
+  async function authenticateAndRetry(
+    normalizedSource: string,
+    signal: AbortSignal,
+  ) {
+    setAuthenticationMessage('Opening GitHub sign-in in your browser.');
+    let session = await startGitHubAuthentication(signal);
+    authenticationSessionRef.current = session.sessionId;
+    setAuthenticationMessage(session.message ?? 'Complete GitHub sign-in in your browser.');
+
+    try {
+      while (session.status === 'pending') {
+        session = await getGitHubAuthentication(session.sessionId, signal);
+        setAuthenticationMessage(session.message ?? 'Waiting for GitHub sign-in.');
+        if (session.status === 'pending') {
+          await waitForPoll(signal);
+        }
+      }
+
+      if (session.status !== 'succeeded') {
+        throw new Error(session.message ?? 'GitHub sign-in did not complete.');
+      }
+
+      return await assessRepository(normalizedSource, signal, session.sessionId);
+    } finally {
+      if (authenticationSessionRef.current === session.sessionId) {
+        authenticationSessionRef.current = null;
+      }
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedSource = source.trim();
 
     if (!normalizedSource) {
-      setInputError('Enter a public GitHub repository URL.');
+      setInputError('Enter a GitHub repository URL.');
       return;
     }
 
     setInputError(null);
     setError(null);
-  setAssessment(null);
+    setAssessment(null);
+    setAuthenticationMessage(null);
     setLoading(true);
     const nextController = new AbortController();
-    setController(nextController);
+    controllerRef.current = nextController;
 
     try {
-      const result = await assessRepository(normalizedSource, nextController.signal);
+      let result: RepositoryAssessment;
+      try {
+        result = await assessRepository(normalizedSource, nextController.signal);
+      } catch (requestError) {
+        if (!(requestError instanceof AssessmentApiError && requestError.authenticationRequired)) {
+          throw requestError;
+        }
+
+        result = await authenticateAndRetry(normalizedSource, nextController.signal);
+      }
+
+      setAuthenticationMessage(null);
       setAssessment(result);
     } catch (requestError) {
       if (!(requestError instanceof DOMException && requestError.name === 'AbortError')) {
@@ -481,12 +550,19 @@ export default function App() {
       }
     } finally {
       setLoading(false);
-      setController(null);
+      if (controllerRef.current === nextController) {
+        controllerRef.current = null;
+      }
     }
   }
 
   function cancelAssessment() {
-    controller?.abort();
+    const authenticationSessionId = authenticationSessionRef.current;
+    authenticationSessionRef.current = null;
+    controllerRef.current?.abort();
+    if (authenticationSessionId) {
+      void cancelGitHubAuthentication(authenticationSessionId).catch(() => undefined);
+    }
   }
 
   return (
@@ -508,7 +584,7 @@ export default function App() {
           <div className="page-intro">
             <p className="eyebrow">Windows on Arm</p>
             <h1 id="page-title">Repository assessment</h1>
-            <p className="page-context">Evidence workspace for public GitHub repositories</p>
+            <p className="page-context">Evidence workspace for GitHub repositories</p>
           </div>
 
           <form className="assessment-form" onSubmit={handleSubmit} noValidate>
@@ -563,8 +639,10 @@ export default function App() {
           ) : null}
           {loading ? (
             <div className="request-status" role="status" aria-live="polite">
-              <span>Cloning and scanning the repository</span>
-              <span>Results will appear when evidence collection is complete.</span>
+              <span>{authenticationMessage ? 'Waiting for GitHub sign-in' : 'Cloning and scanning the repository'}</span>
+              <span>
+                {authenticationMessage ?? 'Results will appear when evidence collection is complete.'}
+              </span>
             </div>
           ) : null}
         </section>
