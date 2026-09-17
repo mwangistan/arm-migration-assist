@@ -1,15 +1,30 @@
 # ARM Migration Assist
 
-An evidence-first engineering workspace for accelerating Windows on Arm
-application readiness and migration.
+AI-powered engineering assistant for accelerating Windows on Arm application
+readiness and migration.
 
-A developer provides a GitHub repository URL and gets a commit-pinned readiness
-assessment, an auditable migration strategy, approval-gated work items,
-portable reports, and a contract ready for reviewable patch generation.
+A developer provides a repository URL and gets an evidence-based readiness
+assessment, a prioritized migration plan, proposed code and configuration
+changes, validation results, and portable delivery artifacts.
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment and CI/CD](docs/CICD.md)
 - [Frontend workspace](frontend/README.md)
+
+## Project at a glance
+
+| Stage | Module | Current role |
+|---|---|---|
+| Connect and assess | `backend/Assessment/` | Commit-pinned repository evidence, live progress, compatibility findings, and explicit unknowns |
+| Plan | `backend/MigrationPlanner/` | Deterministic readiness scoring, grounded migration strategy, approvals, and Markdown/HTML reports |
+| Transform | `backend/AutomatedMigration/` | Review-only ARM64 build, CI, and code patch generation for runnable skills |
+| Validate | `backend/Validation/` | Approval-bound ARM64 build/test execution, evidence capture, scorecards, and dashboard projections |
+| Experience | `frontend/` | One Fluent UI workflow spanning Connect, Assess, Plan, Transform, and Validate |
+
+The versioned skill catalog at
+[`knowledge/skills/catalog.json`](knowledge/skills/catalog.json) records which
+skills are runnable and where they are implemented. Declared-only capabilities
+remain visible as gaps instead of appearing as completed work.
 
 ## Tech stack (from the spec)
 
@@ -41,6 +56,25 @@ Static Web Apps. Versioned JSON contracts keep every module independently
 testable and deployable. See [the architecture guide](docs/ARCHITECTURE.md) for
 runtime sequences, security boundaries, and module internals.
 
+## Assessment updates
+
+Repository assessment now:
+
+- resolves a GitHub default branch to an immutable commit and scans its bounded
+  archive without creating a remote Git checkout;
+- rejects unsafe archive paths, symbolic links, credential-bearing URLs, and
+  oversized inputs;
+- catalogs files once, then runs technology, dependency, and architecture-code
+  analysis concurrently;
+- streams real phase, percentage, and status events to the frontend, with
+  polling fallback and cancellation;
+- normalizes valid UTF-8 BOM manifests, validates evidence references, and sends
+  the completed `RepositoryAssessmentV1` unchanged to migration planning.
+
+Protected-repository authentication remains local and loopback-only through Git
+Credential Manager. The deployed Static Web App assesses public repositories
+without receiving or storing GitHub credentials.
+
 ## Project structure
 
 The folders map directly to the four features in the spec, so anyone reading the
@@ -71,6 +105,9 @@ arm-migration-assist/
 │       ├── BuildValidation/         # Story 4.1
 │       └── Dashboard/               # Story 4.2 (backend support)
 │
+├── knowledge/                 # Audited skills and Windows on Arm guidance
+│   └── skills/                # Runnable/declared implementation catalog
+│
 └── samples/                   # Reference repos for the demo (Story 4.3)
     ├── comfyui/
     └── open-webui/
@@ -84,7 +121,7 @@ arm-migration-assist/
 | Feature 2: AI Migration Planner | `backend/MigrationPlanner/` |
 | Feature 3: Automated Migration Actions | `backend/AutomatedMigration/` |
 | Feature 4: Validation & Demo | `backend/Validation/` + `samples/` |
-| Frontend dashboard | `frontend/` |
+| Migration workspace | `frontend/` |
 | Reference repos (ComfyUI, Open WebUI) | `samples/` |
 
 Each backend module owns its implementation and publishes a contract for the next
