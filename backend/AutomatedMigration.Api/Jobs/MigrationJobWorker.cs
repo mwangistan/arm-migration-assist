@@ -1,5 +1,6 @@
 using AutomatedMigration.Api.Configuration;
 using AutomatedMigration.Api.Contracts;
+using AutomatedMigration.Api.Publication;
 using AutomatedMigration.Api.Repository;
 using AutomatedMigration.CodeMigration;
 using Microsoft.Extensions.Options;
@@ -13,17 +14,23 @@ public sealed class MigrationJobWorker : BackgroundService
 {
     private readonly MigrationJobStore _store;
     private readonly RepositoryFetcher _fetcher;
+    private readonly IGitHubPublisher _publisher;
+    private readonly IValidationDispatcher _validation;
     private readonly AutomationOptions _options;
     private readonly ILogger<MigrationJobWorker> _logger;
 
     public MigrationJobWorker(
         MigrationJobStore store,
         RepositoryFetcher fetcher,
+        IGitHubPublisher publisher,
+        IValidationDispatcher validation,
         IOptions<AutomationOptions> options,
         ILogger<MigrationJobWorker> logger)
     {
         _store = store;
         _fetcher = fetcher;
+        _publisher = publisher;
+        _validation = validation;
         _options = options.Value;
         _logger = logger;
     }
@@ -57,11 +64,49 @@ public sealed class MigrationJobWorker : BackgroundService
                         .Select(w => new SkippedWorkItemDto(w.Id, w.AgentOrSkill, "no change produced"))
                         .ToList();
 
+                    PublicationResult? publication = null;
+                    if (job.Publish is { Enabled: true } publish)
+                    {
+                        try
+                        {
+                            publication = await _publisher
+                                .PublishAsync(job.Target, generated, publish, stoppingToken)
+                                .ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Publish step for job {JobId} threw", job.JobId);
+                            publication = new PublicationResult(
+                                Attempted: true,
+                                ForkFullName: null,
+                                BranchName: publish.BranchName,
+                                BaseCommitSha: job.Target.CommitSha,
+                                HeadCommitSha: null,
+                                PullRequestUrl: null,
+                                PatchesApplied: 0,
+                                PatchesFailed: 0,
+                                Error: $"Publisher threw: {ex.Message}",
+                                Warnings: Array.Empty<string>());
+                        }
+
+                        if (publication is { Error: null, ForkFullName: { } fork, BranchName: { } branch, HeadCommitSha: { } head })
+                        {
+                            var dispatch = await _validation
+                                .DispatchAsync(fork, branch, head, job.Plan, stoppingToken)
+                                .ConfigureAwait(false);
+                            if (dispatch is not null)
+                            {
+                                publication = publication with { Validation = dispatch };
+                            }
+                        }
+                    }
+
                     job.Result = new MigrationActionsResult(
                         job.PlanId,
                         job.Target.CommitSha,
                         generated,
-                        skipped);
+                        skipped,
+                        publication);
                     job.Status = MigrationJobStatus.Completed;
                 }
                 finally

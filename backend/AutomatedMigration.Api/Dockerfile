@@ -17,6 +17,12 @@ RUN dotnet publish backend/AutomatedMigration.Api/AutomatedMigration.Api.csproj 
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
+
+# git is required for the optional publish step (fork+clone+apply+push+PR).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app/publish ./
 
 ENV ASPNETCORE_URLS=http://+:8080

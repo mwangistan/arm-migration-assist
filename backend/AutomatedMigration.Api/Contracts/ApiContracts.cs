@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AutomatedMigration.Api.Publication;
 using AutomatedMigration.Models;
 
 namespace AutomatedMigration.Api.Contracts;
@@ -9,7 +10,8 @@ namespace AutomatedMigration.Api.Contracts;
 
 public sealed record MigrationActionsRequest(
     [property: JsonPropertyName("plan")] MigrationPlan Plan,
-    [property: JsonPropertyName("target")] RepositoryTarget Target);
+    [property: JsonPropertyName("target")] RepositoryTarget Target,
+    [property: JsonPropertyName("publish")] PublishRequest? Publish = null);
 
 public sealed record RepositoryTarget(
     [property: JsonPropertyName("url")] string Url,
@@ -35,7 +37,8 @@ public sealed record MigrationActionsResult(
     [property: JsonPropertyName("planId")] string PlanId,
     [property: JsonPropertyName("sourceCommitSha")] string SourceCommitSha,
     [property: JsonPropertyName("generated")] IReadOnlyList<GeneratedPatchDto> Generated,
-    [property: JsonPropertyName("skipped")] IReadOnlyList<SkippedWorkItemDto> Skipped);
+    [property: JsonPropertyName("skipped")] IReadOnlyList<SkippedWorkItemDto> Skipped,
+    [property: JsonPropertyName("publication")] PublicationResult? Publication = null);
 
 public sealed record GeneratedPatchDto(
     [property: JsonPropertyName("workItemId")] string WorkItemId,

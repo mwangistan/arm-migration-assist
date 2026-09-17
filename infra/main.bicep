@@ -234,6 +234,7 @@ resource automationApp 'Microsoft.App/containerApps@2024-03-01' = {
           }
           env: [
             { name: 'AUTOMATION_ALLOWED_ORIGINS', value: allowedOrigins }
+            { name: 'AUTOMATION_VALIDATION_API_URL', value: 'https://${validationApp.properties.configuration.ingress.fqdn}' }
             { name: 'AZURE_CLIENT_ID',            value: uami.properties.clientId }
           ]
         }

@@ -111,6 +111,74 @@ group.MapPost("/plans", async (
     return Results.Created(response.Links.Self, response);
 });
 
+// Clone-based sibling of POST /plans. Accepts a github.com URL + branch (optionally pinned
+// to a commit sha) and delegates to the same workflow once the tree is on disk. Scratch
+// lives under /tmp so evidence-under-storage guards on the local-path endpoint still hold.
+group.MapPost("/plans/from-git", async (
+    CreatePlanFromGitRequest? request,
+    IValidationWorkflowRunner workflow,
+    IValidationStore store,
+    CancellationToken cancellationToken) =>
+{
+    if (request is null)
+        return Problems.BadRequest("Request body is required.");
+    if (request.MigrationPlan is null)
+        return Problems.BadRequest("migrationPlan is required.");
+    if (!RequestValidation.HasRequiredMigrationFields(request.MigrationPlan))
+        return Problems.BadRequest("migrationPlan requires plan IDs, validation check lists, targetDevices, and workItems with acceptanceTests.");
+    if (request.Source is null)
+        return Problems.BadRequest("source is required.");
+
+    GitCloner.CloneResult cloned;
+    try
+    {
+        cloned = await GitCloner.CloneAsync(request.Source, cancellationToken);
+    }
+    catch (InvalidDataException ex)
+    {
+        return Problems.BadRequest(ex.Message);
+    }
+    catch (TimeoutException ex)
+    {
+        return Results.Problem(ex.Message, statusCode: StatusCodes.Status504GatewayTimeout);
+    }
+
+    try
+    {
+        var target = new Validation.BuildValidation.RepositoryTarget(
+            cloned.RepoPath,
+            CommitSha: string.IsNullOrWhiteSpace(cloned.ResolvedCommitSha) ? null : cloned.ResolvedCommitSha,
+            Branch: request.Source.Branch);
+        var options = new Validation.BuildValidation.PlanningOptions(cloned.EvidencePath);
+
+        if (PathGuard.IsSameOrInside(cloned.RepoPath, cloned.EvidencePath))
+            return Problems.BadRequest("Internal scratch layout invalid: evidence directory is inside repo.");
+        if (store.EvidenceDirectoryIsInsideStorage(cloned.EvidencePath))
+            return Problems.BadRequest("Internal scratch layout invalid: evidence directory is inside storage root.");
+        if (store.StorageRootIsInsideTarget(cloned.RepoPath))
+            return Problems.BadRequest("Internal scratch layout invalid: storage root is inside cloned repo.");
+
+        PreparedValidation prepared;
+        try
+        {
+            prepared = await workflow.PrepareAsync(request.MigrationPlan, target, options, cancellationToken);
+        }
+        catch (InvalidDataException)
+        {
+            return Problems.BadRequest("Repository or planning input failed validation. Check the supplied plan, branch, and commit.");
+        }
+        PlanSafety.Validate(prepared);
+        var created = await store.CreatePlanAsync(prepared, cancellationToken);
+        var response = PlanResponse.From(created.Metadata, includeProposal: request.IncludeProposal ? prepared : null);
+        return Results.Created(response.Links.Self, response);
+    }
+    catch
+    {
+        try { if (Directory.Exists(cloned.ScratchRoot)) Directory.Delete(cloned.ScratchRoot, recursive: true); } catch { }
+        throw;
+    }
+});
+
 group.MapGet("/plans/{planId}", async (string planId, IValidationStore store, CancellationToken cancellationToken) =>
 {
     var plan = await store.GetPlanAsync(planId, cancellationToken);

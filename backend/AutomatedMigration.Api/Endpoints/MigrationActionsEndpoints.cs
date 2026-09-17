@@ -52,7 +52,19 @@ public static class MigrationActionsEndpoints
             return TypedResults.BadRequest(Problem("target.commitSha must be a full 40+ char hex SHA."));
         }
 
-        var job = store.Enqueue(request.Plan.PlanId, request.Target, request.Plan);
+        if (request.Publish is { Enabled: true })
+        {
+            if (string.IsNullOrWhiteSpace(request.Publish.BranchName))
+            {
+                return TypedResults.BadRequest(Problem("publish.branchName is required when publish.enabled=true."));
+            }
+            if (!IsSafeBranchName(request.Publish.BranchName))
+            {
+                return TypedResults.BadRequest(Problem("publish.branchName must contain only [A-Za-z0-9_./-], no leading/trailing '/' or '..'."));
+            }
+        }
+
+        var job = store.Enqueue(request.Plan.PlanId, request.Target, request.Plan, request.Publish);
         var statusUrl = $"{http.Request.Scheme}://{http.Request.Host.Value}/api/migration-actions/jobs/{job.JobId}";
         var body = new MigrationActionsAccepted(job.JobId, job.Status.ToString().ToLowerInvariant(), statusUrl);
         return TypedResults.Accepted(statusUrl, body);
@@ -79,6 +91,18 @@ public static class MigrationActionsEndpoints
 
     private static bool IsHex(char c) =>
         (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+
+    private static bool IsSafeBranchName(string name)
+    {
+        if (name.StartsWith('/') || name.EndsWith('/')) return false;
+        if (name.Contains("..", StringComparison.Ordinal)) return false;
+        foreach (var c in name)
+        {
+            var ok = char.IsLetterOrDigit(c) || c is '-' or '_' or '.' or '/';
+            if (!ok) return false;
+        }
+        return true;
+    }
 
     private static ProblemDetails Problem(string detail) => new()
     {

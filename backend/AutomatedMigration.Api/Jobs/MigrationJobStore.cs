@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Threading.Channels;
 using AutomatedMigration.Api.Configuration;
 using AutomatedMigration.Api.Contracts;
+using AutomatedMigration.Api.Publication;
 using Microsoft.Extensions.Options;
 
 namespace AutomatedMigration.Api.Jobs;
@@ -14,6 +15,7 @@ public sealed class MigrationJob
     public required string PlanId { get; init; }
     public required RepositoryTarget Target { get; init; }
     public required AutomatedMigration.Models.MigrationPlan Plan { get; init; }
+    public PublishRequest? Publish { get; init; }
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
@@ -42,7 +44,7 @@ public sealed class MigrationJobStore
 
     public ChannelReader<string> Queue => _queue.Reader;
 
-    public MigrationJob Enqueue(string planId, RepositoryTarget target, AutomatedMigration.Models.MigrationPlan plan)
+    public MigrationJob Enqueue(string planId, RepositoryTarget target, AutomatedMigration.Models.MigrationPlan plan, PublishRequest? publish = null)
     {
         Trim();
         var job = new MigrationJob
@@ -50,7 +52,8 @@ public sealed class MigrationJobStore
             JobId = "job-" + Guid.NewGuid().ToString("N"),
             PlanId = planId,
             Target = target,
-            Plan = plan
+            Plan = plan,
+            Publish = publish
         };
         _jobs[job.JobId] = job;
         _queue.Writer.TryWrite(job.JobId);
