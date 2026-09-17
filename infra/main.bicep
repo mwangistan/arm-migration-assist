@@ -30,12 +30,16 @@ var lawName         = 'law-${nameSuffix}'
 var caeName         = 'cae-${nameSuffix}'
 var appName         = 'ca-${nameSuffix}-planner-api'
 var automationAppName = 'ca-${nameSuffix}-automation-api'
+var validationAppName = 'ca-${nameSuffix}-validation-api'
 var foundryName     = 'foundry-${nameSuffix}'
 var uamiName        = 'id-${nameSuffix}-planner-api'
 var phiDeploymentNm = 'phi-4'
 
 @description('Container image reference for the automation-api. Defaults to the quickstart image so infra can be provisioned before the first real build is pushed.')
 param automationContainerImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
+
+@description('Container image reference for the validation-api. Defaults to the quickstart image so infra can be provisioned before the first real build is pushed.')
+param validationContainerImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 
 // User-assigned MI is created first so RBAC can be granted before the Container App exists,
 // avoiding a chicken-and-egg cycle with AcrPull.
@@ -245,6 +249,64 @@ resource automationApp 'Microsoft.App/containerApps@2024-03-01' = {
   ]
 }
 
+// F4 Validation API. Larger CPU/memory because approved build/test commands run in-process.
+// AllowNonLoopback=true is required in ACA — the built-in LoopbackOnlyMiddleware would 403
+// on all external requests otherwise. This trades the app's only network guard for external
+// ingress; acceptable for the hackathon demo, must not be exposed to the public internet in a
+// production posture without adding auth + network isolation in front.
+resource validationApp 'Microsoft.App/containerApps@2024-03-01' = {
+  name: validationAppName
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${uami.id}': {}
+    }
+  }
+  properties: {
+    managedEnvironmentId: cae.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: true
+        targetPort: 8080
+        transport: 'auto'
+        allowInsecure: false
+      }
+      registries: [
+        {
+          server: acr.properties.loginServer
+          identity: uami.id
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'api'
+          image: validationContainerImage
+          resources: {
+            cpu: json('1.0')
+            memory: '2Gi'
+          }
+          env: [
+            { name: 'ValidationApi__AllowNonLoopback', value: 'true' }
+            { name: 'ValidationApi__StorageRoot',      value: '/data/validation-api' }
+            { name: 'AZURE_CLIENT_ID',                 value: uami.properties.clientId }
+          ]
+        }
+      ]
+      scale: {
+        minReplicas: 0
+        maxReplicas: 2
+      }
+    }
+  }
+  dependsOn: [
+    acrPull
+  ]
+}
+
 output acrLoginServer   string = acr.properties.loginServer
 output acrName          string = acr.name
 output containerAppName string = app.name
@@ -254,3 +316,5 @@ output uamiClientId     string = uami.properties.clientId
 output resourceGroup    string = resourceGroup().name
 output automationAppName string = automationApp.name
 output automationAppFqdn string = automationApp.properties.configuration.ingress.fqdn
+output validationAppName string = validationApp.name
+output validationAppFqdn string = validationApp.properties.configuration.ingress.fqdn

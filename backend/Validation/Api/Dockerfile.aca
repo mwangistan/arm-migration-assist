@@ -1,0 +1,58 @@
+# syntax=docker/dockerfile:1
+#
+# ACA-friendly variant of Api/Dockerfile. Identical to the original except the
+# `--mount=type=secret` line is dropped: `az acr build` does not enable BuildKit
+# by default and no enterprise NuGet feed is needed for cloud deploys.
+#
+# Build context: backend/Validation (NOT backend/Validation/Api).
+#
+#   az acr build -r <acr> -t validation-api:<tag> \
+#     -f backend/Validation/Api/Dockerfile.aca backend/Validation
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+COPY Validation.csproj ./
+COPY Api/Validation.Api.csproj ./Api/
+RUN dotnet restore ./Api/Validation.Api.csproj
+
+COPY . .
+RUN dotnet publish ./Api/Validation.Api.csproj \
+    --configuration Release \
+    --no-restore \
+    --output /app/publish \
+    /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS final
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 10001 validation-api \
+    && useradd --uid 10001 --gid validation-api --shell /usr/sbin/nologin --create-home validation-api
+
+WORKDIR /app
+COPY --from=build /app/publish .
+
+RUN mkdir -p /data/validation-api \
+    && chown validation-api:validation-api /data/validation-api
+
+ENV ASPNETCORE_URLS=http://+:8080 \
+    ValidationApi__StorageRoot=/data/validation-api \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    HOME=/home/validation-api \
+    DOTNET_CLI_HOME=/home/validation-api \
+    DOTNET_NOLOGO=1 \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_GENERATE_ASPNET_CERTIFICATE=0
+
+EXPOSE 8080
+VOLUME ["/data/validation-api"]
+
+USER validation-api:validation-api
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8080/healthz || exit 1
+
+ENTRYPOINT ["dotnet", "Validation.Api.dll"]
