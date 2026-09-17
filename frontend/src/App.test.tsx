@@ -249,8 +249,8 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'sample-app' })).toBeInTheDocument();
     expect(fetchMock.mock.calls[0][0]).toBe('https://assessment.example.test/api/assessment-jobs');
     expect(fetchMock.mock.calls[2][0]).toBe('https://planner.example.test/api/migration-plans');
-    expect(screen.getByText('1 dependency')).toBeInTheDocument();
-    expect(screen.getByText('1 code finding')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '1 dependency' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '1 code finding' })).toBeInTheDocument();
     expect(screen.getByText('native-runtime-x64')).toBeInTheDocument();
     expect(screen.getByText('NativeMethods.cs')).toBeInTheDocument();
     expect(await screen.findByText('74')).toBeInTheDocument();

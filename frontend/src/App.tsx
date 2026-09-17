@@ -590,16 +590,16 @@ function AssessmentResults({
       </div>
 
       <div className="metric-grid" aria-label="Assessment summary">
-        <div className="metric metric-dependencies">
+        <div className="metric metric-dependencies" role="group" aria-label={pluralize(assessment.dependencies.length, 'dependency', 'dependencies')}>
           <span className="metric-value">{assessment.dependencies.length}</span>
           <span className="metric-label">
-            {pluralize(assessment.dependencies.length, 'dependency', 'dependencies')}
+            {assessment.dependencies.length === 1 ? 'dependency' : 'dependencies'}
           </span>
         </div>
-        <div className="metric metric-code">
+        <div className="metric metric-code" role="group" aria-label={pluralize(assessment.codeFindings.length, 'code finding')}>
           <span className="metric-value">{assessment.codeFindings.length}</span>
           <span className="metric-label">
-            {pluralize(assessment.codeFindings.length, 'code finding')}
+            {assessment.codeFindings.length === 1 ? 'code finding' : 'code findings'}
           </span>
         </div>
         <div className="metric metric-files">
@@ -608,10 +608,10 @@ function AssessmentResults({
           </span>
           <span className="metric-label">files scanned</span>
         </div>
-        <div className="metric metric-unknowns">
+        <div className="metric metric-unknowns" role="group" aria-label={pluralize(assessment.unknowns.length, 'open unknown')}>
           <span className="metric-value">{assessment.unknowns.length}</span>
           <span className="metric-label">
-            {pluralize(assessment.unknowns.length, 'open unknown')}
+            {assessment.unknowns.length === 1 ? 'open unknown' : 'open unknowns'}
           </span>
         </div>
       </div>
