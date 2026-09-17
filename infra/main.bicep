@@ -19,6 +19,9 @@ param allowedOrigins string = 'http://localhost:5173,http://localhost:3000'
 @description('Deploy the Azure AI Foundry (AI Services) account and phi-4 model deployment.')
 param deployFoundry bool = true
 
+@description('Optional URL of the AutomatedMigration (F3) API. When set, F2 will POST plans to this endpoint and embed the returned jobId in its response.')
+param automationApiUrl string = ''
+
 @description('Log Analytics workspace retention in days.')
 param logRetentionDays int = 30
 
@@ -171,6 +174,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'MIGRATIONPLANNER_PHI_ENDPOINT',     value: foundryInferenceEndpoint }
             { name: 'MIGRATIONPLANNER_PHI_DEPLOYMENT',   value: phiDeploymentNm }
             { name: 'MIGRATIONPLANNER_ALLOWED_ORIGINS',  value: allowedOrigins }
+            { name: 'MIGRATIONPLANNER_AUTOMATION_API_URL', value: automationApiUrl }
             { name: 'AZURE_CLIENT_ID',                   value: uami.properties.clientId }
           ]
         }
