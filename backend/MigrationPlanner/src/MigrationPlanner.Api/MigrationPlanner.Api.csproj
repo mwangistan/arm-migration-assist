@@ -13,5 +13,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="MigrationPlanner.Tests.Integration" />
+    <InternalsVisibleTo Include="MigrationPlanner.Tests.Unit" />
   </ItemGroup>
 </Project>

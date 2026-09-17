@@ -1,3 +1,4 @@
+using MigrationPlanner.Api.Automation;
 using MigrationPlanner.Api.Configuration;
 using MigrationPlanner.Api.Endpoints;
 using MigrationPlanner.Application.Abstractions;
@@ -104,6 +105,26 @@ public class Program
             options.ModelProvider,
             phiOptions,
             hostedOptions);
+
+        var automationOptions = new AutomationApiOptions();
+        builder.Configuration.GetSection(AutomationApiOptions.SectionName).Bind(automationOptions);
+        var automationUrlEnv = Environment.GetEnvironmentVariable("MIGRATIONPLANNER_AUTOMATION_API_URL");
+        if (!string.IsNullOrWhiteSpace(automationUrlEnv)) automationOptions.BaseUrl = automationUrlEnv;
+        builder.Services.AddSingleton(automationOptions);
+
+        if (!string.IsNullOrWhiteSpace(automationOptions.BaseUrl))
+        {
+            builder.Services.AddHttpClient<IAutomationDispatcher, HttpAutomationDispatcher>(client =>
+            {
+                client.BaseAddress = new Uri(automationOptions.BaseUrl!, UriKind.Absolute);
+                client.Timeout = TimeSpan.FromSeconds(Math.Max(1, automationOptions.TimeoutSeconds));
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("arm-migration-assist-planner-api/1.0");
+            });
+        }
+        else
+        {
+            builder.Services.AddSingleton<IAutomationDispatcher, NoopAutomationDispatcher>();
+        }
 
         var app = builder.Build();
 

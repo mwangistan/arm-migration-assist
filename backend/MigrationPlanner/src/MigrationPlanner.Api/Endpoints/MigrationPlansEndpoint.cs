@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using MigrationPlanner.Api.Automation;
 using MigrationPlanner.Application.Abstractions;
 using MigrationPlanner.Application.Planning;
 using MigrationPlanner.Application.Reporting;
@@ -30,6 +31,7 @@ internal static class MigrationPlansEndpoint
         IAssessmentSchemaValidator schemaValidator,
         MigrationPlanningService planningService,
         IPlanArtifactStore artifactStore,
+        IAutomationDispatcher automationDispatcher,
         CancellationToken cancellationToken)
     {
         JsonDocument document;
@@ -124,12 +126,18 @@ internal static class MigrationPlansEndpoint
             }
 
             artifactStore.Store(MigrationReportFactory.From(assessment, result));
+
+            var automation = await automationDispatcher
+                .DispatchAsync(result.Plan!, assessment.Repository, cancellationToken)
+                .ConfigureAwait(false);
+
             return Results.Ok(new
             {
                 runId = result.RunId,
                 plan = result.Plan,
                 score = result.Score,
                 warnings = result.Warnings,
+                automation,
             });
         }
     }
