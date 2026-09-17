@@ -1,0 +1,5 @@
+# Corpus snippet content is byte-hashed and byte-length-checked at runtime
+# (see EmbeddedGuidanceStore.VerifySnippet). Pin LF so hashes match across
+# Windows and Linux checkouts regardless of core.autocrlf.
+knowledge/windows-on-arm/snippets/*.md text eol=lf
+knowledge/windows-on-arm/corpus.json  text eol=lf

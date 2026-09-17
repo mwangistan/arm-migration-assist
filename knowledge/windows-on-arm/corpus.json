@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
   "corpusVersion": "2026-09-15.1",
-  "generatedAt": "2026-09-15T09:39:35Z",
+  "generatedAt": "2026-09-17T12:23:28Z",
   "producer": {
     "name": "arm-migration-assist-corpus",
     "version": "0.1.0",
@@ -21,8 +21,8 @@
         "woa-overview"
       ],
       "summary": "Windows 11 supports ARM64 natively and emulates x64; native ARM64 unlocks best performance and battery.",
-      "sha256": "8b8ea0f5650a10eadea12adf409b186eda0a3679f844a56fc06f13c0d4afe652",
-      "byteLength": 1470
+      "sha256": "f8307444b3833a5064baf483f118d690cef195049aa48c67e24ca181f6024764",
+      "byteLength": 1452
     },
     {
       "guidanceId": "arm64ec-overview-01",
@@ -36,8 +36,8 @@
         "arm64ec-abi"
       ],
       "summary": "Arm64EC lets one process mix native ARM64 code with x64 modules under emulation, enabling incremental migration.",
-      "sha256": "4b8d0d5e8bf014d63f98f2fe7c694216f507976a5f7d87b8d3475099a63db768",
-      "byteLength": 1582
+      "sha256": "c0e620b1ed68de2ab594b95123043321893a7ea13a603f366d26bf4eac49d144",
+      "byteLength": 1559
     },
     {
       "guidanceId": "add-arm-support-01",
@@ -52,8 +52,8 @@
         "compatibility-troubleshooting"
       ],
       "summary": "Four-stage workflow (assess, plan, build, validate) for adding ARM64 support to an existing Windows app.",
-      "sha256": "0b861cc7d855ce7d97a7387b84ef4093d9529320660b42d105f266ad4d3b804d",
-      "byteLength": 1850
+      "sha256": "389c8ca769dd081845c0da5236009ea4d586594670c4f43646792cf46f6f93c5",
+      "byteLength": 1819
     }
   ],
   "notes": "Bootstrap corpus with three hand-authored snippets. Replace with a sanctioned Microsoft Learn snapshot before shipping the demo."
