@@ -94,14 +94,17 @@ describe('App', () => {
     cleanup();
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
 
   it('runs an assessment and presents dependency and code findings', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(assessment), {
+    vi.stubEnv('VITE_ASSESSMENT_API_URL', 'https://assessment.example.test/');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(assessment), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-    })));
+    }));
+    vi.stubGlobal('fetch', fetchMock);
     render(<App />);
 
     fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
@@ -110,6 +113,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run assessment' }));
 
     expect(await screen.findByRole('heading', { name: 'sample-app' })).toBeInTheDocument();
+    expect(fetchMock.mock.calls[0][0]).toBe('https://assessment.example.test/api/assessments');
     expect(screen.getByText('1 dependency')).toBeInTheDocument();
     expect(screen.getByText('1 code finding')).toBeInTheDocument();
     expect(screen.getByText('native-runtime-x64')).toBeInTheDocument();

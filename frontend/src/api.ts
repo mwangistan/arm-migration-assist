@@ -170,6 +170,11 @@ async function readJson(response: Response): Promise<unknown> {
   return response.json().catch(() => null) as Promise<unknown>;
 }
 
+function assessmentApiUrl(path: string) {
+  const configuredBase = import.meta.env.VITE_ASSESSMENT_API_URL?.trim();
+  return configuredBase ? `${configuredBase.replace(/\/+$/, '')}${path}` : path;
+}
+
 function problemMessage(value: unknown) {
   if (!isRecord(value)) {
     return 'Assessment failed.';
@@ -223,7 +228,7 @@ export async function assessRepository(
   signal?: AbortSignal,
   authenticationSessionId?: string,
 ): Promise<RepositoryAssessment> {
-  const response = await fetch('/api/assessments', {
+  const response = await fetch(assessmentApiUrl('/api/assessments'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ source, authenticationSessionId }),
@@ -249,7 +254,7 @@ export async function assessRepository(
 export async function startGitHubAuthentication(
   signal?: AbortSignal,
 ): Promise<GitHubAuthenticationSession> {
-  const response = await fetch('/api/auth/github/sessions', {
+  const response = await fetch(assessmentApiUrl('/api/auth/github/sessions'), {
     method: 'POST',
     headers: { 'X-Arm-Migration-Client': 'dashboard' },
     signal,
@@ -268,7 +273,7 @@ export async function getGitHubAuthentication(
   sessionId: string,
   signal?: AbortSignal,
 ): Promise<GitHubAuthenticationSession> {
-  const response = await fetch(`/api/auth/github/sessions/${encodeURIComponent(sessionId)}`, {
+  const response = await fetch(assessmentApiUrl(`/api/auth/github/sessions/${encodeURIComponent(sessionId)}`), {
     signal,
   });
   const payload = await readJson(response);
@@ -284,7 +289,7 @@ export async function getGitHubAuthentication(
 }
 
 export async function cancelGitHubAuthentication(sessionId: string): Promise<void> {
-  const response = await fetch(`/api/auth/github/sessions/${encodeURIComponent(sessionId)}`, {
+  const response = await fetch(assessmentApiUrl(`/api/auth/github/sessions/${encodeURIComponent(sessionId)}`), {
     method: 'DELETE',
     headers: { 'X-Arm-Migration-Client': 'dashboard' },
   });

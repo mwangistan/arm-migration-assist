@@ -22,6 +22,10 @@ npm run dev
 
 Open `http://127.0.0.1:5173`.
 
+Vite proxies relative `/api` requests to `http://127.0.0.1:5000`. To call a
+separately hosted assessment API, set `VITE_ASSESSMENT_API_URL` to its HTTPS
+origin before starting or building the frontend.
+
 ## Dashboard coverage
 
 - GitHub repository intake with loading, cancellation, and error states
@@ -37,6 +41,23 @@ Authentication is initiated only after anonymous Git access fails. The existing
 dashboard remains the sole UI: it displays sign-in progress in the assessment
 status area and automatically retries after success. No token or account data is
 entered into or rendered by the web application.
+
+## Azure Static Web Apps
+
+The `frontend-static-web-app.yml` workflow verifies the frontend on pull
+requests and deploys the production build from `main`. Configure these GitHub
+repository settings before enabling deployment:
+
+| Setting | Kind | Value |
+|---------|------|-------|
+| `AZURE_STATIC_WEB_APPS_API_TOKEN` | Actions secret | Deployment token from the Static Web App |
+| `ASSESSMENT_API_URL` | Actions variable | HTTPS origin of the deployed assessment API |
+
+Add the Static Web App origin to the assessment API's `DashboardOrigins`
+configuration, using semicolons when more than one origin is allowed. The
+deployed dashboard can assess public GitHub repositories. Git Credential
+Manager sign-in for protected repositories intentionally remains a local,
+loopback-only workflow; it is not exposed by the cloud deployment.
 
 ## Verify
 
