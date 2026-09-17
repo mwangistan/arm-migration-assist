@@ -243,6 +243,29 @@ describe('App', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('clears the repository URL, validation, and restores input focus', async () => {
+    render(<App />);
+    const input = screen.getByLabelText('GitHub repository URL');
+
+    expect(screen.queryByRole('button', { name: 'Clear repository URL' })).not.toBeInTheDocument();
+    fireEvent.change(input, { target: { value: 'not-a-repository' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
+
+    expect(await screen.findByText(
+      'Use an HTTPS GitHub URL in the form https://github.com/owner/repository.',
+    )).toBeInTheDocument();
+    const clearButton = screen.getByRole('button', { name: 'Clear repository URL' });
+    expect(clearButton).toHaveAttribute('type', 'button');
+    fireEvent.click(clearButton);
+
+    expect(input).toHaveValue('');
+    expect(input).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Clear repository URL' })).not.toBeInTheDocument();
+    expect(screen.queryByText(
+      'Use an HTTPS GitHub URL in the form https://github.com/owner/repository.',
+    )).not.toBeInTheDocument();
+  });
+
   it('shows an actionable message when the assessment service is unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     render(<App />);

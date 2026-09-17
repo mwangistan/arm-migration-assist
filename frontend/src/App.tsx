@@ -906,6 +906,14 @@ export default function App() {
   const controllerRef = useRef<AbortController | null>(null);
   const authenticationSessionRef = useRef<string | null>(null);
   const assessmentJobRef = useRef<AssessmentJob | null>(null);
+  const repositoryInputRef = useRef<HTMLInputElement>(null);
+
+  function clearRepositoryUrl() {
+    setSource('');
+    setInputError(null);
+    setError(null);
+    repositoryInputRef.current?.focus();
+  }
 
   function updateAssessmentProgress(nextProgress: AssessmentProgress) {
     setProgress(nextProgress);
@@ -1086,12 +1094,25 @@ export default function App() {
                   validationState={inputError ? 'error' : 'none'}
                 >
                   <Input
+                    ref={repositoryInputRef}
                     value={source}
                     onChange={(_, data) => {
                       setSource(data.value);
                       if (inputError) setInputError(null);
                     }}
                     contentBefore={<Search20Regular />}
+                    contentAfter={source ? (
+                      <Button
+                        appearance="transparent"
+                        aria-label="Clear repository URL"
+                        disabled={loading}
+                        icon={<Dismiss20Regular />}
+                        size="small"
+                        title="Clear repository URL"
+                        type="button"
+                        onClick={clearRepositoryUrl}
+                      />
+                    ) : undefined}
                     placeholder="https://github.com/owner/repository"
                     size="large"
                     type="url"
