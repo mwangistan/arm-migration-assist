@@ -118,6 +118,34 @@ internal static class PlannerPromptBuilder
                 builder.AppendLine("     unknowns, validationPlan, requiredApprovals, or anything else.");
                 builder.AppendLine("  5. Output the corrected JSON only. No prose.");
             }
+            else if (retryHint.Reason == PlannerRetryReason.SkillIoMismatch)
+            {
+                builder.AppendLine("Exact assessment.availableSkills contracts:");
+                foreach (var contract in retryHint.AvailableSkillContracts ?? Array.Empty<PlannerSkillIoContract>())
+                {
+                    builder.AppendLine($"  - name: {JsonSerializer.Serialize(contract.Name)}");
+                    builder.AppendLine($"    description: {JsonSerializer.Serialize(contract.Description)}");
+                    builder.AppendLine($"    writeAccess: {contract.WriteAccess.ToString().ToLowerInvariant()}");
+                    builder.AppendLine($"    supportedInputs: {JsonSerializer.Serialize(contract.SupportedInputs)}");
+                    builder.AppendLine($"    supportedOutputs: {JsonSerializer.Serialize(contract.SupportedOutputs)}");
+                }
+                builder.AppendLine();
+                builder.AppendLine("Rules for the retry (STRICT):");
+                builder.AppendLine("  1. Copy the entire 'Previous plan' JSON below into your output.");
+                builder.AppendLine("  2. For EVERY work item citing an available skill, make inputs an exact");
+                builder.AppendLine("     non-empty subset of that skill's supportedInputs and make");
+                builder.AppendLine("     expectedOutputs an exact non-empty subset of supportedOutputs.");
+                builder.AppendLine("     Use literal contract tokens, including \"repository\" when listed;");
+                builder.AppendLine("     do not substitute repository file paths or output format guesses.");
+                builder.AppendLine("  3. The skill description must match the work item's objective. Never use");
+                builder.AppendLine("     a read-only assessment skill for patch-producing migration work.");
+                builder.AppendLine("  4. If no available skill both fits the objective and supports the needed");
+                builder.AppendLine("     I/O, change agentOrSkill to a kebab-case proposed skill and add one");
+                builder.AppendLine("     matching missingSkills[] entry. Its requiredInputs and expectedOutputs");
+                builder.AppendLine("     must contain every token cited by that work item.");
+                builder.AppendLine("  5. Correct every mismatched work item, not only the first diagnostic.");
+                builder.AppendLine("  6. Do NOT rewrite unrelated fields. Output corrected JSON only. No prose.");
+            }
             else if (retryHint.Reason == PlannerRetryReason.ShapeInvalid)
             {
                 builder.AppendLine("Rules for the retry (STRICT):");
@@ -431,6 +459,17 @@ internal static class PlannerPromptBuilder
             required inputs, expected outputs, justification, and
             evidenceIds, and then cite the same proposedName from any
             workItem that would use it.
+          16a.Skill I/O honesty. When agentOrSkill names an entry in
+            assessment.availableSkills[], every workItems[].inputs value MUST
+            be copied exactly from that entry's supportedInputs, and every
+            expectedOutputs value MUST be copied exactly from its
+            supportedOutputs. Both arrays must be non-empty subsets. A token
+            such as "repository" is intentional; never replace it with a file
+            path. If the available skill's description or I/O does not fit the
+            work item, declare and cite a missing skill instead. Its
+            requiredInputs and expectedOutputs must include every value used by
+            the work item. Read-only assessment skills must not be used for
+            patch-producing migration work.
         17. Risk depth. Produce enough risks that a reviewer can act on
             them. Concretely:
               - At least one Risk per entry in
@@ -475,10 +514,10 @@ internal static class PlannerPromptBuilder
                 name the ruleId and file.
             Each workItem's objective MUST be 1-4 concrete sentences
             naming what changes, in which files or configs, and what shape
-            the output takes. Each MUST include >= 1 input path drawn from
-            the assessment and >= 1 named expected output
-            (patch, workflow-yaml, wheel-build-recipe, packaging-manifest,
-            doc-page, test-file, etc.). Each MUST include >= 2
+            the output takes. Each MUST include >= 1 input and >= 1 expected
+            output copied from the selected available skill contract. For a
+            declared missing skill, its contract must explicitly contain every
+            work-item input and output. Each MUST include >= 2
             acceptanceTests with distinct expectedOutcomes (typically a
             build check plus a functional check; add a perf or reliability
             check when relevant). Do NOT combine multiple deps or multiple
@@ -574,9 +613,9 @@ internal static class PlannerPromptBuilder
               "priority": "P0",
               "title": "Add windows-arm64 CI job to ci.yml",
               "objective": "Add a windows-arm64 runner job to .github/workflows/ci.yml that mirrors the existing x64 job: restore, build ARM64/Release, run unit tests, and upload the arm64 binaries as an artifact.",
-              "agentOrSkill": "build/add-ci-job",
-              "inputs": [".github/workflows/ci.yml"],
-              "expectedOutputs": ["workflow-yaml"],
+              "agentOrSkill": "pipeline/github-actions-arm64-job",
+              "inputs": ["repository"],
+              "expectedOutputs": ["patch"],
               "dependencies": ["wi-add-arm64-target"],
               "evidenceIds": ["build-example-01"],
               "guidanceIds": ["add-arm-support-01"],
@@ -654,6 +693,24 @@ internal static class PlannerPromptBuilder
             }
           ],
           "missingSkills": [
+            {
+              "proposedName": "dependency/source-build",
+              "purpose": "Create a source-build recipe and dependency update for a native dependency without an ARM64 artifact.",
+              "requiredInputs": ["scripts/build-deps/", "src/Example/Example.csproj"],
+              "expectedOutputs": ["build-recipe", "dependency-patch"],
+              "justification": "No available skill supports dependency source-build work.",
+              "evidenceIds": ["dep-example-01"],
+              "writeAccess": false
+            },
+            {
+              "proposedName": "packaging/add-arm64",
+              "purpose": "Add ARM64 payloads to the repository's installer configuration.",
+              "requiredInputs": ["packaging/Product.wxs", "packaging/Bundle.wxs"],
+              "expectedOutputs": ["packaging-patch", "installer-artifact"],
+              "justification": "No available skill supports the detected installer format.",
+              "evidenceIds": ["build-example-01"],
+              "writeAccess": false
+            },
             {
               "proposedName": "assessment/accessibility-audit",
               "purpose": "Grade WinForms and XAML accessibility affordances against Windows UX guidelines.",

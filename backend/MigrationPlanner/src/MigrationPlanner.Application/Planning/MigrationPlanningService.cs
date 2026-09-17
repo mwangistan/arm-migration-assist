@@ -177,6 +177,23 @@ public sealed class MigrationPlanningService
             return PlannerRetryHint.ForMissingSkill(unresolved, diagnostic, previousPlanJson);
         }
 
+        if (safety.ErrorCode == PlannerErrorCode.PlanSkillIoMismatch)
+        {
+            var contracts = assessment.AvailableSkills
+                .Where(skill => !string.IsNullOrWhiteSpace(skill.Name))
+                .Select(skill => new PlannerSkillIoContract(
+                    skill.Name,
+                    skill.Description,
+                    skill.WriteAccess,
+                    skill.SupportedInputs ?? Array.Empty<string>(),
+                    skill.SupportedOutputs ?? Array.Empty<string>()))
+                .OrderBy(contract => contract.Name, StringComparer.Ordinal)
+                .ToArray();
+            return contracts.Length == 0
+                ? null
+                : PlannerRetryHint.ForSkillIoMismatch(contracts, diagnostic, previousPlanJson);
+        }
+
         if (safety.ErrorCode == PlannerErrorCode.PlanEvidenceMissing)
         {
             var invalid = ExtractInvalidEvidenceIds(safety.Violations);
@@ -239,6 +256,8 @@ public sealed class MigrationPlanningService
             $"Model recommendation corrected on retry: initial='{hint.PreviousRecommendedPath}' -> dispatch='{hint.ExpectedRecommendedPath}'.",
         PlannerRetryReason.SkillMissing =>
             $"Model declared previously-hallucinated skill(s) in missingSkills on retry: {string.Join(", ", hint.UnresolvedSkills ?? Array.Empty<string>())}.",
+        PlannerRetryReason.SkillIoMismatch =>
+            "Model work-item inputs and outputs corrected on retry to match declared skill contracts.",
         PlannerRetryReason.ShapeInvalid =>
             "Model plan shape corrected on retry after JSON Schema failure.",
         PlannerRetryReason.MissingEvidence =>

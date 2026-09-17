@@ -13,7 +13,10 @@ validates the proposed `MigrationPlanV1` before returning it.
 Validation resolves evidence, guidance, skills, work-item dependencies, approval
 flags, score digest, and recommendation consistency. Unsupported execution
 capabilities are represented as `missingSkills`; available build, CI, and code
-work maps directly to Feature 3 skill names.
+work maps directly to Feature 3 skill names. Work-item inputs and outputs must be
+non-empty subsets of the selected skill contract. If a model violates that
+contract, the planner retries once with the exact available-skill I/O before
+returning a validation error.
 
 | Subfolder | User story |
 |-----------|------------|

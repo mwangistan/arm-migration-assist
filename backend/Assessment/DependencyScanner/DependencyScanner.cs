@@ -180,6 +180,11 @@ internal sealed partial class DependencyScanner
             return new(type, "emulation-only", ["x86"], 0.9m);
         }
 
+        if (type == "managed")
+        {
+            return new(type, "ready", ["any-cpu"], 0.85m);
+        }
+
         return new(type, "unknown", ["unknown"], 0.55m);
     }
 

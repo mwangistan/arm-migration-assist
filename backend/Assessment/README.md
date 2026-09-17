@@ -24,6 +24,12 @@ that catalog in parallel. It combines their outputs with build and Windows
 signals, validates cross-record evidence, and publishes
 `RepositoryAssessmentV1`.
 
+Anonymous API intake uses commit-pinned shared clones with Windows long-path
+support and validates a cached clone's HEAD before reuse. Dependency scanning
+reports architecture-neutral managed NuGet references as `ready`/`any-cpu`;
+explicit architecture tokens and native packages retain stricter evidence-based
+classification.
+
 The API exposes direct, synchronous, queued, and SSE integration surfaces. The
 product frontend uses queued jobs and live events; the planner consumes only the
 completed contract. See [the system architecture](../../docs/ARCHITECTURE.md)

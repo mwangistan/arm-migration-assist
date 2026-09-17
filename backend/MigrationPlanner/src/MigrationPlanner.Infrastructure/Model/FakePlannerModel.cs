@@ -347,6 +347,17 @@ public sealed class FakePlannerModel : IPlannerModel
         GranularityCalculator.ExpectedBucket bucket,
         string skill)
     {
+        var availableSkill = assessment.AvailableSkills.FirstOrDefault(
+            candidate => string.Equals(candidate.Name, skill, StringComparison.Ordinal));
+        if (availableSkill is not null)
+        {
+            return availableSkill.SupportedInputs
+                .Where(input => !string.IsNullOrWhiteSpace(input))
+                .Distinct(StringComparer.Ordinal)
+                .Take(8)
+                .ToArray();
+        }
+
         IEnumerable<string?> paths = bucket.Category switch
         {
             "code" => assessment.CodeFindings
@@ -360,16 +371,7 @@ public sealed class FakePlannerModel : IPlannerModel
 
         if (skill == "pipeline/github-actions-arm64-job")
         {
-            return [];
-        }
-
-        if (skill == "build/add-arm64-target")
-        {
-            paths = paths.Where(path => path is not null && IsSupportedBuildInput(path));
-        }
-        else if (skill == "packaging/add-arm64-msix")
-        {
-            paths = paths.Where(path => path is not null && IsPackagingInput(path));
+            return ["repository"];
         }
 
         return paths
@@ -378,23 +380,6 @@ public sealed class FakePlannerModel : IPlannerModel
             .Distinct(StringComparer.Ordinal)
             .Take(8)
             .ToArray();
-    }
-
-    private static bool IsSupportedBuildInput(string path)
-    {
-        var name = Path.GetFileName(path);
-        return name.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase)
-            || name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
-            || name.EndsWith(".vcxproj", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsPackagingInput(string path)
-    {
-        var extension = Path.GetExtension(path);
-        return extension.Equals(".appxmanifest", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".msixproj", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".wixproj", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".wxs", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string SlugifyForId(string text)

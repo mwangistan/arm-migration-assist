@@ -116,8 +116,67 @@ public sealed class FakePlannerModelTests
             item.GetProperty("agentOrSkill").GetString() == "pipeline/github-actions-arm64-job");
 
         buildItem.GetProperty("inputs")[0].GetString().Should().Be("src/App.csproj");
+        pipelineItem.GetProperty("inputs")[0].GetString().Should().Be("repository");
         pipelineItem.GetProperty("dependencies")[0].GetString()
             .Should().Be(buildItem.GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task UnsupportedBuildInput_IsPreservedInMatchingMissingSkillContract()
+    {
+        var build = new BuildFindings(
+            EvidenceId: "build-makefile",
+            Arm64TargetExists: false,
+            Arm64EcTargetExists: false,
+            Arm64CiJobExists: true,
+            PackagingSupportsArm64: true,
+            TestsExist: true,
+            DetectedTargets: new[] { "x64" },
+            Evidence: new[] { new Evidence(SourceType.Manifest, "Makefile build", Path: "tests/Makefile") });
+        var assessment = ScoringAssessmentBuilder.Ready(build: build);
+        var score = Scorer.Score(assessment);
+
+        var modelResult = await Model.GeneratePlanJsonAsync(
+            assessment,
+            score,
+            new NoopGuidance(),
+            CancellationToken.None);
+        using var document = JsonDocument.Parse(modelResult.PlanJson);
+        var buildItem = document.RootElement.GetProperty("workItems").EnumerateArray().Single();
+        var missingSkill = document.RootElement.GetProperty("missingSkills").EnumerateArray().Single();
+
+        buildItem.GetProperty("inputs")[0].GetString().Should().Be("tests/Makefile");
+        missingSkill.GetProperty("proposedName").GetString()
+            .Should().Be(buildItem.GetProperty("agentOrSkill").GetString());
+        missingSkill.GetProperty("requiredInputs")[0].GetString().Should().Be("tests/Makefile");
+    }
+
+    [Fact]
+    public async Task MissingPackagingSkill_PreservesBuildEvidenceInput()
+    {
+        var build = new BuildFindings(
+            EvidenceId: "build-packaging",
+            Arm64TargetExists: true,
+            Arm64EcTargetExists: false,
+            Arm64CiJobExists: true,
+            PackagingSupportsArm64: false,
+            TestsExist: true,
+            DetectedTargets: new[] { "arm64" },
+            Evidence: new[] { new Evidence(SourceType.Manifest, "Packaging config", Path: "Directory.Build.props") });
+        var assessment = ScoringAssessmentBuilder.Ready(build: build);
+        var score = Scorer.Score(assessment);
+
+        var modelResult = await Model.GeneratePlanJsonAsync(
+            assessment,
+            score,
+            new NoopGuidance(),
+            CancellationToken.None);
+        using var document = JsonDocument.Parse(modelResult.PlanJson);
+        var workItem = document.RootElement.GetProperty("workItems").EnumerateArray().Single();
+        var missingSkill = document.RootElement.GetProperty("missingSkills").EnumerateArray().Single();
+
+        workItem.GetProperty("inputs")[0].GetString().Should().Be("Directory.Build.props");
+        missingSkill.GetProperty("requiredInputs")[0].GetString().Should().Be("Directory.Build.props");
     }
 
     private static async Task<(string Path, string Confidence)> MapAsync(RepositoryAssessmentV1 assessment)

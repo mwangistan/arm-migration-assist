@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="MigrationPlanner.Tests.Unit" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\MigrationPlanner.Application\MigrationPlanner.Application.csproj" />
     <ProjectReference Include="..\MigrationPlanner.Domain\MigrationPlanner.Domain.csproj" />
   </ItemGroup>

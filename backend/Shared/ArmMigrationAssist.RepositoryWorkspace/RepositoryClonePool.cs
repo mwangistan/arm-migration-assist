@@ -95,8 +95,24 @@ public sealed class RepositoryClonePool : IRepositoryClonePool, IDisposable
 
         if (Directory.Exists(destination) && Directory.EnumerateFileSystemEntries(destination).Any())
         {
-            _logger.LogDebug("Reusing existing clone at {Path} for {Sha}", destination, key.CommitSha);
-            return new RepositoryClone(destination, key, key.CommitSha);
+            var existingHead = await _git.RunAsync(
+                destination,
+                new[] { "rev-parse", "HEAD" },
+                cancellationToken).ConfigureAwait(false);
+            if (existingHead.Succeeded
+                && string.Equals(existingHead.StdOut.Trim(), key.CommitSha, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogDebug("Reusing existing clone at {Path} for {Sha}", destination, key.CommitSha);
+                return new RepositoryClone(destination, key, key.CommitSha);
+            }
+
+            _logger.LogWarning("Replacing invalid cached clone at {Path} for {Sha}", destination, key.CommitSha);
+            TryDeleteDirectory(destination);
+            if (Directory.Exists(destination))
+            {
+                throw new InvalidOperationException(
+                    $"Invalid cached clone could not be removed at {destination}.");
+            }
         }
 
         // Fresh directory. Delete anything half-materialized from a previous crash so `git clone`
@@ -123,6 +139,7 @@ public sealed class RepositoryClonePool : IRepositoryClonePool, IDisposable
                 "--depth=1",
                 "-c", "core.autocrlf=false",
                 "-c", "core.eol=lf",
+                "-c", "core.longpaths=true",
                 key.RepositoryUrl,
                 destination,
             }, cancellationToken).ConfigureAwait(false);
@@ -215,7 +232,14 @@ public sealed class RepositoryClonePool : IRepositoryClonePool, IDisposable
     {
         try
         {
-            if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+            if (!Directory.Exists(path)) return;
+
+            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(file, FileAttributes.Normal);
+            }
+
+            Directory.Delete(path, recursive: true);
         }
         catch (IOException) { /* best effort */ }
         catch (UnauthorizedAccessException) { /* best effort */ }

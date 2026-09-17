@@ -8,10 +8,18 @@ public enum PlannerRetryReason
 {
     RecommendationInconsistent,
     SkillMissing,
+    SkillIoMismatch,
     ShapeInvalid,
     UnderGranular,
     MissingEvidence,
 }
+
+public sealed record PlannerSkillIoContract(
+    string Name,
+    string Description,
+    bool WriteAccess,
+    IReadOnlyList<string> SupportedInputs,
+    IReadOnlyList<string> SupportedOutputs);
 
 /// <summary>
 /// Structured correction hint the orchestrator hands the model on retry when
@@ -31,7 +39,8 @@ public sealed record PlannerRetryHint(
     IReadOnlyList<string>? UnresolvedSkills = null,
     IReadOnlyList<string>? MissingBuckets = null,
     IReadOnlyList<string>? InvalidEvidenceIds = null,
-    IReadOnlyList<string>? AllowedEvidenceIds = null)
+    IReadOnlyList<string>? AllowedEvidenceIds = null,
+    IReadOnlyList<PlannerSkillIoContract>? AvailableSkillContracts = null)
 {
     public static PlannerRetryHint ForRecommendation(
         string previousPath, string previousConfidence,
@@ -53,6 +62,16 @@ public sealed record PlannerRetryHint(
             Diagnostic: diagnostic,
             PreviousPlanJson: previousPlanJson,
             UnresolvedSkills: unresolvedSkills);
+
+    public static PlannerRetryHint ForSkillIoMismatch(
+        IReadOnlyList<PlannerSkillIoContract> availableSkillContracts,
+        string diagnostic,
+        string previousPlanJson) =>
+        new(
+            Reason: PlannerRetryReason.SkillIoMismatch,
+            Diagnostic: diagnostic,
+            PreviousPlanJson: previousPlanJson,
+            AvailableSkillContracts: availableSkillContracts);
 
     public static PlannerRetryHint ForShapeInvalid(string diagnostic, string previousPlanJson) =>
         new(

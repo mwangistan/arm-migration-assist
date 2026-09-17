@@ -245,7 +245,11 @@ public sealed class RepositoryDiscoveryServiceTests
         var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
 
         Assert.Contains(assessment.Dependencies,
-            dependency => dependency.Name == "Contoso.Managed" && dependency.Ecosystem == "nuget");
+            dependency => dependency.Name == "Contoso.Managed"
+                && dependency.Ecosystem == "nuget"
+                && dependency.Type == "managed"
+                && dependency.ArchitectureStatus == "ready"
+                && dependency.AvailableArchitectures.Contains("any-cpu"));
         Assert.Contains(assessment.Dependencies,
             dependency => dependency.Name == "Contoso.Native.win-x64"
                 && dependency.ArchitectureStatus == "emulation-only"

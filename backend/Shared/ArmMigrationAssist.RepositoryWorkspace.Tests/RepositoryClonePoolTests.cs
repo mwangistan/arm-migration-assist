@@ -107,6 +107,21 @@ public sealed class RepositoryClonePoolTests : IDisposable
     }
 
     [Fact]
+    public async Task AcquireAsync_EnablesLongPathsForWindowsRepositories()
+    {
+        var fake = new FakeGitProcess();
+        using var pool = CreatePool(fake);
+        var key = new RepositoryCloneKey(
+            "https://github.com/owner/repo",
+            new string('a', 40),
+            Anonymous: true);
+
+        _ = await pool.AcquireAsync(key, CancellationToken.None);
+
+        Assert.Contains("core.longpaths=true", fake.CloneArguments);
+    }
+
+    [Fact]
     public async Task AcquireAsync_ReusesExistingCloneOnRepeatCall()
     {
         var fake = new FakeGitProcess();
@@ -137,6 +152,28 @@ public sealed class RepositoryClonePoolTests : IDisposable
         Assert.Equal(2, fake.CloneCount);
     }
 
+    [Fact]
+    public async Task AcquireAsync_ReplacesNonRepositoryCacheDirectory()
+    {
+        var fake = new FakeGitProcess();
+        using var pool = CreatePool(fake);
+        var key = new RepositoryCloneKey(
+            "https://github.com/owner/repo",
+            new string('a', 40),
+            Anonymous: true);
+        var staleDirectory = Path.Combine(_root, key.DirectorySegment);
+        Directory.CreateDirectory(staleDirectory);
+        var staleFile = Path.Combine(staleDirectory, "partial-clone.txt");
+        await File.WriteAllTextAsync(staleFile, "incomplete");
+        File.SetAttributes(staleFile, FileAttributes.ReadOnly);
+
+        var clone = await pool.AcquireAsync(key, CancellationToken.None);
+
+        Assert.Equal(1, fake.CloneCount);
+        Assert.False(File.Exists(staleFile));
+        Assert.True(File.Exists(Path.Combine(clone.RootPath, "README.md")));
+    }
+
     private RepositoryClonePool CreatePool(IGitProcess gitProcess)
     {
         var options = Options.Create(new RepositoryClonePoolOptions
@@ -158,6 +195,7 @@ public sealed class RepositoryClonePoolTests : IDisposable
         private int _cloneCount;
 
         public int CloneCount => Volatile.Read(ref _cloneCount);
+        public IReadOnlyList<string> CloneArguments { get; private set; } = [];
 
         public async Task<GitProcessResult> RunAsync(
             string workingDirectory,
@@ -168,6 +206,7 @@ public sealed class RepositoryClonePoolTests : IDisposable
             if (arguments.Count >= 1 && arguments[0] == "clone")
             {
                 Interlocked.Increment(ref _cloneCount);
+                CloneArguments = arguments.ToArray();
                 var destination = arguments[^1];
                 Directory.CreateDirectory(destination);
                 await File.WriteAllTextAsync(Path.Combine(destination, "README.md"), "fake", cancellationToken);
@@ -175,7 +214,9 @@ public sealed class RepositoryClonePoolTests : IDisposable
             }
             if (arguments.Count >= 1 && arguments[0] == "rev-parse")
             {
-                return new GitProcessResult(0, new string('a', 40), "");
+                return File.Exists(Path.Combine(workingDirectory, "README.md"))
+                    ? new GitProcessResult(0, new string('a', 40), "")
+                    : new GitProcessResult(128, "", "not a git repository");
             }
             return new GitProcessResult(0, "", "");
         }
