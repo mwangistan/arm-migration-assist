@@ -7,7 +7,7 @@ This repository implements **Feature 1: Repository Assessment Engine**. It
 discovers repository technologies, dependencies, binaries, build signals, and
 architecture-sensitive source code. The result is a deterministic JSON
 document conforming to
-[`RepositoryAssessmentV1.schema.json`](backend/RepositoryAssessmentV1.schema.json),
+[`RepositoryAssessmentV1.schema.json`](backend/Assessment/RepositoryAssessmentV1.schema.json),
 plus a standalone React dashboard and printable report.
 
 > **Feature boundary:** this project reports measured facts. It does not
@@ -150,7 +150,7 @@ From the repository root:
 
 ```powershell
 dotnet restore .\ArmMigrationAssist.slnx
-dotnet run --project .\backend\ArmMigrationAssist.Api.csproj
+dotnet run --project .\backend\Assessment\ArmMigrationAssist.Api.csproj
 ```
 
 In a second terminal:
@@ -186,7 +186,7 @@ writable workspace:
 
 ```powershell
 $env:ARM_MIGRATION_WORKSPACE_ROOT = "C:\arm-ma"
-dotnet run --project .\backend\ArmMigrationAssist.Api.csproj
+dotnet run --project .\backend\Assessment\ArmMigrationAssist.Api.csproj
 ```
 
 ## Using the dashboard
@@ -664,7 +664,11 @@ so it is a coordinated contract change to plan with Feature 2.
 |   |   |-- CodeCompatibility/
 |   |   |-- Contract/
 |   |   |-- DependencyScanner/
-|   |   `-- RepositoryDiscovery/
+|   |   |-- RepositoryDiscovery/
+|   |   |-- AssessController.cs
+|   |   |-- Program.cs
+|   |   |-- Dockerfile
+|   |   `-- RepositoryAssessmentV1.schema.json
 |   |-- MigrationPlanner/
 |   |   |-- ReadinessScoring/
 |   |   |-- ReportGeneration/
@@ -673,12 +677,9 @@ so it is a coordinated contract change to plan with Feature 2.
 |   |   |-- BuildConfiguration/
 |   |   |-- CodeMigration/
 |   |   `-- PipelineUpdates/
-|   |-- Validation/
-|   |   |-- BuildValidation/
-|   |   `-- Dashboard/
-|   |-- Controllers/
-|   |-- Program.cs
-|   `-- RepositoryAssessmentV1.schema.json
+|   `-- Validation/
+|       |-- BuildValidation/
+|       `-- Dashboard/
 |-- frontend/
 |   |-- index.html
 |   |-- package.json

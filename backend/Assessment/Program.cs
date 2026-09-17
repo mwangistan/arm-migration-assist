@@ -5,7 +5,6 @@ using ArmMigrationAssist.Api.Assessment.CodeCompatibility;
 using ArmMigrationAssist.Api.Assessment.Contract;
 using ArmMigrationAssist.Api.Assessment.DependencyScanner;
 using ArmMigrationAssist.Api.Assessment.RepositoryDiscovery;
-using ArmMigrationAssist.Api.MigrationPlanner;
 
 var builder = WebApplication.CreateBuilder(args);
 var frontendOrigins = builder.Configuration.GetSection("FrontendOrigins").Get<string[]>() ?? [];
@@ -32,19 +31,6 @@ builder.Services.AddHttpClient<DependencyRegistryVerifier>(c =>
 {
     c.Timeout = TimeSpan.FromSeconds(30);
     c.DefaultRequestHeaders.UserAgent.ParseAdd("arm-migration-assist-feature1/1.0");
-});
-builder.Services.AddHttpClient<MigrationPlannerClient>(c =>
-{
-    var baseUrl = builder.Configuration["MigrationPlanner:BaseUrl"]
-        ?? throw new InvalidOperationException("MigrationPlanner:BaseUrl is required.");
-    if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri) ||
-        baseUri.Scheme != Uri.UriSchemeHttps)
-        throw new InvalidOperationException("MigrationPlanner:BaseUrl must be an absolute HTTPS URL.");
-
-    c.BaseAddress = new Uri(baseUri.AbsoluteUri.TrimEnd('/') + "/");
-    c.Timeout = TimeSpan.FromMinutes(10);
-    c.DefaultRequestHeaders.UserAgent.ParseAdd("arm-migration-assist/1.0");
-    c.DefaultRequestHeaders.Accept.ParseAdd("application/json");
 });
 
 // Reusable assessment skills (Stories 1.2 - 1.4 + build readiness).

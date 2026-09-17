@@ -18,7 +18,7 @@ application.
 Start the backend from the repository root:
 
 ```powershell
-dotnet run --project .\backend\ArmMigrationAssist.Api.csproj
+dotnet run --project .\backend\Assessment\ArmMigrationAssist.Api.csproj
 ```
 
 In a second terminal, run the desktop client:

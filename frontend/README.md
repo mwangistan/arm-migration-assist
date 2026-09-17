@@ -29,7 +29,7 @@ Migration Plan tab renders the nested `plan` document.
 Start the backend from the repository root:
 
 ```powershell
-dotnet run --project .\backend\ArmMigrationAssist.Api.csproj
+dotnet run --project .\backend\Assessment\ArmMigrationAssist.Api.csproj
 ```
 
 Then start the frontend:

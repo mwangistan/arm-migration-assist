@@ -20,11 +20,11 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <ProjectReference Include="..\..\backend\ArmMigrationAssist.Api.csproj" />
+    <ProjectReference Include="..\..\backend\Assessment\ArmMigrationAssist.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\backend\RepositoryAssessmentV1.schema.json" Link="RepositoryAssessmentV1.schema.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\backend\Assessment\RepositoryAssessmentV1.schema.json" Link="RepositoryAssessmentV1.schema.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

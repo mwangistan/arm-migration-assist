@@ -10,11 +10,3 @@ Accept: application/json
 }
 
 ###
-
-POST {{ArmMigrationAssist.Api_HostAddress}}/api/migration-plans
-Content-Type: application/json
-Accept: application/json
-
-< ./sample-assessment.json
-
-###

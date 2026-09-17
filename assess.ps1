@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 
 try {
     $env:Logging__LogLevel__Default = 'None'
-    $projectPath = Join-Path $PSScriptRoot 'backend\ArmMigrationAssist.Api.csproj'
+    $projectPath = Join-Path $PSScriptRoot 'backend\Assessment\ArmMigrationAssist.Api.csproj'
     $json = & dotnet run --project $projectPath -- assess $Url $Target
     if ($LASTEXITCODE -ne 0) {
         throw "Assessment process exited with code $LASTEXITCODE."
