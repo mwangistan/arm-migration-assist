@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AutomatedMigration.BuildConfiguration;
 using AutomatedMigration.CodeMigration;
 using AutomatedMigration.Generators;
@@ -64,10 +65,72 @@ public sealed class MigrationActionsRunner
             generated.Add(new GeneratedItem(item, patchPath, patch.Diff));
         }
 
-        return new MigrationRunResult(plan.PlanId, generated, skipped);
+        var result = new MigrationRunResult(plan.PlanId, generated, skipped);
+        WriteArtifact(outputDir, ToArtifact(result, branch: null, baseBranch: null));
+        return result;
     }
 
     // Apply the already-generated patches to a branch and (optionally) open a PR.
-    public PublishResult Publish(MigrationPlan plan, PublishOptions options) =>
-        new PrPublisher().Publish(SelectWorkItems(plan), options);
+    public PublishResult Publish(MigrationPlan plan, PublishOptions options)
+    {
+        var result = new PrPublisher().Publish(SelectWorkItems(plan), options);
+        if (result.Commits > 0)
+            StampBranch(options.OutputDir, options.BranchName, options.BaseBranch);
+        return result;
+    }
+
+    private const string ResultFileName = "migration-result.json";
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+    };
+
+    private static MigrationResultArtifact ToArtifact(MigrationRunResult result, string? branch, string? baseBranch) =>
+        new(
+            "1.0",
+            result.PlanId,
+            branch,
+            baseBranch,
+            result.Generated.Select(g => new GeneratedChange(
+                g.WorkItem.Id,
+                g.WorkItem.AgentOrSkill,
+                g.WorkItem.Title,
+                g.PatchPath.Replace('\\', '/'),
+                g.WorkItem.EvidenceIds ?? new List<string>(),
+                g.WorkItem.AcceptanceTests ?? new List<AcceptanceTest>())).ToList(),
+            result.Skipped.Select(w => new SkippedChange(w.Id, "no change produced")).ToList());
+
+    private static void WriteArtifact(string outputDir, MigrationResultArtifact artifact) =>
+        File.WriteAllText(Path.Combine(outputDir, ResultFileName), JsonSerializer.Serialize(artifact, JsonOpts));
+
+    private static void StampBranch(string outputDir, string branch, string baseBranch)
+    {
+        var path = Path.Combine(outputDir, ResultFileName);
+        if (!File.Exists(path))
+            return;
+        var existing = JsonSerializer.Deserialize<MigrationResultArtifact>(File.ReadAllText(path), JsonOpts);
+        if (existing is null)
+            return;
+        File.WriteAllText(path, JsonSerializer.Serialize(existing with { Branch = branch, BaseBranch = baseBranch }, JsonOpts));
+    }
 }
+
+// Feature 3 -> Feature 4 hand-off artifact (written to output/migration-result.json).
+public sealed record MigrationResultArtifact(
+    string SchemaVersion,
+    string PlanId,
+    string? Branch,
+    string? BaseBranch,
+    IReadOnlyList<GeneratedChange> Generated,
+    IReadOnlyList<SkippedChange> Skipped);
+
+public sealed record GeneratedChange(
+    string WorkItemId,
+    string AgentOrSkill,
+    string Title,
+    string PatchPath,
+    IReadOnlyList<string> EvidenceIds,
+    IReadOnlyList<AcceptanceTest> AcceptanceTests);
+
+public sealed record SkippedChange(string WorkItemId, string Reason);
