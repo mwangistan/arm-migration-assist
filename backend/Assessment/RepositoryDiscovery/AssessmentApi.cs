@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using ArmMigrationAssist.RepositoryDiscovery.Authentication;
 using ArmMigrationAssist.RepositoryDiscovery.Jobs;
 using ArmMigrationAssist.RepositoryDiscovery.Models;
+using ArmMigrationAssist.RepositoryWorkspace;
 using Microsoft.AspNetCore.Http.Json;
 
 namespace ArmMigrationAssist.RepositoryDiscovery;
@@ -37,9 +38,12 @@ public static class AssessmentApi
             options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         });
 
+        services.AddRepositoryClonePool(configuration);
+
         if (assessmentService is null)
         {
-            services.AddSingleton<IRepositoryAssessmentService, RepositoryDiscoveryService>();
+            services.AddSingleton<IRepositoryAssessmentService>(sp =>
+                new RepositoryDiscoveryService(sp.GetRequiredService<IRepositoryClonePool>()));
         }
         else
         {

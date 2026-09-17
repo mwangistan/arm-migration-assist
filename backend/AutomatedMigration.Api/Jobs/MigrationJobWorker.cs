@@ -1,29 +1,30 @@
+using ArmMigrationAssist.RepositoryWorkspace;
 using AutomatedMigration.Api.Configuration;
 using AutomatedMigration.Api.Contracts;
-using AutomatedMigration.Api.Repository;
 using AutomatedMigration.CodeMigration;
 using Microsoft.Extensions.Options;
 
 namespace AutomatedMigration.Api.Jobs;
 
-// Reads queued jobs, fetches the source at the pinned commit, runs the
-// MigrationActionsRunner over an ephemeral worktree, populates the job Result,
-// and cleans up. One job at a time (SingleReader=true).
+// Reads queued jobs, acquires a shared clone from RepositoryClonePool at the pinned commit,
+// runs the MigrationActionsRunner over that working tree, populates the job Result, and
+// releases scratch. The clone itself is process-lifetime cached so F1/F3 within the same
+// composed host reuse the tree rather than each fetching the archive.
 public sealed class MigrationJobWorker : BackgroundService
 {
     private readonly MigrationJobStore _store;
-    private readonly RepositoryFetcher _fetcher;
+    private readonly IRepositoryClonePool _clonePool;
     private readonly AutomationOptions _options;
     private readonly ILogger<MigrationJobWorker> _logger;
 
     public MigrationJobWorker(
         MigrationJobStore store,
-        RepositoryFetcher fetcher,
+        IRepositoryClonePool clonePool,
         IOptions<AutomationOptions> options,
         ILogger<MigrationJobWorker> logger)
     {
         _store = store;
-        _fetcher = fetcher;
+        _clonePool = clonePool;
         _options = options.Value;
         _logger = logger;
     }
@@ -41,7 +42,11 @@ public sealed class MigrationJobWorker : BackgroundService
                 job.Status = MigrationJobStatus.Running;
                 job.StartedAt = DateTimeOffset.UtcNow;
 
-                using var fetched = await _fetcher.FetchAsync(job.Target.Url, job.Target.CommitSha, stoppingToken);
+                // Anonymous mode always: F3 does not receive user-loopback GitHub sessions;
+                // if a private repo needs authentication, the flow must be rethought at the
+                // job-queue boundary before we start passing credentials here.
+                var cloneKey = new RepositoryCloneKey(job.Target.Url, job.Target.CommitSha, Anonymous: true);
+                var clone = await _clonePool.AcquireAsync(cloneKey, stoppingToken);
 
                 var chatModel = ResolveChatModel();
                 var runner = new AutomatedMigration.MigrationActionsRunner(chatModel);
@@ -49,7 +54,7 @@ public sealed class MigrationJobWorker : BackgroundService
                 Directory.CreateDirectory(scratchOut);
                 try
                 {
-                    var runResult = runner.Run(job.Plan, fetched.Root, scratchOut);
+                    var runResult = runner.Run(job.Plan, clone.RootPath, scratchOut);
                     var generated = runResult.Generated
                         .Select(g => Project(g.WorkItem, g.Diff, _options.MaxDiffBytes))
                         .ToList();
@@ -59,14 +64,14 @@ public sealed class MigrationJobWorker : BackgroundService
 
                     job.Result = new MigrationActionsResult(
                         job.PlanId,
-                        job.Target.CommitSha,
+                        clone.ResolvedCommitSha,
                         generated,
                         skipped);
                     job.Status = MigrationJobStatus.Completed;
                 }
                 finally
                 {
-                    RepositoryFetcher.TryDeleteDirectory(scratchOut);
+                    TryDeleteDirectory(scratchOut);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -92,6 +97,13 @@ public sealed class MigrationJobWorker : BackgroundService
     {
         var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
         return string.IsNullOrWhiteSpace(token) ? null : new GitHubModelsChatModel(token);
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
+        catch (IOException) { /* best effort */ }
+        catch (UnauthorizedAccessException) { /* best effort */ }
     }
 
     private static GeneratedPatchDto Project(

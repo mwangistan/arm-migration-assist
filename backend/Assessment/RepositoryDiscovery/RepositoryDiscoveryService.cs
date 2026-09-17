@@ -9,6 +9,7 @@ using ArmMigrationAssist.RepositoryDiscovery.GitHub;
 using ArmMigrationAssist.RepositoryDiscovery.Scanning;
 using ArmMigrationAssist.RepositoryDiscovery.Skills;
 using ArmMigrationAssist.RepositoryDiscovery.Validation;
+using ArmMigrationAssist.RepositoryWorkspace;
 
 namespace ArmMigrationAssist.RepositoryDiscovery;
 
@@ -28,15 +29,38 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
     private const string Ruleset = "repository-discovery-1.2";
     private static readonly string ProducerVersion = ResolveProducerVersion();
     private readonly IGitHubRepositorySource gitHubRepositorySource;
+    private readonly IGitHubMetadataResolver? metadataResolver;
+    private readonly IRepositoryClonePool? clonePool;
 
     public RepositoryDiscoveryService()
         : this(new GitHubRepositorySource())
     {
     }
 
+    // Used by the composed host: an anonymous URL assessment shares a clone with the same
+    // (URL, SHA) key that a later F3 migration job requests, so the demo path materializes
+    // the working copy once instead of once per feature.
+    public RepositoryDiscoveryService(IRepositoryClonePool clonePool)
+        : this(new GitHubRepositorySource())
+    {
+        this.clonePool = clonePool;
+        this.metadataResolver = (IGitHubMetadataResolver)this.gitHubRepositorySource;
+    }
+
     internal RepositoryDiscoveryService(IGitHubRepositorySource gitHubRepositorySource)
     {
         this.gitHubRepositorySource = gitHubRepositorySource;
+        this.metadataResolver = gitHubRepositorySource as IGitHubMetadataResolver;
+    }
+
+    internal RepositoryDiscoveryService(
+        IGitHubRepositorySource gitHubRepositorySource,
+        IRepositoryClonePool? clonePool,
+        IGitHubMetadataResolver? metadataResolver)
+    {
+        this.gitHubRepositorySource = gitHubRepositorySource;
+        this.clonePool = clonePool;
+        this.metadataResolver = metadataResolver ?? gitHubRepositorySource as IGitHubMetadataResolver;
     }
 
     private static string ResolveProducerVersion()
@@ -69,7 +93,9 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
         using var workspace = await new RepositoryIntake(
             git,
             gitHubRepositorySource,
-            accessOptions?.UseStoredGitHubCredentials == true)
+            accessOptions?.UseStoredGitHubCredentials == true,
+            clonePool,
+            metadataResolver)
             .OpenAsync(source, cancellationToken);
         progress?.Report(new AssessmentProgress("file-catalog", 20, "Cataloging tracked repository files."));
         var catalog = await RepositoryFileCatalog.CreateAsync(
