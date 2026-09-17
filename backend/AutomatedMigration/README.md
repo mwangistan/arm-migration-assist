@@ -40,11 +40,11 @@ We run a work item only when its `agentOrSkill` matches one of these:
 
 | Skill | Story | Subfolder | Produces |
 |-------|-------|-----------|----------|
-| `build-config-generator` | 3.1 | `BuildConfiguration/` | ARM64 build/packaging diff (Dockerfile, `.csproj`, or `.vcxproj`) |
-| `ci-pipeline-generator` | 3.2 | `PipelineUpdates/` | ARM64 CI job diff (GitHub Actions / Azure Pipelines) |
-| `code-transformer` | 3.3 | `CodeMigration/` | An AI-drafted code diff (GitHub Models; needs `GITHUB_TOKEN`). Skipped if unset. |
+| `build/add-arm64-target` | 3.1 | `BuildConfiguration/` | ARM64 build/packaging diff (Dockerfile, `.csproj`, or `.vcxproj`) |
+| `pipeline/github-actions-arm64-job` | 3.2 | `PipelineUpdates/` | ARM64 CI job diff (GitHub Actions / Azure Pipelines) |
+| `code/arch-conditional-cleanup` | 3.3 | `CodeMigration/` | An AI-drafted code diff (GitHub Models; needs `GITHUB_TOKEN`). Skipped if unset. |
 
-### Build systems supported by `build-config-generator`
+### Build systems supported by `build/add-arm64-target`
 
 The target file comes from the work item's `inputs`; the generator picks the rule
 by file type. Unsupported build systems produce no change (no guessing).
@@ -110,7 +110,7 @@ made.
   "generated": [
     {
       "workItemId": "wi-dockerfile-arm64",
-      "agentOrSkill": "build-config-generator",
+      "agentOrSkill": "build/add-arm64-target",
       "title": "Add ARM64 build target to Dockerfile",
       "patchPath": "output/wi-dockerfile-arm64.patch",
       "evidenceIds": ["ev-dockerfile-001"],
@@ -126,9 +126,9 @@ Feature 4 reads `branch` (build it), `generated[].acceptanceTests` (validate), a
 
 ## Priorities
 
-1. **3.1 `build-config-generator`** — the P0; every reference repo needs one valid ARM64 build/config change.
-2. **3.2 `ci-pipeline-generator`** — adds the ARM64 CI job.
-3. **3.3 `code-transformer`** — one solid pattern transform if time allows.
+1. **3.1 `build/add-arm64-target`** — the P0; every reference repo needs one valid ARM64 build/config change.
+2. **3.2 `pipeline/github-actions-arm64-job`** — adds the ARM64 CI job.
+3. **3.3 `code/arch-conditional-cleanup`** — one solid pattern transform if time allows.
 
 ## Architecture boundary
 

@@ -26,9 +26,9 @@ public sealed class MigrationActionsRunner
     {
         _generators = new Dictionary<string, IMigrationGenerator>(StringComparer.Ordinal)
         {
-            ["build-config-generator"] = new BuildConfigGenerator(), // Story 3.1
-            ["ci-pipeline-generator"] = new PipelineGenerator(),     // Story 3.2
-            ["code-transformer"] = new CodePatcher(chatModel),       // Story 3.3
+            ["build/add-arm64-target"] = new BuildConfigGenerator(),          // Story 3.1
+            ["pipeline/github-actions-arm64-job"] = new PipelineGenerator(),  // Story 3.2
+            ["code/arch-conditional-cleanup"] = new CodePatcher(chatModel),   // Story 3.3
         };
     }
 

@@ -213,9 +213,9 @@ function ProductWorkflow({
   progressPhase: string;
 }) {
   const actionableSkills = new Set([
-    'build-config-generator',
-    'ci-pipeline-generator',
-    'code-transformer',
+    'build/add-arm64-target',
+    'pipeline/github-actions-arm64-job',
+    'code/arch-conditional-cleanup',
   ]);
   const actionableWork = planning?.plan.workItems.filter((item) =>
     actionableSkills.has(item.agentOrSkill)).length ?? 0;

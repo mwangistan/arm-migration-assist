@@ -17,6 +17,8 @@
              Link="CodeCompatibility\%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\MigrationPlanner\contracts\RepositoryAssessmentV1.schema.json"
                       LogicalName="ArmMigrationAssist.Contracts.RepositoryAssessmentV1.schema.json" />
+    <EmbeddedResource Include="..\..\..\knowledge\skills\catalog.json"
+                      LogicalName="ArmMigrationAssist.Knowledge.SkillCatalog.json" />
   </ItemGroup>
 
   <ItemGroup>

@@ -140,9 +140,9 @@ Path: `backend/AutomatedMigration/`
 Feature 3 binds directly to the subset of `MigrationPlanV1` it needs. The
 production selector recognizes three skills:
 
-- `build-config-generator` for supported Docker, .NET, and Visual C++ targets;
-- `ci-pipeline-generator` for GitHub Actions and Azure Pipelines;
-- `code-transformer` for model-assisted, single-file compatibility patches.
+- `build/add-arm64-target` for supported Docker, .NET, and Visual C++ targets;
+- `pipeline/github-actions-arm64-job` for GitHub Actions and Azure Pipelines;
+- `code/arch-conditional-cleanup` for model-assisted, single-file compatibility patches.
 
 Generators read a caller-provided local worktree and write unified diffs plus
 `migration-result.json` to a separate output directory. They do not apply the

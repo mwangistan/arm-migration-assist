@@ -165,7 +165,7 @@ public sealed class FakePlannerModel : IPlannerModel
         {
             var id = CreateWorkItemId(bucket);
             var skill = ResolveSkill(bucket);
-            var dependencies = skill == "ci-pipeline-generator" && buildWorkItemId is not null
+            var dependencies = skill == "pipeline/github-actions-arm64-job" && buildWorkItemId is not null
                 ? new[] { buildWorkItemId }
                 : Array.Empty<string>();
             var inputs = ResolveInputs(assessment, bucket, skill);
@@ -201,7 +201,7 @@ public sealed class FakePlannerModel : IPlannerModel
                 estimatedEffort = bucket.Category == "dep" ? "large" : "medium",
                 risk = bucket.Category == "dep" ? "high" : "low",
             });
-            if (skill == "build-config-generator")
+            if (skill == "build/add-arm64-target")
             {
                 buildWorkItemId = id;
             }
@@ -316,30 +316,30 @@ public sealed class FakePlannerModel : IPlannerModel
     {
         if (bucket.Category == "dep")
         {
-            return "dependency-upgrader";
+            return "dependency/replace-x64-only";
         }
 
         if (bucket.Category == "code")
         {
-            return "code-transformer";
+            return "code/arch-conditional-cleanup";
         }
 
         if (bucket.Description.Contains("CI job", StringComparison.OrdinalIgnoreCase))
         {
-            return "ci-pipeline-generator";
+            return "pipeline/github-actions-arm64-job";
         }
 
         if (bucket.Description.Contains("packaging", StringComparison.OrdinalIgnoreCase))
         {
-            return "packaging-generator";
+            return "packaging/add-arm64-msix";
         }
 
         if (bucket.Description.Contains("test suite", StringComparison.OrdinalIgnoreCase))
         {
-            return "test-generator";
+            return "validation/smoke-test";
         }
 
-        return "build-config-generator";
+        return "build/add-arm64-target";
     }
 
     private static string[] ResolveInputs(
@@ -358,16 +358,16 @@ public sealed class FakePlannerModel : IPlannerModel
             _ => assessment.BuildFindings.Evidence.Select(evidence => evidence.Path),
         };
 
-        if (skill == "ci-pipeline-generator")
+        if (skill == "pipeline/github-actions-arm64-job")
         {
             return [];
         }
 
-        if (skill == "build-config-generator")
+        if (skill == "build/add-arm64-target")
         {
             paths = paths.Where(path => path is not null && IsSupportedBuildInput(path));
         }
-        else if (skill == "packaging-generator")
+        else if (skill == "packaging/add-arm64-msix")
         {
             paths = paths.Where(path => path is not null && IsPackagingInput(path));
         }
