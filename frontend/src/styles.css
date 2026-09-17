@@ -289,6 +289,13 @@ h1 {
   line-height: 1.2;
 }
 
+.report-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 .repository-link {
   display: inline-block;
   max-width: min(680px, 85vw);
@@ -743,7 +750,8 @@ footer {
     display: grid;
   }
 
-  .repository-heading > button {
+  .report-actions {
+    flex-wrap: wrap;
     width: fit-content;
   }
 
@@ -778,6 +786,112 @@ footer {
     display: grid;
     gap: 5px;
     padding: 18px 16px;
+  }
+}
+
+@page {
+  margin: 14mm;
+}
+
+@media print {
+  :root,
+  body {
+    background: #ffffff;
+  }
+
+  body {
+    min-width: 0;
+    color: #000000;
+    print-color-adjust: exact;
+  }
+
+  .global-header,
+  .intake-band,
+  .report-actions,
+  .section-rail,
+  footer {
+    display: none !important;
+  }
+
+  main {
+    min-height: 0;
+  }
+
+  .workspace {
+    width: 100%;
+    margin: 0;
+  }
+
+  .results-enter {
+    padding: 0;
+    animation: none;
+  }
+
+  .repository-heading {
+    break-after: avoid;
+  }
+
+  .repository-link {
+    max-width: none;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .metric {
+    min-height: 82px;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+
+  .assessment-layout {
+    display: block;
+  }
+
+  .content-section {
+    padding-bottom: 24px;
+  }
+
+  .content-section + .content-section {
+    padding-top: 24px;
+  }
+
+  .section-heading,
+  thead {
+    break-after: avoid;
+  }
+
+  .technology-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .signal-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .table-frame {
+    overflow: visible;
+  }
+
+  table {
+    min-width: 0;
+  }
+
+  th,
+  td {
+    padding: 8px;
+    font-size: 10px;
+  }
+
+  tr,
+  .technology-group,
+  .signal-group,
+  .unknown-row {
+    break-inside: avoid;
   }
 }
 

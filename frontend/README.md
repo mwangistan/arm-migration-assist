@@ -31,7 +31,7 @@ Open `http://127.0.0.1:5173`.
 - dependency architecture evidence
 - architecture-sensitive code findings
 - ARM64 build, CI, packaging, and Windows experience signals
-- explicit unknowns and JSON export
+- explicit unknowns, print-ready reports, and JSON export
 
 Authentication is initiated only after anonymous Git access fails. The existing
 dashboard remains the sole UI: it displays sign-in progress in the assessment

@@ -123,6 +123,7 @@ describe('App', () => {
       .mockImplementation(function captureDownload(this: HTMLAnchorElement) {
         downloadedFileName = this.download;
       });
+    const print = vi.spyOn(window, 'print').mockImplementation(() => undefined);
 
     fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }));
 
@@ -130,6 +131,9 @@ describe('App', () => {
     expect(downloadedFileName).toBe('sample-app-assessment.json');
     expect(anchorClick).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:assessment');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Print report' }));
+    expect(print).toHaveBeenCalledOnce();
   });
 
   it('clears an earlier result when a replacement assessment fails', async () => {

@@ -15,6 +15,7 @@ import {
   ArrowDownload20Regular,
   ArrowRight20Regular,
   Dismiss20Regular,
+  Print20Regular,
   Search20Regular,
 } from '@fluentui/react-icons';
 import {
@@ -167,6 +168,10 @@ function AssessmentResults({ assessment }: { assessment: RepositoryAssessment })
     URL.revokeObjectURL(url);
   }
 
+  function printAssessment() {
+    window.print();
+  }
+
   return (
     <div className="results-enter">
       <section className="repository-heading" aria-labelledby="repository-name">
@@ -182,13 +187,22 @@ function AssessmentResults({ assessment }: { assessment: RepositoryAssessment })
             {assessment.repository.url}
           </a>
         </div>
-        <Button
-          appearance="secondary"
-          icon={<ArrowDownload20Regular />}
-          onClick={downloadAssessment}
-        >
-          Export JSON
-        </Button>
+        <div className="report-actions">
+          <Button
+            appearance="secondary"
+            icon={<Print20Regular />}
+            onClick={printAssessment}
+          >
+            Print report
+          </Button>
+          <Button
+            appearance="secondary"
+            icon={<ArrowDownload20Regular />}
+            onClick={downloadAssessment}
+          >
+            Export JSON
+          </Button>
+        </div>
       </section>
 
       <div className="repository-meta" aria-label="Repository metadata">
@@ -639,7 +653,7 @@ export default function App() {
           ) : null}
           {loading ? (
             <div className="request-status" role="status" aria-live="polite">
-              <span>{authenticationMessage ? 'Waiting for GitHub sign-in' : 'Cloning and scanning the repository'}</span>
+              <span>{authenticationMessage ? 'Waiting for GitHub sign-in' : 'Downloading and scanning a read-only snapshot'}</span>
               <span>
                 {authenticationMessage ?? 'Results will appear when evidence collection is complete.'}
               </span>
