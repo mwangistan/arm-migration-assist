@@ -7,6 +7,7 @@ WORKDIR /src
 
 COPY backend/Assessment/ backend/Assessment/
 COPY backend/MigrationPlanner/contracts/ backend/MigrationPlanner/contracts/
+COPY knowledge/skills/catalog.json knowledge/skills/catalog.json
 
 RUN dotnet restore backend/Assessment/RepositoryDiscovery/RepositoryDiscovery.csproj
 RUN dotnet publish backend/Assessment/RepositoryDiscovery/RepositoryDiscovery.csproj \
