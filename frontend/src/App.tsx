@@ -5,6 +5,11 @@ import {
   Field,
   FluentProvider,
   Input,
+  Menu,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
   MessageBar,
   MessageBarBody,
   ProgressBar,
@@ -71,7 +76,12 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
 function titleCase(value: string) {
   return value
     .replace(/[-_]/g, ' ')
-    .replace(/\b\w/g, (character) => character.toUpperCase());
+    .replace(/\b\w/g, (character) => character.toUpperCase())
+    .replace(/\bArm64ec\b/g, 'ARM64EC')
+    .replace(/\bArm64\b/g, 'ARM64')
+    .replace(/\bCi\b/g, 'CI')
+    .replace(/\bApi\b/g, 'API')
+    .replace(/\bSdk\b/g, 'SDK');
 }
 
 function formatPercent(value: number) {
@@ -187,6 +197,87 @@ function workItemColor(priority: string): BadgeColor {
   return 'informative';
 }
 
+type WorkflowStageState = 'active' | 'attention' | 'complete' | 'ready' | 'waiting';
+
+function ProductWorkflow({
+  assessment,
+  planning,
+  planningError,
+  loading,
+  progressPhase,
+}: {
+  assessment: RepositoryAssessment | null;
+  planning: MigrationPlanningResult | null;
+  planningError: string | null;
+  loading: boolean;
+  progressPhase: string;
+}) {
+  const actionableSkills = new Set([
+    'build-config-generator',
+    'ci-pipeline-generator',
+    'code-transformer',
+  ]);
+  const actionableWork = planning?.plan.workItems.filter((item) =>
+    actionableSkills.has(item.agentOrSkill)).length ?? 0;
+  const validationChecks = planning
+    ? Object.entries(planning.plan.validationPlan)
+        .filter(([key, value]) => key !== 'targetDevices' && Array.isArray(value))
+        .reduce((total, [, value]) => total + value.length, 0)
+    : 0;
+  const assessing = loading && progressPhase !== 'migration-planning';
+  const stages: Array<{
+    label: string;
+    detail: string;
+    state: WorkflowStageState;
+  }> = [
+    {
+      label: 'Connect',
+      detail: assessment || loading ? 'Repository selected' : 'GitHub repository',
+      state: assessment || loading ? 'complete' : 'active',
+    },
+    {
+      label: 'Assess',
+      detail: assessment ? `${assessment.scanCoverage.filesScanned} files analyzed` : assessing ? titleCase(progressPhase) : 'Evidence collection',
+      state: assessment ? 'complete' : assessing ? 'active' : 'waiting',
+    },
+    {
+      label: 'Plan',
+      detail: planning ? titleCase(planning.plan.recommendedPath) : planningError ? 'Review required' : progressPhase === 'migration-planning' ? 'Scoring readiness' : 'Migration strategy',
+      state: planning ? 'complete' : planningError ? 'attention' : progressPhase === 'migration-planning' ? 'active' : 'waiting',
+    },
+    {
+      label: 'Transform',
+      detail: planning
+        ? `${actionableWork} ready / ${planning.plan.missingSkills.length} gaps`
+        : 'Reviewable patches',
+      state: planning ? actionableWork > 0 ? 'ready' : 'attention' : 'waiting',
+    },
+    {
+      label: 'Validate',
+      detail: planning ? `${pluralize(validationChecks, 'check')} defined` : 'ARM64 verification',
+      state: planning ? 'ready' : 'waiting',
+    },
+  ];
+
+  return (
+    <section className="workflow-band" id="workflow" aria-label="Migration workflow">
+      <ol className="workflow-steps">
+        {stages.map((stage, index) => (
+          <li className={`workflow-step workflow-${stage.state}`} key={stage.label}>
+            <span className="workflow-index" aria-hidden="true">
+              {stage.state === 'complete' ? <Checkmark16Regular /> : index + 1}
+            </span>
+            <span>
+              <strong>{stage.label}</strong>
+              <small>{stage.detail}</small>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function PlanningResults({
   planning,
   pending,
@@ -228,6 +319,18 @@ function PlanningResults({
   if (!planning) return null;
 
   const { plan, score, warnings } = planning;
+  const validationGroups = [
+    ['Build', plan.validationPlan.buildChecks],
+    ['Functional', plan.validationPlan.functionalChecks],
+    ['Reliability', plan.validationPlan.reliabilityChecks],
+    ['Performance', plan.validationPlan.performanceChecks],
+    ['Power', plan.validationPlan.powerChecks],
+    ['Offline', plan.validationPlan.offlineChecks],
+    ['Accessibility', plan.validationPlan.accessibilityChecks],
+    ['Windows experience', plan.validationPlan.windowsExperienceChecks],
+  ] as const;
+  const validationChecks = validationGroups.flatMap(([group, checks]) =>
+    checks.map((check) => ({ group, check })));
   return (
     <section className="content-section planning-section" id="migration-plan" aria-labelledby="planning-heading">
       <div className="section-heading">
@@ -298,6 +401,87 @@ function PlanningResults({
           {plan.workItems.map((item) => <WorkItemRow item={item} key={item.id} />)}
         </div>
       )}
+
+      <div className="decision-grid">
+        <section aria-labelledby="alternatives-heading">
+          <h4 id="alternatives-heading">Alternatives</h4>
+          {plan.alternatives.map((alternative) => (
+            <div className="decision-row" key={alternative.path}>
+              <div>
+                <strong>{titleCase(alternative.path)}</strong>
+                <StatusBadge meta={{
+                  label: titleCase(alternative.disposition),
+                  color: alternative.disposition === 'viable' ? 'success' : 'subtle',
+                }} />
+              </div>
+              <p>{alternative.rationale}</p>
+            </div>
+          ))}
+        </section>
+
+        <section aria-labelledby="risks-heading">
+          <h4 id="risks-heading">Risks and unknowns</h4>
+          {plan.risks.map((risk) => (
+            <div className="decision-row" key={risk.id}>
+              <div>
+                <strong>{risk.description}</strong>
+                <StatusBadge meta={{ label: titleCase(risk.severity), color: risk.severity === 'critical' ? 'danger' : 'warning' }} />
+              </div>
+              <p>{risk.mitigation}</p>
+            </div>
+          ))}
+          {plan.unknowns.map((unknown) => (
+            <div className="decision-row" key={unknown.id}>
+              <strong>{unknown.description}</strong>
+              {unknown.requiredSkill ? <p>Resolve with {titleCase(unknown.requiredSkill)}.</p> : null}
+            </div>
+          ))}
+          {plan.risks.length === 0 && plan.unknowns.length === 0 ? (
+            <p className="empty-state-inline">No additional planning risks or unknowns.</p>
+          ) : null}
+        </section>
+
+        <section aria-labelledby="gates-heading">
+          <h4 id="gates-heading">Capability and approval gates</h4>
+          {plan.missingSkills.map((skill) => (
+            <div className="decision-row" key={skill.proposedName}>
+              <div>
+                <strong>{titleCase(skill.proposedName)}</strong>
+                <StatusBadge meta={{ label: 'Missing skill', color: 'warning' }} />
+              </div>
+              <p>{skill.purpose}</p>
+            </div>
+          ))}
+          {plan.requiredApprovals.map((approval) => (
+            <div className="decision-row" key={approval.approvalId}>
+              <div>
+                <strong>{approval.summary}</strong>
+                <StatusBadge meta={{ label: 'Approval required', color: 'important' }} />
+              </div>
+              <p>{pluralize(approval.workItemIds.length, 'work item')} gated.</p>
+            </div>
+          ))}
+        </section>
+      </div>
+
+      <div className="validation-plan">
+        <div className="work-items-heading">
+          <h4>ARM64 validation plan</h4>
+          <span>{plan.validationPlan.targetDevices.map(titleCase).join(', ')}</span>
+        </div>
+        {validationChecks.length === 0 ? (
+          <p className="empty-state-inline">No additional validation checks were generated.</p>
+        ) : (
+          <div className="validation-list">
+            {validationChecks.map(({ group, check }) => (
+              <div key={check.id}>
+                <Badge appearance="outline" color="informative" size="small">{group}</Badge>
+                <p><strong>{check.description}</strong>{check.expectedOutcome}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -357,7 +541,7 @@ function AssessmentResults({
     <div className="results-enter">
       <section className="repository-heading" aria-labelledby="repository-name">
         <div>
-          <p className="eyebrow">Assessment result</p>
+          <p className="eyebrow">Migration workspace</p>
           <h2 id="repository-name">{assessment.repository.name}</h2>
           <a
             className="repository-link"
@@ -376,38 +560,25 @@ function AssessmentResults({
           >
             Print report
           </Button>
-          <Button
-            appearance="secondary"
-            icon={<ArrowDownload20Regular />}
-            onClick={downloadAssessment}
-          >
-            Export JSON
-          </Button>
-          {planning ? (
-            <>
-              <Button
-                appearance="secondary"
-                icon={<ArrowDownload20Regular />}
-                onClick={() => downloadJson(planning.plan, `${assessment.repository.name}-migration-plan.json`)}
-              >
-                Export plan
-              </Button>
-              <Button
-                appearance="secondary"
-                icon={<ArrowDownload20Regular />}
-                onClick={() => downloadReport(planning.runId, 'md')}
-              >
-                Report .md
-              </Button>
-              <Button
-                appearance="secondary"
-                icon={<ArrowDownload20Regular />}
-                onClick={() => downloadReport(planning.runId, 'html')}
-              >
-                Report .html
-              </Button>
-            </>
-          ) : null}
+          <Menu>
+            <MenuTrigger disableButtonEnhancement>
+              <Button appearance="secondary" icon={<ArrowDownload20Regular />}>Export</Button>
+            </MenuTrigger>
+            <MenuPopover>
+              <MenuList>
+                <MenuItem onClick={downloadAssessment}>Assessment JSON</MenuItem>
+                {planning ? (
+                  <>
+                    <MenuItem onClick={() => downloadJson(planning.plan, `${assessment.repository.name}-migration-plan.json`)}>
+                      Migration plan JSON
+                    </MenuItem>
+                    <MenuItem onClick={() => downloadReport(planning.runId, 'md')}>Markdown report</MenuItem>
+                    <MenuItem onClick={() => downloadReport(planning.runId, 'html')}>HTML report</MenuItem>
+                  </>
+                ) : null}
+              </MenuList>
+            </MenuPopover>
+          </Menu>
         </div>
       </section>
 
@@ -836,6 +1007,7 @@ export default function App() {
 
   return (
     <FluentProvider theme={webLightTheme} className="app-provider">
+      <a className="skip-link" href="#top">Skip to content</a>
       <header className="global-header">
         <div className="global-header-inner">
           <a className="brand" href="#top" aria-label="Arm Migration Assist home">
@@ -845,82 +1017,114 @@ export default function App() {
                 <path className="brand-cut" d="M15.8 24h4.4L18 19.2 15.8 24Z" />
               </svg>
             </span>
-            <span>Arm Migration Assist</span>
+            <span className="brand-copy">
+              <strong>Arm Migration Assist</strong>
+              <small>Migration engineering workspace</small>
+            </span>
           </a>
+          <div className="header-assurances" aria-label="Product safeguards">
+            <span>Read-only analysis</span>
+            <span>Approval-gated change</span>
+          </div>
         </div>
       </header>
 
       <main id="top">
         <section className="intake-band" aria-labelledby="page-title">
-          <div className="page-intro">
-            <p className="eyebrow">Windows on Arm</p>
-            <h1 id="page-title">Repository assessment</h1>
-            <p className="page-context">Evidence workspace for GitHub repositories</p>
-          </div>
+          <div className="intake-grid">
+            <div className="page-intro">
+              <p className="eyebrow">ARM Migration Assist</p>
+              <h1 id="page-title">Windows on Arm migration workspace</h1>
+              <p className="page-context">
+                Turn a GitHub repository into an evidence-linked readiness assessment,
+                migration strategy, and approval-gated work package.
+              </p>
+              <div className="trust-row" aria-label="Analysis guarantees">
+                <span><Checkmark16Regular aria-hidden="true" /> Commit-pinned</span>
+                <span><Checkmark16Regular aria-hidden="true" /> Read-only</span>
+                <span><Checkmark16Regular aria-hidden="true" /> Evidence-linked</span>
+              </div>
+            </div>
 
-          <form className="assessment-form" onSubmit={handleSubmit} noValidate>
-            <Field
-              className="repository-field"
-              label="GitHub repository URL"
-              validationMessage={inputError}
-              validationState={inputError ? 'error' : 'none'}
-            >
-              <Input
-                value={source}
-                onChange={(_, data) => {
-                  setSource(data.value);
-                  if (inputError) setInputError(null);
-                }}
-                contentBefore={<Search20Regular />}
-                placeholder="https://github.com/owner/repository"
-                size="large"
-                type="url"
-                disabled={loading}
-              />
-            </Field>
-            <div className="form-actions">
-              <Button
-                appearance="primary"
-                icon={loading ? <Spinner size="tiny" /> : <ArrowRight20Regular />}
-                iconPosition="after"
-                size="large"
-                type="submit"
-                disabled={loading}
-              >
-                {loading
-                  ? progress.phase === 'migration-planning' ? 'Planning migration' : 'Assessing repository'
-                  : 'Run assessment'}
-              </Button>
-              {loading ? (
-                <Button
-                  appearance="subtle"
-                  icon={<Dismiss20Regular />}
-                  size="large"
-                  type="button"
-                  onClick={cancelAssessment}
+            <div className="intake-workbench">
+              <div className="intake-heading">
+                <span>01 / Connect</span>
+                <strong>Analyze a repository</strong>
+                <p>Public repositories run directly. Protected repositories use local GitHub sign-in.</p>
+              </div>
+              <form className="assessment-form" onSubmit={handleSubmit} noValidate>
+                <Field
+                  className="repository-field"
+                  label="GitHub repository URL"
+                  validationMessage={inputError}
+                  validationState={inputError ? 'error' : 'none'}
                 >
-                  Cancel
-                </Button>
+                  <Input
+                    value={source}
+                    onChange={(_, data) => {
+                      setSource(data.value);
+                      if (inputError) setInputError(null);
+                    }}
+                    contentBefore={<Search20Regular />}
+                    placeholder="https://github.com/owner/repository"
+                    size="large"
+                    type="url"
+                    disabled={loading}
+                  />
+                </Field>
+                <div className="form-actions">
+                  <Button
+                    appearance="primary"
+                    icon={loading ? <Spinner size="tiny" /> : <ArrowRight20Regular />}
+                    iconPosition="after"
+                    size="large"
+                    type="submit"
+                    disabled={loading}
+                  >
+                    {loading
+                      ? progress.phase === 'migration-planning' ? 'Planning migration' : 'Assessing repository'
+                      : 'Run migration analysis'}
+                  </Button>
+                  {loading ? (
+                    <Button
+                      appearance="subtle"
+                      icon={<Dismiss20Regular />}
+                      size="large"
+                      type="button"
+                      onClick={cancelAssessment}
+                    >
+                      Cancel
+                    </Button>
+                  ) : null}
+                </div>
+              </form>
+
+              {error ? (
+                <MessageBar className="request-message" intent="error">
+                  <MessageBarBody>{error}</MessageBarBody>
+                </MessageBar>
+              ) : null}
+              {loading ? (
+                <div className="pipeline-status" role="status" aria-live="polite">
+                  <div>
+                    <strong>{authenticationMessage ? 'Waiting for GitHub sign-in' : titleCase(progress.phase)}</strong>
+                    <span>{progress.phase === 'migration-planning' ? 'Planning' : `${progress.percent}%`}</span>
+                  </div>
+                  <ProgressBar value={progress.phase === 'migration-planning' ? undefined : progress.percent / 100} />
+                  <p>{authenticationMessage ?? progress.message}</p>
+                </div>
               ) : null}
             </div>
-          </form>
-
-          {error ? (
-            <MessageBar className="request-message" intent="error">
-              <MessageBarBody>{error}</MessageBarBody>
-            </MessageBar>
-          ) : null}
-          {loading ? (
-            <div className="pipeline-status" role="status" aria-live="polite">
-              <div>
-                <strong>{authenticationMessage ? 'Waiting for GitHub sign-in' : titleCase(progress.phase)}</strong>
-                <span>{progress.phase === 'migration-planning' ? 'Planning' : `${progress.percent}%`}</span>
-              </div>
-              <ProgressBar value={progress.phase === 'migration-planning' ? undefined : progress.percent / 100} />
-              <p>{authenticationMessage ?? progress.message}</p>
-            </div>
-          ) : null}
+          </div>
         </section>
+
+        <ProductWorkflow
+          assessment={assessment}
+          planning={planning}
+          planningError={planningError}
+          loading={loading}
+          progressPhase={progress.phase}
+        />
 
         <div className="workspace">
           {assessment ? (
@@ -931,10 +1135,17 @@ export default function App() {
               planningError={planningError}
             />
           ) : !loading ? (
-            <section className="empty-workspace" aria-label="Assessment status">
-              <div className="empty-glyph" aria-hidden="true"><span /></div>
-              <h2>Awaiting repository</h2>
-              <p>No assessment results are loaded.</p>
+            <section className="empty-workspace" aria-labelledby="empty-title">
+              <div className="empty-intro">
+                <p className="eyebrow">One controlled workflow</p>
+                <h2 id="empty-title">Repository evidence becomes an executable migration decision.</h2>
+                <p>Analysis never runs repository code. Planning preserves evidence IDs, and every generated change remains review-only until approved.</p>
+              </div>
+              <div className="outcome-grid">
+                <div><span>Assess</span><strong>Compatibility evidence</strong><p>Technology, dependencies, native binaries, code findings, build and Windows signals.</p></div>
+                <div><span>Plan</span><strong>Auditable strategy</strong><p>Deterministic readiness scoring, model-grounded recommendations, risks and acceptance criteria.</p></div>
+                <div><span>Transform + validate</span><strong>Reviewable execution</strong><p>Generator-ready work items, patch outputs, approval gates and ARM64 validation checks.</p></div>
+              </div>
             </section>
           ) : null}
         </div>
@@ -942,7 +1153,7 @@ export default function App() {
 
       <footer>
         <span>Arm Migration Assist</span>
-        <span>Repository discovery and compatibility evidence</span>
+        <span>Evidence → strategy → reviewable change → validation</span>
       </footer>
     </FluentProvider>
   );

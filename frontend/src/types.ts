@@ -172,6 +172,50 @@ export interface MigrationWorkItem {
   risk: string;
 }
 
+export interface MigrationValidationCheck {
+  id: string;
+  description: string;
+  expectedOutcome: string;
+}
+
+export interface MigrationRisk {
+  id: string;
+  description: string;
+  severity: string;
+  mitigation: string;
+}
+
+export interface MigrationUnknown {
+  id: string;
+  description: string;
+  requiredSkill?: string | null;
+}
+
+export interface MissingMigrationSkill {
+  proposedName: string;
+  purpose: string;
+  justification: string;
+  writeAccess?: boolean;
+}
+
+export interface MigrationApproval {
+  approvalId: string;
+  summary: string;
+  workItemIds: string[];
+}
+
+export interface MigrationValidationPlan {
+  targetDevices: string[];
+  buildChecks: MigrationValidationCheck[];
+  functionalChecks: MigrationValidationCheck[];
+  reliabilityChecks: MigrationValidationCheck[];
+  performanceChecks: MigrationValidationCheck[];
+  powerChecks: MigrationValidationCheck[];
+  offlineChecks: MigrationValidationCheck[];
+  accessibilityChecks: MigrationValidationCheck[];
+  windowsExperienceChecks: MigrationValidationCheck[];
+}
+
 export interface MigrationPlan {
   schemaVersion: string;
   planId: string;
@@ -191,12 +235,14 @@ export interface MigrationPlan {
     path: string;
     disposition: string;
     rationale: string;
+    estimatedEffort?: string;
+    risk?: string;
   }>;
-  risks: Array<Record<string, unknown>>;
-  unknowns: Array<Record<string, unknown>>;
-  missingSkills: Array<Record<string, unknown>>;
-  requiredApprovals: Array<Record<string, unknown>>;
-  validationPlan: Record<string, unknown>;
+  risks: MigrationRisk[];
+  unknowns: MigrationUnknown[];
+  missingSkills: MissingMigrationSkill[];
+  requiredApprovals: MigrationApproval[];
+  validationPlan: MigrationValidationPlan;
   [key: string]: unknown;
 }
 

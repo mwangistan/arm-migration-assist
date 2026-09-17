@@ -1,19 +1,30 @@
-# Frontend
+# Migration Workspace Frontend
 
 React and Fluent UI operational dashboard for repository assessment and
 migration planning. It submits a GitHub URL, streams assessment progress,
 automatically plans the migration, and presents the evidence, readiness score,
 work items, and acceptance criteria in one report.
 
+## Architecture
+
+The frontend is the product entrypoint for the whole workflow, not a module-
+specific dashboard. Its real-state workflow rail covers Connect, Assess, Plan,
+Transform, and Validate. It creates assessment jobs, consumes SSE with polling
+fallback, sends the completed assessment unchanged to the planner, and exposes
+Feature 3-compatible plan and report artifacts. Business rules remain in the
+backend contracts and validators.
+
+See [the end-to-end architecture](../docs/ARCHITECTURE.md).
+
 ## Run
 
-Start the Feature 1 API from the repository root:
+Start the assessment API from the repository root:
 
 ```pwsh
 dotnet run --project backend/Assessment/RepositoryDiscovery/RepositoryDiscovery.csproj -- serve
 ```
 
-Start the Feature 2 API in another terminal:
+Start the migration planner API in another terminal:
 
 ```pwsh
 dotnet run --project backend/MigrationPlanner/src/MigrationPlanner.Api/MigrationPlanner.Api.csproj

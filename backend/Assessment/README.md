@@ -1,4 +1,4 @@
-# Feature 1: Repository Analysis
+# Assessment (Feature 1)
 
 Turns a repository into a reproducible, evidence-backed inventory for Windows on
 Arm planning. The `RepositoryDiscovery` executable orchestrates all four stories
@@ -15,3 +15,16 @@ integration paths while retaining one React and Fluent UI dashboard.
 Feature 1 reports repository facts, compatibility signals, scan coverage, and
 explicit unknowns. Readiness scores and migration recommendations belong to
 Feature 2 and are not inferred here.
+
+## Architecture
+
+`RepositoryDiscoveryService` opens an immutable repository snapshot, builds one
+bounded file catalog, and runs technology, dependency, and code scanners over
+that catalog in parallel. It combines their outputs with build and Windows
+signals, validates cross-record evidence, and publishes
+`RepositoryAssessmentV1`.
+
+The API exposes direct, synchronous, queued, and SSE integration surfaces. The
+product frontend uses queued jobs and live events; the planner consumes only the
+completed contract. See [the system architecture](../../docs/ARCHITECTURE.md)
+and [repository assessment details](RepositoryDiscovery/README.md).

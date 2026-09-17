@@ -130,8 +130,30 @@ const planningResult: MigrationPlanningResult = {
     risks: [],
     unknowns: [],
     missingSkills: [],
-    requiredApprovals: [],
-    validationPlan: {},
+    requiredApprovals: [
+      {
+        approvalId: 'ap-ui-test',
+        summary: 'Approve ARM64 build changes.',
+        workItemIds: ['wi-build-arm64'],
+      },
+    ],
+    validationPlan: {
+      targetDevices: ['arm64-vm'],
+      buildChecks: [
+        {
+          id: 'vc-ui-build',
+          description: 'Build the ARM64 target.',
+          expectedOutcome: 'The ARM64 build succeeds.',
+        },
+      ],
+      functionalChecks: [],
+      reliabilityChecks: [],
+      performanceChecks: [],
+      powerChecks: [],
+      offlineChecks: [],
+      accessibilityChecks: [],
+      windowsExperienceChecks: [],
+    },
   },
   score: {
     schemaVersion: '1.0',
@@ -218,7 +240,11 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
       target: { value: 'https://github.com/example/sample-app' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Run assessment' }));
+    const workflow = screen.getByRole('region', { name: 'Migration workflow' });
+    for (const stage of ['Connect', 'Assess', 'Plan', 'Transform', 'Validate']) {
+      expect(workflow).toHaveTextContent(stage);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
 
     expect(await screen.findByRole('heading', { name: 'sample-app' })).toBeInTheDocument();
     expect(fetchMock.mock.calls[0][0]).toBe('https://assessment.example.test/api/assessment-jobs');
@@ -228,9 +254,11 @@ describe('App', () => {
     expect(screen.getByText('native-runtime-x64')).toBeInTheDocument();
     expect(screen.getByText('NativeMethods.cs')).toBeInTheDocument();
     expect(await screen.findByText('74')).toBeInTheDocument();
-    expect(screen.getByText('Native Arm64')).toBeInTheDocument();
+    expect(screen.getAllByText('Native ARM64').length).toBeGreaterThan(0);
     expect(screen.getByText('Add an ARM64 build target')).toBeInTheDocument();
     expect(screen.getByText('The Release ARM64 build succeeds.')).toBeInTheDocument();
+    expect(screen.getByText('Approve ARM64 build changes.')).toBeInTheDocument();
+    expect(screen.getByText('The ARM64 build succeeds.')).toBeInTheDocument();
 
     const createObjectURL = vi.fn().mockReturnValue('blob:assessment');
     const revokeObjectURL = vi.fn();
@@ -244,21 +272,25 @@ describe('App', () => {
       });
     const print = vi.spyOn(window, 'print').mockImplementation(() => undefined);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Assessment JSON' }));
 
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(downloadedFileName).toBe('sample-app-assessment.json');
     expect(anchorClick).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:assessment');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Export plan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Migration plan JSON' }));
     expect(downloadedFileName).toBe('sample-app-migration-plan.json');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Report .md' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Markdown report' }));
     expect(downloadedFileName).toBe('migration-report-run-ui-test.md');
     expect(downloadedHref).toBe('https://planner.example.test/api/migration-plans/run-ui-test/report.md');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Report .html' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'HTML report' }));
     expect(downloadedFileName).toBe('migration-report-run-ui-test.html');
     expect(downloadedHref).toBe('https://planner.example.test/api/migration-plans/run-ui-test/report.html');
 
@@ -278,15 +310,15 @@ describe('App', () => {
 
     const input = screen.getByLabelText('GitHub repository URL');
     fireEvent.change(input, { target: { value: 'https://github.com/example/sample-app' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Run assessment' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
     expect(await screen.findByRole('heading', { name: 'sample-app' })).toBeInTheDocument();
 
     fireEvent.change(input, { target: { value: 'https://github.com/example/other-app' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Run assessment' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
 
     expect(screen.queryByRole('heading', { name: 'sample-app' })).not.toBeInTheDocument();
     expect(await screen.findByText('The repository could not be assessed.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Awaiting repository' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Repository evidence becomes an executable migration decision.' })).toBeInTheDocument();
   });
 
   it('rejects a successful response that is not an assessment object', async () => {
@@ -298,10 +330,10 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
       target: { value: 'https://github.com/example/invalid-response' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Run assessment' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
 
     expect(await screen.findByText('The assessment service returned an invalid response.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Awaiting repository' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Repository evidence becomes an executable migration decision.' })).toBeInTheDocument();
   });
 
   it('handles a null problem response without crashing', async () => {
@@ -314,10 +346,10 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
       target: { value: 'https://github.com/example/null-problem' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Run assessment' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
 
     expect(await screen.findByText('Assessment failed.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Awaiting repository' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Repository evidence becomes an executable migration decision.' })).toBeInTheDocument();
   });
 
   it('authenticates and resumes a protected repository assessment', async () => {
@@ -347,7 +379,7 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
       target: { value: 'https://github.com/example/private-app' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Run assessment' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
 
     expect(await screen.findByRole('heading', { name: 'sample-app' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(6);
@@ -378,12 +410,12 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
       target: { value: 'https://github.com/example/private-app' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Run assessment' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
     expect(await screen.findByText('Waiting for GitHub sign-in')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    expect(await screen.findByRole('heading', { name: 'Awaiting repository' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Repository evidence becomes an executable migration decision.' })).toBeInTheDocument();
     expect(screen.queryByText('Waiting for GitHub sign-in')).not.toBeInTheDocument();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     expect(fetchMock.mock.calls[3][0]).toBe(`/api/auth/github/sessions/${'b'.repeat(32)}`);
@@ -428,7 +460,7 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
       target: { value: 'https://github.com/example/sample-app' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Run assessment' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
 
     await waitFor(() => expect(MockEventSource.instance).toBeDefined());
     MockEventSource.instance.emit({
@@ -438,7 +470,7 @@ describe('App', () => {
       message: 'Scanning dependency manifests and binaries.',
     });
 
-    expect(await screen.findByText('Dependency Scanner')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Dependency Scanner'));
     expect(screen.getByText('60%')).toBeInTheDocument();
     expect(screen.getByText('Scanning dependency manifests and binaries.')).toBeInTheDocument();
 

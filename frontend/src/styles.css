@@ -44,6 +44,23 @@ input {
   background: transparent;
 }
 
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 8px;
+  left: 12px;
+  padding: 8px 12px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 12px;
+  text-decoration: none;
+  transform: translateY(-150%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
 .global-header {
   position: sticky;
   z-index: 20;
@@ -59,7 +76,7 @@ input {
   align-items: center;
   justify-content: space-between;
   width: min(1280px, calc(100% - 48px));
-  height: 53px;
+  height: 61px;
   margin: 0 auto;
 }
 
@@ -69,28 +86,58 @@ input {
   align-items: center;
   color: var(--ink);
   font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif;
-  font-size: 16px;
-  font-weight: 650;
   text-decoration: none;
 }
 
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
   border-radius: 4px;
   background: var(--blue);
 }
 
 .brand-mark svg {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   fill: #ffffff;
 }
 
 .brand-mark .brand-cut {
   fill: var(--blue);
+}
+
+.brand-copy {
+  display: grid;
+  gap: 1px;
+}
+
+.brand-copy strong {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.15;
+}
+
+.brand-copy small {
+  color: var(--muted);
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.header-assurances {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.header-assurances span + span {
+  margin-left: 16px;
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
 }
 
 main {
@@ -105,8 +152,17 @@ main {
   padding: 42px max(24px, calc((100vw - 1280px) / 2));
 }
 
+.intake-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(500px, 1.1fr);
+  gap: 64px;
+  align-items: center;
+  width: min(1280px, 100%);
+  margin: 0 auto;
+}
+
 .page-intro {
-  margin-bottom: 24px;
+  margin: 0;
 }
 
 .eyebrow {
@@ -137,22 +193,75 @@ h3 {
 h1 {
   margin-bottom: 6px;
   color: var(--ink);
-  font-size: clamp(28px, 3vw, 38px);
+  font-size: 38px;
   font-weight: 650;
   line-height: 1.12;
 }
 
 .page-context {
+  max-width: 610px;
   margin-bottom: 0;
   color: var(--muted);
   font-size: 15px;
+  line-height: 1.55;
+}
+
+.trust-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin-top: 22px;
+}
+
+.trust-row span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: #484644;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.trust-row svg {
+  color: var(--teal);
+}
+
+.intake-workbench {
+  min-width: 0;
+  padding-left: 42px;
+  border-left: 1px solid var(--line);
+}
+
+.intake-heading {
+  display: grid;
+  margin-bottom: 18px;
+}
+
+.intake-heading > span {
+  color: var(--blue-dark);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.intake-heading > strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  font-size: 20px;
+}
+
+.intake-heading p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .assessment-form {
   display: flex;
   gap: 12px;
   align-items: end;
-  max-width: 930px;
+  width: 100%;
 }
 
 .repository-field {
@@ -168,14 +277,12 @@ h1 {
 }
 
 .request-message {
-  max-width: 930px;
   margin-top: 14px;
 }
 
 .pipeline-status {
   display: grid;
   gap: 8px;
-  max-width: 930px;
   margin-top: 16px;
   padding: 14px 16px;
   border: 1px solid #b8c7d3;
@@ -210,22 +317,168 @@ h1 {
   margin: 0 auto;
 }
 
+.workflow-band {
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+
+.workflow-band::-webkit-scrollbar {
+  display: none;
+}
+
+.workflow-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(145px, 1fr));
+  width: min(1280px, calc(100% - 48px));
+  min-width: 760px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 72px;
+  padding: 12px 18px;
+  border-left: 1px solid var(--line-light);
+  scroll-snap-align: start;
+}
+
+.workflow-step:last-child {
+  border-right: 1px solid var(--line-light);
+}
+
+.workflow-index {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #b8c1cc;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.workflow-step > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+
+.workflow-step strong {
+  color: #323130;
+  font-size: 12px;
+}
+
+.workflow-step small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-active::after,
+.workflow-attention::after,
+.workflow-ready::after {
+  position: absolute;
+  right: 18px;
+  bottom: -1px;
+  left: 18px;
+  height: 3px;
+  content: "";
+}
+
+.workflow-active::after { background: var(--blue); }
+.workflow-ready::after { background: var(--teal); }
+.workflow-attention::after { background: var(--orange); }
+
+.workflow-active .workflow-index {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #ffffff;
+}
+
+.workflow-complete .workflow-index {
+  border-color: var(--teal);
+  background: var(--teal);
+  color: #ffffff;
+}
+
+.workflow-ready .workflow-index {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.workflow-attention .workflow-index {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
 .empty-workspace {
   display: grid;
-  justify-items: center;
-  min-height: 340px;
-  padding: 76px 24px;
-  text-align: center;
+  min-height: 330px;
+  padding: 52px 0 72px;
 }
 
 .empty-workspace h2 {
-  margin: 18px 0 6px;
-  font-size: 20px;
-  font-weight: 600;
+  max-width: 760px;
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 650;
 }
 
-.empty-workspace p {
+.empty-intro > p:last-child {
+  max-width: 760px;
   color: var(--muted);
+  line-height: 1.55;
+}
+
+.outcome-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 34px;
+  border-block: 1px solid var(--line);
+}
+
+.outcome-grid > div {
+  min-width: 0;
+  padding: 22px 28px 22px 0;
+}
+
+.outcome-grid > div + div {
+  padding-left: 28px;
+  border-left: 1px solid var(--line);
+}
+
+.outcome-grid span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--blue-dark);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.outcome-grid strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.outcome-grid p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .empty-glyph {
@@ -652,6 +905,88 @@ h1 {
   font-weight: 600;
 }
 
+.decision-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 30px;
+  border-block: 1px solid var(--line);
+}
+
+.decision-grid > section {
+  min-width: 0;
+  padding: 18px 20px 18px 0;
+}
+
+.decision-grid > section + section {
+  padding-left: 20px;
+  border-left: 1px solid var(--line);
+}
+
+.decision-grid h4 {
+  margin-bottom: 13px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.decision-row + .decision-row {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-light);
+}
+
+.decision-row > div {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.decision-row strong {
+  color: #323130;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.decision-row p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.validation-plan {
+  margin-top: 28px;
+}
+
+.validation-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+  border-top: 1px solid var(--line);
+}
+
+.validation-list > div {
+  display: grid;
+  grid-template-columns: 105px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-light);
+}
+
+.validation-list p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.validation-list strong {
+  display: block;
+  margin-bottom: 2px;
+  color: #323130;
+}
+
 .content-section {
   scroll-margin-top: 82px;
   padding: 0 0 38px;
@@ -928,6 +1263,17 @@ footer {
 }
 
 @media (max-width: 900px) {
+  .intake-grid {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+
+  .intake-workbench {
+    padding: 26px 0 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -966,6 +1312,20 @@ footer {
   .dimension-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .decision-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .decision-grid > section {
+    padding: 18px 0;
+  }
+
+  .decision-grid > section + section {
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
 }
 
 @media (max-width: 680px) {
@@ -978,8 +1338,21 @@ footer {
     padding: 30px 16px;
   }
 
+  .header-assurances {
+    display: none;
+  }
+
+  .brand-copy small {
+    display: none;
+  }
+
+  .workflow-steps {
+    width: auto;
+    margin: 0 16px;
+  }
+
   h1 {
-    font-size: 29px;
+    font-size: 30px;
   }
 
   .assessment-form {
@@ -1005,8 +1378,27 @@ footer {
   .technology-grid,
   .signal-columns,
   .dimension-grid,
-  .acceptance-list {
+  .acceptance-list,
+  .validation-list {
     grid-template-columns: 1fr;
+  }
+
+  .empty-workspace {
+    padding: 38px 0 56px;
+  }
+
+  .outcome-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .outcome-grid > div {
+    padding: 18px 0;
+  }
+
+  .outcome-grid > div + div {
+    padding-left: 0;
+    border-top: 1px solid var(--line-light);
+    border-left: 0;
   }
 
   .planning-summary {
@@ -1081,7 +1473,9 @@ footer {
   }
 
   .global-header,
+  .skip-link,
   .intake-band,
+  .workflow-band,
   .report-actions,
   .section-rail,
   footer {
@@ -1166,7 +1560,9 @@ footer {
   .technology-group,
   .signal-group,
   .unknown-row,
-  .work-item {
+  .work-item,
+  .decision-row,
+  .validation-list > div {
     break-inside: avoid;
   }
 }

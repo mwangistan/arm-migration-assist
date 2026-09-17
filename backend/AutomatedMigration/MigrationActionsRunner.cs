@@ -9,7 +9,7 @@ using AutomatedMigration.Publishing;
 namespace AutomatedMigration;
 
 // Feature 3's entry point. The planner (or an orchestrator) calls Run() with a
-// deserialized MigrationPlan and the clone path to get reviewable patches, then
+// deserialized MigrationPlan and a caller-provided worktree to get reviewable patches, then
 // optionally Publish() to put them on a branch / open a PR.
 public sealed record GeneratedItem(WorkItem WorkItem, string PatchPath, string Diff);
 

@@ -1,18 +1,22 @@
-# Feature 1 Repository Assessment
+# Repository Assessment
 
 Implements and orchestrates Feature 1 stories 1.1 through 1.4: repository intake,
 technology discovery, dependency scanning, and architecture compatibility
-scanning. It accepts a GitHub URL or a clean local Git clone
+scanning. It accepts a GitHub URL or a clean local Git worktree
 whose `origin` points to GitHub, then writes a `RepositoryAssessmentV1` JSON
 artifact with stable assessment and evidence identifiers.
 
-Remote repositories are not cloned. The service reads repository metadata from
+Remote repositories use no Git checkout. The service reads repository metadata from
 GitHub's REST API, resolves the default branch to an immutable commit SHA, and
 downloads that commit's ZIP archive. Extraction is isolated and bounded by path,
 entry, file-count, compressed-download, and total-uncompressed size limits.
 Symbolic links and unsafe archive paths are skipped. The temporary archive and
-files are deleted after assessment. Local clones remain available to the CLI for
+files are deleted after assessment. Existing local worktrees remain available to the CLI for
 offline or already-checked-out workflows.
+
+Technology, dependency, and architecture-sensitive code scanners run in
+parallel after the bounded catalog is created. Progress is published as ordered
+SSE events so the UI reports the actual phase, percentage, and message.
 
 ## Run the CLI
 
@@ -22,7 +26,7 @@ dotnet run --project backend/Assessment/RepositoryDiscovery/RepositoryDiscovery.
   --output artifacts/repository-assessment.json
 ```
 
-A local clone can be supplied instead:
+An existing local worktree can be supplied instead:
 
 ```pwsh
 dotnet run --project backend/Assessment/RepositoryDiscovery/RepositoryDiscovery.csproj -- `
@@ -30,7 +34,7 @@ dotnet run --project backend/Assessment/RepositoryDiscovery/RepositoryDiscovery.
   --output artifacts/repository-assessment.json
 ```
 
-Local clones must have no modified tracked files. Untracked files are not read.
+Local worktrees must have no modified tracked files. Untracked files are not read.
 This keeps the reported commit SHA aligned with the files being assessed.
 
 ## Run the API and dashboard
@@ -84,11 +88,11 @@ where required, organization SSO authorization.
 
 This flow requires Git Credential Manager (included with Git for Windows). It is
 available only through loopback API requests. Credentials remain in the operating
-system credential store; tokens, account details, and authenticated clone URLs
+system credential store; tokens, account details, and credential-bearing repository URLs
 are never returned by the API or written to assessment JSON. The CLI remains
-non-interactive and accepts anonymous URLs or an already available clean clone.
+non-interactive and accepts anonymous URLs or an already available clean worktree.
 
-Local clone assessment remains a CLI workflow. In another terminal, start the
+Local worktree assessment remains a CLI workflow. In another terminal, start the
 dashboard:
 
 ```pwsh
@@ -154,3 +158,6 @@ dotnet test backend/Assessment/RepositoryDiscovery.Tests/RepositoryDiscovery.Tes
 The integration tests create temporary Git repositories, exercise the service,
 CLI, API, dependency and code scanners, and validate output against
 `MigrationPlanner/contracts/RepositoryAssessmentV1.schema.json`.
+
+See [the end-to-end architecture](../../../docs/ARCHITECTURE.md) for the
+assessment-to-planner contract and Azure deployment boundary.
