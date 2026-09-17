@@ -1,34 +1,44 @@
 using System.Text.RegularExpressions;
+using ArmMigrationAssist.RepositoryDiscovery.GitHub;
 
 namespace ArmMigrationAssist.RepositoryDiscovery;
 
-internal sealed partial class RepositoryIntake(GitClient git)
+internal sealed partial class RepositoryIntake(
+    GitClient git,
+    IGitHubRepositorySource gitHubRepositorySource,
+    bool useStoredGitHubCredentials)
 {
     public async Task<RepositoryWorkspace> OpenAsync(
         string source,
         CancellationToken cancellationToken)
     {
         var trimmedSource = source.Trim();
-        string rootPath;
-        string? temporaryRoot = null;
-        string? inputUrl = null;
-
         if (LooksLikeUrl(trimmedSource))
         {
-            inputUrl = NormalizeGitHubUrl(trimmedSource);
-            temporaryRoot = Path.Combine(
+            var repositoryUrl = NormalizeGitHubUrl(trimmedSource);
+            var temporaryRoot = Path.Combine(
                 Path.GetTempPath(),
                 "arm-migration-assist",
                 Guid.NewGuid().ToString("N"));
-            rootPath = Path.Combine(temporaryRoot, "repository");
             Directory.CreateDirectory(temporaryRoot);
 
             try
             {
-                await git.RunAsync(
+                var snapshot = await gitHubRepositorySource.DownloadAsync(
+                    repositoryUrl,
                     temporaryRoot,
-                    ["clone", "--depth", "1", "--no-tags", "--single-branch", "--", inputUrl, rootPath],
+                    useStoredGitHubCredentials,
                     cancellationToken);
+                return new RepositoryWorkspace(
+                    snapshot.Archive.RootPath,
+                    repositoryUrl,
+                    snapshot.Name,
+                    snapshot.CommitSha,
+                    snapshot.DefaultBranch,
+                    temporaryRoot,
+                    snapshot.Archive.RelativePaths,
+                    snapshot.Archive.TotalFiles,
+                    snapshot.Archive.SkippedFiles);
             }
             catch
             {
@@ -36,71 +46,60 @@ internal sealed partial class RepositoryIntake(GitClient git)
                 throw;
             }
         }
-        else
-        {
-            if (!Directory.Exists(trimmedSource))
-            {
-                throw new RepositoryDiscoveryException("The local repository directory does not exist.");
-            }
 
-            var requestedPath = Path.GetFullPath(trimmedSource);
-            rootPath = (await git.RunAsync(
-                requestedPath,
-                ["rev-parse", "--show-toplevel"],
-                cancellationToken)).Trim();
+        if (!Directory.Exists(trimmedSource))
+        {
+            throw new RepositoryDiscoveryException("The local repository directory does not exist.");
         }
 
-        try
+        var requestedPath = Path.GetFullPath(trimmedSource);
+        var rootPath = (await git.RunAsync(
+            requestedPath,
+            ["rev-parse", "--show-toplevel"],
+            cancellationToken)).Trim();
+
+        var dirtyState = await git.RunAsync(
+            rootPath,
+            ["status", "--porcelain=v1", "--untracked-files=no"],
+            cancellationToken);
+        if (!string.IsNullOrWhiteSpace(dirtyState))
         {
-            var dirtyState = await git.RunAsync(
-                rootPath,
-                ["status", "--porcelain=v1", "--untracked-files=no"],
-                cancellationToken);
-            if (!string.IsNullOrWhiteSpace(dirtyState))
-            {
-                throw new RepositoryDiscoveryException(
-                    "The repository has tracked changes. Commit or stash them so the assessment matches a commit.");
-            }
-
-            var commitSha = (await git.RunAsync(
-                rootPath,
-                ["rev-parse", "HEAD"],
-                cancellationToken)).Trim().ToLowerInvariant();
-            if (!CommitShaRegex().IsMatch(commitSha))
-            {
-                throw new RepositoryDiscoveryException("Git returned an invalid commit identifier.");
-            }
-
-            var repositoryUrl = inputUrl ?? await ReadLocalRepositoryUrlAsync(rootPath, cancellationToken);
-            var defaultBranch = await ReadDefaultBranchAsync(rootPath, cancellationToken);
-            if (defaultBranch.Length > 200)
-            {
-                throw new RepositoryDiscoveryException("The repository default branch name exceeds the assessment contract limit.");
-            }
-
-            var name = new Uri(repositoryUrl).Segments[^1].Trim('/');
-            if (name.Length > 200)
-            {
-                throw new RepositoryDiscoveryException("The repository name exceeds the assessment contract limit.");
-            }
-
-            return new RepositoryWorkspace(
-                rootPath,
-                repositoryUrl,
-                name,
-                commitSha,
-                defaultBranch,
-                temporaryRoot);
+            throw new RepositoryDiscoveryException(
+                "The repository has tracked changes. Commit or stash them so the assessment matches a commit.");
         }
-        catch
+
+        var commitSha = (await git.RunAsync(
+            rootPath,
+            ["rev-parse", "HEAD"],
+            cancellationToken)).Trim().ToLowerInvariant();
+        if (!CommitShaRegex().IsMatch(commitSha))
         {
-            if (temporaryRoot is not null)
-            {
-                DeleteDirectory(temporaryRoot);
-            }
-
-            throw;
+            throw new RepositoryDiscoveryException("Git returned an invalid commit identifier.");
         }
+
+        var localRepositoryUrl = await ReadLocalRepositoryUrlAsync(rootPath, cancellationToken);
+        var defaultBranch = await ReadDefaultBranchAsync(rootPath, cancellationToken);
+        if (defaultBranch.Length > 200)
+        {
+            throw new RepositoryDiscoveryException("The repository default branch name exceeds the assessment contract limit.");
+        }
+
+        var name = new Uri(localRepositoryUrl).Segments[^1].Trim('/');
+        if (name.Length > 200)
+        {
+            throw new RepositoryDiscoveryException("The repository name exceeds the assessment contract limit.");
+        }
+
+        return new RepositoryWorkspace(
+            rootPath,
+            localRepositoryUrl,
+            name,
+            commitSha,
+            defaultBranch,
+            null,
+            null,
+            null,
+            0);
     }
 
     internal static string NormalizeGitHubUrl(string value)
@@ -219,7 +218,10 @@ internal sealed record RepositoryWorkspace(
     string Name,
     string CommitSha,
     string DefaultBranch,
-    string? TemporaryRoot) : IDisposable
+    string? TemporaryRoot,
+    IReadOnlyList<string>? KnownRelativePaths,
+    int? KnownTotalFiles,
+    int KnownSkippedFiles) : IDisposable
 {
     public void Dispose()
     {

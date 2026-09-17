@@ -36,15 +36,19 @@ internal sealed record RepositoryFileCatalog(
     public static async Task<RepositoryFileCatalog> CreateAsync(
         string rootPath,
         GitClient git,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<string>? knownRelativePaths = null,
+        int? knownTotalFiles = null,
+        int knownSkippedFiles = 0)
     {
-        var output = await git.RunAsync(
-            rootPath,
-            ["ls-files", "--stage", "-z"],
-            cancellationToken);
-        var entries = ParseEntries(output);
+        var entries = knownRelativePaths is null
+            ? ParseEntries(await git.RunAsync(
+                rootPath,
+                ["ls-files", "--stage", "-z"],
+                cancellationToken))
+            : knownRelativePaths.Select(path => new GitEntry("100644", path)).ToList();
         var files = new List<RepositoryFile>(Math.Min(entries.Count, MaximumFiles));
-        var skipped = 0;
+        var skipped = knownSkippedFiles;
         var contentBytes = 0;
 
         foreach (var entry in entries.OrderBy(entry => entry.Path, StringComparer.Ordinal))
@@ -91,7 +95,7 @@ internal sealed record RepositoryFileCatalog(
                 content));
         }
 
-        return new RepositoryFileCatalog(files, entries.Count, skipped);
+        return new RepositoryFileCatalog(files, knownTotalFiles ?? entries.Count, skipped);
     }
 
     private static List<GitEntry> ParseEntries(string output)

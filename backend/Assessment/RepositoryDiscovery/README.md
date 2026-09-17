@@ -6,6 +6,14 @@ scanning. It accepts a GitHub URL or a clean local Git clone
 whose `origin` points to GitHub, then writes a `RepositoryAssessmentV1` JSON
 artifact with stable assessment and evidence identifiers.
 
+Remote repositories are not cloned. The service reads repository metadata from
+GitHub's REST API, resolves the default branch to an immutable commit SHA, and
+downloads that commit's ZIP archive. Extraction is isolated and bounded by path,
+entry, file-count, compressed-download, and total-uncompressed size limits.
+Symbolic links and unsafe archive paths are skipped. The temporary archive and
+files are deleted after assessment. Local clones remain available to the CLI for
+offline or already-checked-out workflows.
+
 ## Run the CLI
 
 ```pwsh
@@ -121,11 +129,12 @@ migration strategy.
 - Anonymous Git commands disable credential helpers, prompts, hooks, system
   configuration, and submodule recursion. An authorized loopback session enables
   only Git Credential Manager for the single retry.
-- Only Git-tracked files are considered; `.git`, untracked files, and submodules
-  are not scanned.
+- Only files in the immutable GitHub commit archive or local Git index are
+  considered; `.git`, untracked files, and submodule contents are not scanned.
 - Symbolic links, reparse points, unsafe paths, and oversized scan inputs are
   skipped and reflected in scan coverage.
-- File reads are bounded, and build tools or repository code are never executed.
+- Downloads, archive extraction, and file reads are bounded; build tools and
+  repository code are never executed.
 - Evidence contains repository-relative paths and fixed factual observations,
   never source text or local filesystem paths.
 - API concurrency is bounded to two assessments and honors request cancellation.

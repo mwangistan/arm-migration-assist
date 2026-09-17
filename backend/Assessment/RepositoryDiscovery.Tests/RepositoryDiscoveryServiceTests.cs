@@ -1,6 +1,10 @@
 using System.Diagnostics;
+using System.IO.Compression;
+using System.Net;
+using System.Text;
 using System.Text.Json.Nodes;
 using ArmMigrationAssist.RepositoryDiscovery;
+using ArmMigrationAssist.RepositoryDiscovery.GitHub;
 using ArmMigrationAssist.RepositoryDiscovery.Models;
 using ArmMigrationAssist.RepositoryDiscovery.Validation;
 using Json.Schema;
@@ -10,6 +14,116 @@ namespace ArmMigrationAssist.RepositoryDiscovery.Tests;
 
 public sealed class RepositoryDiscoveryServiceTests
 {
+    [Fact]
+    public async Task ArchiveExtractor_ExtractsOnlyBoundedRegularRepositoryFiles()
+    {
+        var root = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            "arm-migration-assist-tests",
+            Guid.NewGuid().ToString("N"));
+        var archivePath = System.IO.Path.Combine(root, "repository.zip");
+        var destination = System.IO.Path.Combine(root, "repository");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            using (var stream = File.Create(archivePath))
+            using (var archive = new ZipArchive(stream, ZipArchiveMode.Create))
+            {
+                await WriteArchiveEntryAsync(archive, "owner-repo-sha/src/App.cs", "class App { }");
+                await WriteArchiveEntryAsync(archive, "owner-repo-sha/../outside.txt", "outside");
+                var symbolicLink = archive.CreateEntry("owner-repo-sha/external-link");
+                symbolicLink.ExternalAttributes = 0xA000 << 16;
+                await using var linkContent = new StreamWriter(symbolicLink.Open());
+                await linkContent.WriteAsync("../outside");
+            }
+
+            var result = await RepositoryArchiveExtractor.ExtractAsync(
+                archivePath,
+                destination,
+                CancellationToken.None);
+
+            Assert.Equal(3, result.TotalFiles);
+            Assert.Equal(2, result.SkippedFiles);
+            Assert.Equal(["src/App.cs"], result.RelativePaths);
+            Assert.True(File.Exists(System.IO.Path.Combine(destination, "src", "App.cs")));
+            Assert.False(File.Exists(System.IO.Path.Combine(root, "outside.txt")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_AssessesGitHubArchiveWithoutGitClone()
+    {
+        var source = new StubGitHubRepositorySource();
+
+        var assessment = await new RepositoryDiscoveryService(source).DiscoverAsync(
+            "https://github.com/example/archive-app");
+
+        Assert.True(source.Called);
+        Assert.False(source.UseStoredCredentials);
+        Assert.Equal("archive-app", assessment.Repository.Name);
+        Assert.Equal(new string('b', 40), assessment.Repository.CommitSha);
+        Assert.Contains("csharp", assessment.Technology.Languages);
+        Assert.Equal(2, assessment.ScanCoverage.FilesTotal);
+        Assert.Equal(2, assessment.ScanCoverage.FilesScanned);
+        Assert.NotNull(source.TemporaryRoot);
+        Assert.False(Directory.Exists(source.TemporaryRoot));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GitHubRepositorySource_DownloadsCommitPinnedReadOnlyArchive(
+        bool useStoredCredentials)
+    {
+        var root = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            "arm-migration-assist-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var credentialProvider = new StubGitHubCredentialProvider();
+        var handler = new StubGitHubHttpHandler(
+            CreateRepositoryArchive(),
+            credentialProvider.Token,
+            useStoredCredentials);
+        using var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.github.com/"),
+        };
+
+        try
+        {
+            var snapshot = await new GitHubRepositorySource(httpClient, credentialProvider)
+                .DownloadAsync(
+                    "https://github.com/example/archive-app",
+                    root,
+                    useStoredCredentials,
+                    CancellationToken.None);
+
+            Assert.Equal("archive-app", snapshot.Name);
+            Assert.Equal(new string('c', 40), snapshot.CommitSha);
+            Assert.Equal("main", snapshot.DefaultBranch);
+            Assert.Equal(["src/App.cs"], snapshot.Archive.RelativePaths);
+            Assert.Equal(useStoredCredentials ? 1 : 0, credentialProvider.CallCount);
+            Assert.Equal(3, handler.RequestPaths.Count);
+            Assert.EndsWith(
+                $"/zipball/{new string('c', 40)}",
+                handler.RequestPaths[2],
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task AssessmentValidator_ReportsCrossRecordContractViolations()
     {
@@ -795,5 +909,122 @@ public sealed class RepositoryDiscoveryServiceTests
         image[peOffset + 1] = (byte)'E';
         BitConverter.GetBytes(machine).CopyTo(image, peOffset + 4);
         return image;
+    }
+
+    private static async Task WriteArchiveEntryAsync(
+        ZipArchive archive,
+        string path,
+        string content)
+    {
+        var entry = archive.CreateEntry(path);
+        await using var writer = new StreamWriter(entry.Open());
+        await writer.WriteAsync(content);
+    }
+
+    private sealed class StubGitHubRepositorySource : IGitHubRepositorySource
+    {
+        public bool Called { get; private set; }
+        public bool UseStoredCredentials { get; private set; }
+        public string? TemporaryRoot { get; private set; }
+
+        public async Task<GitHubRepositorySnapshot> DownloadAsync(
+            string repositoryUrl,
+            string temporaryRoot,
+            bool useStoredCredentials,
+            CancellationToken cancellationToken)
+        {
+            Called = true;
+            UseStoredCredentials = useStoredCredentials;
+            TemporaryRoot = temporaryRoot;
+            var rootPath = System.IO.Path.Combine(temporaryRoot, "repository");
+            Directory.CreateDirectory(rootPath);
+            await File.WriteAllTextAsync(
+                System.IO.Path.Combine(rootPath, "App.cs"),
+                "class App { }",
+                cancellationToken);
+            await File.WriteAllTextAsync(
+                System.IO.Path.Combine(rootPath, "App.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\" />",
+                cancellationToken);
+            return new GitHubRepositorySnapshot(
+                "archive-app",
+                new string('b', 40),
+                "main",
+                new ExtractedRepositoryArchive(
+                    rootPath,
+                    ["App.cs", "App.csproj"],
+                    2,
+                    0));
+        }
+    }
+
+    private sealed class StubGitHubCredentialProvider : IGitHubCredentialProvider
+    {
+        public string Token { get; } = new('x', 40);
+        public int CallCount { get; private set; }
+
+        public Task<string?> GetTokenAsync(CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return Task.FromResult<string?>(Token);
+        }
+    }
+
+    private sealed class StubGitHubHttpHandler(
+        byte[] archive,
+        string expectedToken,
+        bool expectAuthentication) : HttpMessageHandler
+    {
+        public List<string> RequestPaths { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri?.AbsolutePath
+                ?? throw new InvalidOperationException("Request URI is missing.");
+            RequestPaths.Add(path);
+            if (expectAuthentication)
+            {
+                Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
+                Assert.Equal(expectedToken, request.Headers.Authorization?.Parameter);
+            }
+            else
+            {
+                Assert.Null(request.Headers.Authorization);
+            }
+
+            HttpContent content = path switch
+            {
+                "/repos/example/archive-app" => new StringContent(
+                    """{"name":"archive-app","default_branch":"main"}""",
+                    Encoding.UTF8,
+                    "application/json"),
+                "/repos/example/archive-app/commits/main" => new StringContent(
+                    $"{{\"sha\":\"{new string('c', 40)}\"}}",
+                    Encoding.UTF8,
+                    "application/json"),
+                _ when path.EndsWith($"/zipball/{new string('c', 40)}", StringComparison.Ordinal) =>
+                    new ByteArrayContent(archive),
+                _ => throw new InvalidOperationException($"Unexpected GitHub API path: {path}"),
+            };
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = content,
+            });
+        }
+    }
+
+    private static byte[] CreateRepositoryArchive()
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry("example-archive-app-sha/src/App.cs");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("class App { }");
+        }
+
+        return stream.ToArray();
     }
 }

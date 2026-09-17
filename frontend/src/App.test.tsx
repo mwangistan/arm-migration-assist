@@ -10,7 +10,7 @@ const assessment: RepositoryAssessment = {
   producer: {
     name: 'repository-discovery',
     version: '1.0.0',
-    ruleset: 'repository-discovery-1.1',
+    ruleset: 'repository-discovery-1.2',
     scannerVersions: [],
   },
   repository: {

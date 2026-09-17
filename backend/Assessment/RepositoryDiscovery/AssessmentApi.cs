@@ -72,6 +72,7 @@ public static class AssessmentApi
                 "asynchronous-jobs",
                 "server-sent-events",
                 "github-browser-authentication",
+                "readonly-github-archive",
             },
         }));
         app.MapGet("/api/contracts/repository-assessment/v1", () =>
