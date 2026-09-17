@@ -65,6 +65,24 @@ public sealed class LocalIntegrationTests
     }
 
     [Fact]
+    public async Task LocalRunnerTerminatesDescendantAfterParentExits()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+        using var workspace = new TestWorkspace();
+        string marker = Path.Combine(workspace.Repo, "descendant-ran");
+        var invocation = Invocation(workspace.Repo, "/bin/sh",
+            ["-c", $"(sleep 2; touch '{marker}') & printf descendant-started"]) with { TimeoutSeconds = 1 };
+
+        var result = await new LocalProcessRunner().RunAsync(invocation, default);
+
+        Assert.False(result.TimedOut);
+        Assert.Contains("descendant-started", result.StandardOutput);
+        await Task.Delay(TimeSpan.FromSeconds(3));
+        Assert.False(File.Exists(marker));
+    }
+
+    [Fact]
     public async Task CliPersistsReportAndDashboardForApprovedLocalExecution()
     {
         using var workspace = new TestWorkspace();

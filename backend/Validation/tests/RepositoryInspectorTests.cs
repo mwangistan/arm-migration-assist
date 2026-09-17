@@ -166,6 +166,21 @@ public sealed class RepositoryInspectorTests
         Assert.Contains("Tracked file bytes", error.Message);
     }
 
+    [Fact]
+    public async Task RepositoryIsReverifiedAfterArtifactDiscoveryStarts()
+    {
+        using var workspace = new TestWorkspace();
+        var runner = new IsolatedGitProcessRunner(workspace);
+        await LocalIntegrationTests.InitRepository(workspace, runner);
+        var mutatingRunner = new MutatingProcessRunner(runner, () =>
+            File.WriteAllText(Path.Combine(workspace.Repo, "App.csproj"), "<Project />"));
+
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new GitRepositoryInspector(mutatingRunner).InspectAsync(new(workspace.Repo), default));
+
+        Assert.Contains("changed during discovery: App.csproj", error.Message);
+    }
+
     private static async Task<string> Git(TestWorkspace workspace, IProcessRunner runner, params string[] arguments)
     {
         var result = await runner.RunAsync(new("git", arguments, workspace.Repo,
@@ -177,4 +192,15 @@ public sealed class RepositoryInspectorTests
     private static Task<string> Commit(TestWorkspace workspace, IProcessRunner runner) =>
         Git(workspace, runner, "-c", "user.name=Validation Tests", "-c", "user.email=validation@example.invalid",
             "-c", "commit.gpgsign=false", "-c", $"core.hooksPath={workspace.Evidence}", "commit", "-m", "Fixture");
+
+    private sealed class MutatingProcessRunner(IProcessRunner inner, Action mutate) : IProcessRunner
+    {
+        public async Task<ProcessOutcome> RunAsync(ProcessInvocation invocation, CancellationToken cancellationToken)
+        {
+            var outcome = await inner.RunAsync(invocation, cancellationToken);
+            if (invocation.Arguments.Contains("--others"))
+                mutate();
+            return outcome;
+        }
+    }
 }

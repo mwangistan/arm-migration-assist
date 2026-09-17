@@ -182,12 +182,13 @@ Not approving a command, without an explicit waiver, means not-run.
 
 ### End-to-end demo data
 
-When Feature 1-3 outputs are not available, use one of the prepared reference
-repositories in the top-level `samples/` folder (Story 4.3) as the clean Git target,
-with a hand-written migration plan and validation options describing its expected
-build/test/smoke commands. Point the CLI's `--repository` argument at a clean clone of
-one of those repositories, generate a proposal, review it, and copy only the reviewed
-command IDs into `approval.json` before running.
+This repository does not bundle runnable demo repositories or generated Feature 1-3
+outputs. To run an end-to-end demo, populate one of the reference locations named in
+the top-level `samples/` folder (Story 4.3), or use another clean Git repository, and
+provide a migration plan and validation options describing its expected build/test/
+smoke commands. Pass that clean checkout as the positional `<repo>` argument shown
+above, generate a proposal, review it, and copy only the reviewed command IDs into
+`approval.json` before running.
 
 To exercise the failure path (e.g. a missing ARM64-specific dependency or asset),
 author a migration plan/options pair against a build configuration that is expected to
@@ -591,8 +592,12 @@ container-only scope. They do not imply measurements have taken place.
 ## AI extension and guardrails
 
 Pass implementations of `IValidationPlanner`, `IEvidenceAnalyzer`, and
-`ICoverageReviewer` to `ValidationWorkflow`; the CLI intentionally uses no-AI mode.
-Each interface has a typed request/response in `AiContracts.cs` and a cancellation token.
+`ICoverageReviewer` to `ValidationWorkflow`. The CLI configures
+`FoundryValidationAiClient` for all three stages when both
+`ARM_MIGRATION_FOUNDRY_ENDPOINT` and `ARM_MIGRATION_FOUNDRY_MODEL` are set; otherwise
+planning is deterministic and evidence analysis and coverage review use their
+deterministic fallbacks. Each interface has a typed request/response in `AiContracts.cs`
+and a cancellation token.
 For example, an API composition root can construct:
 
 ```csharp

@@ -462,7 +462,8 @@ public sealed class ValidationApiTests
     private static async Task<PlanResponse> CreatePlanAsync(HttpClient client, bool includeProposal = false)
     {
         var response = await client.PostAsJsonAsync("/api/v1/validation/plans",
-            new CreatePlanRequest(TestData.Migration(), new("C:\\target-repo"), new("C:\\evidence"), includeProposal),
+            new CreatePlanRequest(TestData.Migration(), new(Path.Combine(Path.GetTempPath(), "target-repo")),
+                new(Path.Combine(Path.GetTempPath(), "evidence")), includeProposal),
             ValidationJson.Options);
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<PlanResponse>(ValidationJson.Options))!;
@@ -571,12 +572,12 @@ internal static class TestData
             [], [], [], [], [], [], []),
         [new("wi-one", [new("at-one", "Acceptance scenario", "Expected behavior")])]);
 
-    public static PreparedValidation Prepared(string evidenceDirectory = "C:\\evidence") => new(
+    public static PreparedValidation Prepared(string? evidenceDirectory = null) => new(
         "1.0",
         "prepared-original",
         "migration-plan",
-        new("C:\\target-repo", new string('a', 40), "migration", [], []),
-        evidenceDirectory,
+        new(Path.Combine(Path.GetTempPath(), "target-repo"), new string('a', 40), "migration", [], []),
+        evidenceDirectory ?? Path.Combine(Path.GetTempPath(), "evidence"),
         ["arm64-vm"],
         [new("validation:vc-build", CheckSource.ValidationCheck, "vc-build", null, "build",
             "Build succeeds", "ARM64 build succeeds", ["ev-build"], ["guide-build"])],

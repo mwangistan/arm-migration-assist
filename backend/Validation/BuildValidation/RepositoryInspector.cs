@@ -148,7 +148,18 @@ public sealed class GitRepositoryInspector(IProcessRunner processRunner) : IRepo
                 notices.Add($"Discovery skipped oversized build artifact: {file}");
                 continue;
             }
-            artifacts.Add(new(file, RepositoryPaths.HashFile(path), await File.ReadAllTextAsync(path, cancellationToken)));
+            byte[] content = await File.ReadAllBytesAsync(path, cancellationToken);
+            using var reader = new StreamReader(new MemoryStream(content), detectEncodingFromByteOrderMarks: true);
+            artifacts.Add(new(file, Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant(), reader.ReadToEnd()));
+        }
+        // Discovery reads happen after the initial verification. Recheck every tracked blob so
+        // the captured artifacts cannot be attributed to a commit changed during discovery.
+        foreach (var (file, expected) in tree)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string path = RepositoryPaths.ResolveWithin(root, file);
+            if (!File.Exists(path) || !HashBlob(path, expected.ObjectId.Length).Equals(expected.ObjectId, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Tracked file bytes changed during discovery: {file}");
         }
         return new(root, commit, branch, artifacts, notices);
     }
