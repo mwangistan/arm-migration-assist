@@ -16,6 +16,7 @@ public static class PlannerErrorCode
     public const string CorpusIntegrity = "planner.corpus.integrity";
     public const string ModelFailed = "planner.model.failed";
     public const string ModelOutputInvalid = "planner.model.invalidOutput";
+    public const string ModelRateLimited = "planner.model.rateLimited";
     public const string ModelToolViolation = "planner.model.toolViolation";
     public const string ModelToolBudgetExceeded = "planner.model.toolBudgetExceeded";
     public const string PlanSafetyViolation = "planner.plan.unsafe";
@@ -24,5 +25,7 @@ public static class PlannerErrorCode
     public const string PlanRecommendationInconsistent = "planner.plan.recommendationInconsistent";
     public const string PlanEvidenceMissing = "planner.plan.missingEvidence";
     public const string PlanGuidanceMissing = "planner.plan.missingGuidance";
+    public const string PlanMissingSkill = "planner.plan.missingSkill";
+    public const string PlanUnderGranular = "planner.plan.underGranular";
     public const string Internal = "planner.internal";
 }

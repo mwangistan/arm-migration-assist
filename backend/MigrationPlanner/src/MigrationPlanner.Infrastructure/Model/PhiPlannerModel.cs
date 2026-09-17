@@ -43,7 +43,7 @@ public sealed class PhiPlannerModel : IPlannerModel
             : new ChatCompletionsClient(endpoint, new AzureKeyCredential(options.ApiKey));
     }
 
-    public async Task<string> GeneratePlanJsonAsync(
+    public async Task<PlannerModelResult> GeneratePlanJsonAsync(
         RepositoryAssessmentV1 assessment,
         ReadinessScoreV1 score,
         IGuidanceLookup guidanceLookup,
@@ -55,7 +55,8 @@ public sealed class PhiPlannerModel : IPlannerModel
         ArgumentNullException.ThrowIfNull(guidanceLookup);
 
         var systemPrompt = PlannerPromptBuilder.BuildSystemPrompt();
-        var userPrompt = PlannerPromptBuilder.BuildUserPrompt(assessment, score, guidanceLookup, retryHint);
+        var provenance = new PlannerProvenance(_options.ProvenanceProvider, _options.ProvenanceName, _options.ProvenanceVersion);
+        var userPrompt = PlannerPromptBuilder.BuildUserPrompt(assessment, score, guidanceLookup, provenance, retryHint);
 
         var options = new ChatCompletionsOptions
         {
@@ -78,6 +79,13 @@ public sealed class PhiPlannerModel : IPlannerModel
         catch (RequestFailedException ex)
         {
             _logger.LogError(ex, "Phi inference failed status={Status} errorCode={Code}", ex.Status, ex.ErrorCode);
+            if (ex.Status == 429)
+            {
+                throw new ModelRateLimitedException(
+                    message: $"Phi-4 rate limit reached: {ex.ErrorCode}",
+                    retryAfter: ExtractRetryAfter(ex),
+                    inner: ex);
+            }
             throw;
         }
 
@@ -90,7 +98,7 @@ public sealed class PhiPlannerModel : IPlannerModel
             response.Value.Usage?.CompletionTokens,
             response.Value.Usage?.TotalTokens);
 
-        return ExtractJsonObject(content);
+        return PlannerModelResult.FromJson(ExtractJsonObject(content));
     }
 
     /// <summary>Strips markdown code fences and any preamble Phi may emit around its JSON body.</summary>
@@ -104,5 +112,24 @@ public sealed class PhiPlannerModel : IPlannerModel
         var first = content.IndexOf('{');
         var last = content.LastIndexOf('}');
         return first >= 0 && last > first ? content[first..(last + 1)] : content;
+    }
+
+    private static TimeSpan? ExtractRetryAfter(RequestFailedException ex)
+    {
+        var raw = ex.GetRawResponse();
+        if (raw is null) return null;
+
+        // Retry-After can be seconds (integer) or an HTTP-date; retry-after-ms is milliseconds.
+        if (raw.Headers.TryGetValue("retry-after-ms", out var ms)
+            && double.TryParse(ms, out var msVal) && msVal > 0)
+        {
+            return TimeSpan.FromMilliseconds(msVal);
+        }
+        if (raw.Headers.TryGetValue("Retry-After", out var seconds)
+            && double.TryParse(seconds, out var secVal) && secVal > 0)
+        {
+            return TimeSpan.FromSeconds(secVal);
+        }
+        return null;
     }
 }

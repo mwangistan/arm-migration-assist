@@ -1,8 +1,8 @@
 namespace MigrationPlanner.Infrastructure.Model;
 
-public sealed class PhiModelOptions
+public sealed class HostedModelOptions
 {
-    public const string SectionName = "Planner:Phi";
+    public const string SectionName = "Planner:Hosted";
 
     /// <summary>
     /// Azure AI Foundry inference endpoint, e.g.
@@ -11,9 +11,10 @@ public sealed class PhiModelOptions
     public string Endpoint { get; set; } = string.Empty;
 
     /// <summary>
-    /// Foundry deployment name for the Phi model (not the model catalog name).
+    /// Foundry deployment name for the hosted (GPT-4 class) model. Not the
+    /// model catalog name.
     /// </summary>
-    public string DeploymentName { get; set; } = "phi-4";
+    public string DeploymentName { get; set; } = "gpt-4o";
 
     /// <summary>
     /// Optional static API key. Leave empty to use <c>DefaultAzureCredential</c>
@@ -29,7 +30,13 @@ public sealed class PhiModelOptions
 
     public string ProvenanceProvider { get; set; } = "foundry";
 
-    public string ProvenanceName { get; set; } = "phi-4";
+    public string ProvenanceName { get; set; } = "gpt-4o";
 
-    public string ProvenanceVersion { get; set; } = "7.0.0";
+    public string ProvenanceVersion { get; set; } = "2024.11.20";
+
+    /// <summary>Expose the read-only guidance-lookup MCP tool as a function tool.</summary>
+    public bool EnableGuidanceLookupTool { get; set; } = true;
+
+    /// <summary>Maximum tool-invocation rounds before forcing a final answer.</summary>
+    public int MaxToolRounds { get; set; } = 4;
 }

@@ -56,6 +56,22 @@ public class Program
             if (!string.IsNullOrWhiteSpace(keyEnv)) phiOptions.ApiKey = keyEnv;
         }
 
+        HostedModelOptions? hostedOptions = null;
+        if (options.ModelProvider == PlannerModelProvider.Hosted)
+        {
+            hostedOptions = new HostedModelOptions();
+            builder.Configuration.GetSection(HostedModelOptions.SectionName).Bind(hostedOptions);
+
+            var endpointEnv = Environment.GetEnvironmentVariable("MIGRATIONPLANNER_HOSTED_ENDPOINT");
+            if (!string.IsNullOrWhiteSpace(endpointEnv)) hostedOptions.Endpoint = endpointEnv;
+
+            var deploymentEnv = Environment.GetEnvironmentVariable("MIGRATIONPLANNER_HOSTED_DEPLOYMENT");
+            if (!string.IsNullOrWhiteSpace(deploymentEnv)) hostedOptions.DeploymentName = deploymentEnv;
+
+            var keyEnv = Environment.GetEnvironmentVariable("MIGRATIONPLANNER_HOSTED_API_KEY");
+            if (!string.IsNullOrWhiteSpace(keyEnv)) hostedOptions.ApiKey = keyEnv;
+        }
+
         builder.Services.AddSingleton(options);
         builder.Services.AddProblemDetails();
 
@@ -73,7 +89,8 @@ public class Program
                 corpusOptions.CorpusRoot = options.CorpusRoot;
             },
             options.ModelProvider,
-            phiOptions);
+            phiOptions,
+            hostedOptions);
 
         var app = builder.Build();
 

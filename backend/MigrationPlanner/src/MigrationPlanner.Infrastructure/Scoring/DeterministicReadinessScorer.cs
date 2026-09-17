@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.Serialization;
+using System.Text;
 using MigrationPlanner.Application.Abstractions;
 using MigrationPlanner.Domain.Assessment;
 using MigrationPlanner.Domain.Plan;
@@ -11,8 +13,8 @@ namespace MigrationPlanner.Infrastructure.Scoring;
 /// <see cref="RepositoryAssessmentV1"/> input produces byte-identical output.
 /// The formulas, deductions, cap thresholds, banding, and provisional rules
 /// are documented in
-/// <c>backend/MigrationPlanner/docs/decisions/0001-deterministic-scoring.md</c>
-/// (ruleset id <c>scoring-v1</c>). Any change to the numbers MUST bump
+/// <c>backend/MigrationPlanner/docs/decisions/0002-scoring-v2.md</c>
+/// (ruleset id <c>scoring-v2</c>). Any change to the numbers MUST bump
 /// <see cref="ScoringRuleset.RulesetId"/>.
 /// </summary>
 public sealed class DeterministicReadinessScorer : IReadinessScorer
@@ -26,38 +28,56 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
     {
         ArgumentNullException.ThrowIfNull(assessment);
 
-        var dep = ScoreDependency(assessment);
-        var code = ScoreCode(assessment);
-        var build = ScoreBuild(assessment);
-        var run = ScoreRuntime(assessment);
-        var win = ScoreWindows(assessment);
+        var isInterpretedOnly = ScoringRuleset.IsInterpretedOnly(assessment);
+        var isNonWindowsApp = ScoringRuleset.IsNonWindowsApp(assessment);
+
+        var (wDep, wCode, wBuild, wRun, wWin) = isNonWindowsApp
+            ? (ScoringRuleset.WeightDependencyNoWin, ScoringRuleset.WeightCodeNoWin,
+               ScoringRuleset.WeightBuildNoWin, ScoringRuleset.WeightRuntimeNoWin,
+               ScoringRuleset.WeightWindowsNoWin)
+            : (ScoringRuleset.WeightDependency, ScoringRuleset.WeightCode,
+               ScoringRuleset.WeightBuild, ScoringRuleset.WeightRuntime,
+               ScoringRuleset.WeightWindows);
+
+        var dep = ScoreDependency(assessment, wDep);
+        var code = ScoreCode(assessment, wCode);
+        var build = ScoreBuild(assessment, wBuild, isInterpretedOnly);
+        var run = ScoreRuntime(assessment, wRun);
+        var win = ScoreWindows(assessment, wWin, isNonWindowsApp);
 
         var dimensions = new[] { dep.Dimension, code.Dimension, build.Dimension, run, win };
 
         var uncappedRaw = dimensions.Sum(d => d.WeightedContribution);
         var uncapped = Math.Clamp((int)Math.Round(uncappedRaw, MidpointRounding.AwayFromZero), 0, 100);
 
-        var caps = BuildCaps(dep, build);
-        var overall = uncapped;
-        foreach (var cap in caps)
-        {
-            overall = Math.Min(overall, cap.Ceiling);
-        }
+        var triggeredCaps = BuildCaps(dep, build, isInterpretedOnly);
+        var effectiveCap = triggeredCaps
+            .OrderBy(c => c.Ceiling)
+            .ThenBy(c => (int)c.CapId)
+            .FirstOrDefault();
+        var capsApplied = effectiveCap is null
+            ? Array.Empty<CapApplication>()
+            : new[] { effectiveCap };
+
+        var overall = effectiveCap is null
+            ? uncapped
+            : Math.Min(uncapped, effectiveCap.Ceiling);
         overall = Math.Clamp(overall, 0, 100);
 
         var (provisional, provisionalReasons) = ProvisionalState(assessment);
 
-        var confidenceRaw = dimensions.Sum(d => d.Confidence * d.WeightPct / 100.0);
-        var confidenceScore = Math.Clamp(Math.Round(confidenceRaw, 2, MidpointRounding.AwayFromZero), 0.0, 1.0);
-        var confidenceLabel = confidenceScore >= ScoringRuleset.ConfidenceHighMin
+        var completenessRaw = dimensions.Sum(d => d.Confidence * d.WeightPct / 100.0);
+        var completenessScore = Math.Clamp(
+            Math.Round(completenessRaw, 2, MidpointRounding.AwayFromZero), 0.0, 1.0);
+        var completenessLabel = completenessScore >= ScoringRuleset.CompletenessHighMin
             ? ConfidenceLabel.High
-            : confidenceScore >= ScoringRuleset.ConfidenceMediumMin
+            : completenessScore >= ScoringRuleset.CompletenessMediumMin
                 ? ConfidenceLabel.Medium
                 : ConfidenceLabel.Low;
 
         var band = ClassifyBand(assessment, overall, provisional);
 
-        var majorBlockers = BuildMajorBlockers(assessment, dep, build, caps, code);
+        var majorBlockers = BuildMajorBlockers(assessment, dep, build, capsApplied, code);
 
         var rationaleCodes = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var d in dimensions)
@@ -67,9 +87,9 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
                 rationaleCodes.Add(c);
             }
         }
-        foreach (var cap in caps)
+        if (effectiveCap is not null)
         {
-            rationaleCodes.Add("CAP-" + EnumMemberValue(cap.CapId).ToUpperInvariant());
+            rationaleCodes.Add("CAP-" + EnumMemberValue(effectiveCap.CapId).ToUpperInvariant());
         }
 
         var evidenceIds = new SortedSet<string>(StringComparer.Ordinal);
@@ -80,15 +100,15 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
                 evidenceIds.Add(id);
             }
         }
-        foreach (var cap in caps)
+        if (effectiveCap is not null)
         {
-            foreach (var id in cap.TriggeredBy)
+            foreach (var id in effectiveCap.TriggeredBy)
             {
                 evidenceIds.Add(id);
             }
         }
 
-        return new ReadinessScoreV1
+        var partial = new ReadinessScoreV1
         {
             SchemaVersion = "1.0",
             AssessmentId = assessment.AssessmentId,
@@ -97,15 +117,27 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
             OverallScore = overall,
             UncappedScore = uncapped,
             Band = band,
-            Confidence = confidenceLabel,
-            ConfidenceScore = confidenceScore,
+            EvidenceCompleteness = completenessLabel,
+            EvidenceCompletenessScore = completenessScore,
             Provisional = provisional,
             ProvisionalReasons = provisionalReasons,
             Dimensions = dimensions,
-            CapsApplied = caps,
+            CapsApplied = capsApplied,
             MajorBlockers = majorBlockers,
             RationaleCodes = rationaleCodes.ToArray(),
             EvidenceIds = evidenceIds.ToArray(),
+        };
+
+        var (dispatchPath, dispatchConfidence) = RecommendationDispatch.Choose(partial);
+        var scoreSummary = BuildScoreSummary(
+            assessment, partial, dimensions, isInterpretedOnly, isNonWindowsApp,
+            dispatchPath, dispatchConfidence);
+        var descriptions = BuildRationaleDescriptions(rationaleCodes, dimensions);
+
+        return partial with
+        {
+            ScoreSummary = scoreSummary,
+            RationaleDescriptions = descriptions,
         };
     }
 
@@ -116,7 +148,7 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
         IReadOnlyList<DependencyFinding> DriverBlockers,
         IReadOnlyList<DependencyFinding> NativeBlockersNoRepl);
 
-    private static DependencyResult ScoreDependency(RepositoryAssessmentV1 a)
+    private static DependencyResult ScoreDependency(RepositoryAssessmentV1 a, int weightPct)
     {
         var deductions = new List<Deduction>();
         var codes = new SortedSet<string>(StringComparer.Ordinal);
@@ -208,9 +240,9 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
 
         var dimension = new DimensionScore(
             DimensionKey: DimensionKey.DependencyCompatibility,
-            WeightPct: ScoringRuleset.WeightDependency,
+            WeightPct: weightPct,
             RawScore: rawScore,
-            WeightedContribution: Math.Round(rawScore * ScoringRuleset.WeightDependency / 100.0, 2),
+            WeightedContribution: Math.Round(rawScore * weightPct / 100.0, 2),
             Deductions: deductions,
             Confidence: Math.Round(confidence, 2),
             RationaleCodes: codes.ToArray(),
@@ -223,7 +255,7 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
 
     private sealed record CodeResult(DimensionScore Dimension, IReadOnlyList<CodeFinding> CriticalFindings);
 
-    private static CodeResult ScoreCode(RepositoryAssessmentV1 a)
+    private static CodeResult ScoreCode(RepositoryAssessmentV1 a, int weightPct)
     {
         var deductions = new List<Deduction>();
         var codes = new SortedSet<string>(StringComparer.Ordinal);
@@ -280,9 +312,9 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
 
         var dimension = new DimensionScore(
             DimensionKey: DimensionKey.CodeCompatibility,
-            WeightPct: ScoringRuleset.WeightCode,
+            WeightPct: weightPct,
             RawScore: rawScore,
-            WeightedContribution: Math.Round(rawScore * ScoringRuleset.WeightCode / 100.0, 2),
+            WeightedContribution: Math.Round(rawScore * weightPct / 100.0, 2),
             Deductions: deductions,
             Confidence: Math.Round(confidenceValue, 2),
             RationaleCodes: codes.ToArray(),
@@ -295,7 +327,7 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
 
     private sealed record BuildResult(DimensionScore Dimension, bool NoArm64Target);
 
-    private static BuildResult ScoreBuild(RepositoryAssessmentV1 a)
+    private static BuildResult ScoreBuild(RepositoryAssessmentV1 a, int weightPct, bool capSuppressed)
     {
         var deductions = new List<Deduction>();
         var codes = new SortedSet<string>(StringComparer.Ordinal);
@@ -329,6 +361,11 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
             codes.Add("BUILD-NO-TESTS");
         }
 
+        if (noAnyTarget && capSuppressed)
+        {
+            codes.Add("BUILD-CAP-SUPPRESSED-INTERPRETED");
+        }
+
         var rawScore = Math.Clamp(100 - deductions.Sum(d => d.Magnitude), 0, 100);
 
         var confidence = 0.90;
@@ -339,9 +376,9 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
 
         var dimension = new DimensionScore(
             DimensionKey: DimensionKey.BuildAndCiReadiness,
-            WeightPct: ScoringRuleset.WeightBuild,
+            WeightPct: weightPct,
             RawScore: rawScore,
-            WeightedContribution: Math.Round(rawScore * ScoringRuleset.WeightBuild / 100.0, 2),
+            WeightedContribution: Math.Round(rawScore * weightPct / 100.0, 2),
             Deductions: deductions,
             Confidence: Math.Round(confidence, 2),
             RationaleCodes: codes.ToArray(),
@@ -352,7 +389,7 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
 
     // ---- Dimension 4: Runtime and validation ----
 
-    private static DimensionScore ScoreRuntime(RepositoryAssessmentV1 a)
+    private static DimensionScore ScoreRuntime(RepositoryAssessmentV1 a, int weightPct)
     {
         var deductions = new List<Deduction>();
         var codes = new SortedSet<string>(StringComparer.Ordinal);
@@ -407,9 +444,9 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
 
         return new DimensionScore(
             DimensionKey: DimensionKey.RuntimeAndValidationEvidence,
-            WeightPct: ScoringRuleset.WeightRuntime,
+            WeightPct: weightPct,
             RawScore: rawScore,
-            WeightedContribution: Math.Round(rawScore * ScoringRuleset.WeightRuntime / 100.0, 2),
+            WeightedContribution: Math.Round(rawScore * weightPct / 100.0, 2),
             Deductions: deductions,
             Confidence: Math.Round(confidence, 2),
             RationaleCodes: codes.ToArray(),
@@ -418,7 +455,7 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
 
     // ---- Dimension 5: Windows experience ----
 
-    private static DimensionScore ScoreWindows(RepositoryAssessmentV1 a)
+    private static DimensionScore ScoreWindows(RepositoryAssessmentV1 a, int weightPct, bool dimensionSkipped)
     {
         var deductions = new List<Deduction>();
         var codes = new SortedSet<string>(StringComparer.Ordinal);
@@ -497,11 +534,16 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
             confidence = Math.Min(confidence, 0.60);
         }
 
+        if (dimensionSkipped)
+        {
+            codes.Add("WIN-DIM-SKIPPED-NOT-WINDOWS-APP");
+        }
+
         return new DimensionScore(
             DimensionKey: DimensionKey.WindowsExperienceAndDeployment,
-            WeightPct: ScoringRuleset.WeightWindows,
+            WeightPct: weightPct,
             RawScore: rawScore,
-            WeightedContribution: Math.Round(rawScore * ScoringRuleset.WeightWindows / 100.0, 2),
+            WeightedContribution: Math.Round(rawScore * weightPct / 100.0, 2),
             Deductions: deductions,
             Confidence: Math.Round(confidence, 2),
             RationaleCodes: codes.ToArray(),
@@ -510,7 +552,8 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
 
     // ---- Caps ----
 
-    private static IReadOnlyList<CapApplication> BuildCaps(DependencyResult dep, BuildResult build)
+    private static IReadOnlyList<CapApplication> BuildCaps(
+        DependencyResult dep, BuildResult build, bool isInterpretedOnly)
     {
         var caps = new List<CapApplication>();
 
@@ -540,7 +583,7 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
                     .ToArray()));
         }
 
-        if (build.NoArm64Target)
+        if (build.NoArm64Target && !isInterpretedOnly)
         {
             caps.Add(new CapApplication(
                 CapId: CapId.NoArm64OrArm64EcTargetLe60,
@@ -745,5 +788,104 @@ public sealed class DeterministicReadinessScorer : IReadinessScorer
         var member = typeof(TEnum).GetField(name, BindingFlags.Public | BindingFlags.Static);
         var attr = member?.GetCustomAttribute<EnumMemberAttribute>();
         return attr?.Value ?? name;
+    }
+
+    // ---- scoreSummary ----
+
+    private static string BuildScoreSummary(
+        RepositoryAssessmentV1 a,
+        ReadinessScoreV1 score,
+        IReadOnlyList<DimensionScore> dimensions,
+        bool isInterpretedOnly,
+        bool isNonWindowsApp,
+        string dispatchPath,
+        string dispatchConfidence)
+    {
+        var sb = new StringBuilder();
+        var repoName = string.IsNullOrEmpty(a.Repository?.Name) ? "The repository" : a.Repository.Name;
+
+        sb.Append(repoName)
+          .Append(" scored ").Append(score.OverallScore).Append("/100 (band ")
+          .Append(EnumMemberValue(score.Band)).Append("); evidence completeness ")
+          .Append(EnumMemberValue(score.EvidenceCompleteness)).Append(" (")
+          .Append(score.EvidenceCompletenessScore.ToString("0.00", CultureInfo.InvariantCulture))
+          .Append("). ");
+
+        if (score.CapsApplied.Count > 0)
+        {
+            var cap = score.CapsApplied[0];
+            sb.Append("The '").Append(EnumMemberValue(cap.CapId))
+              .Append("' cap fired at ceiling ").Append(cap.Ceiling).Append(". ");
+        }
+        else
+        {
+            sb.Append("No blocker caps fired. ");
+        }
+
+        if (isInterpretedOnly)
+        {
+            sb.Append("The no-arm64-target cap was suppressed because this is an interpreted-language project. ");
+        }
+        if (isNonWindowsApp)
+        {
+            sb.Append("The Windows-experience dimension was not scored because no Windows-native surface was detected. ");
+        }
+
+        var contributing = dimensions
+            .Where(d => d.WeightPct > 0)
+            .Select(d => new { Dim = d, Gap = d.WeightPct - d.WeightedContribution })
+            .OrderByDescending(x => x.Gap)
+            .ThenBy(x => (int)x.Dim.DimensionKey)
+            .Take(2)
+            .ToArray();
+        if (contributing.Length > 0 && contributing[0].Gap > 0.5)
+        {
+            sb.Append("Largest deductions came from ");
+            for (int i = 0; i < contributing.Length; i++)
+            {
+                var d = contributing[i].Dim;
+                if (i > 0) sb.Append(" and ");
+                sb.Append("the ").Append(EnumMemberValue(d.DimensionKey))
+                  .Append(" dimension (raw ").Append(d.RawScore).Append("/100)");
+            }
+            sb.Append(". ");
+        }
+
+        if (score.Provisional && score.ProvisionalReasons.Count > 0)
+        {
+            sb.Append("Score is provisional (")
+              .Append(string.Join(", ", score.ProvisionalReasons.Select(r => EnumMemberValue(r))))
+              .Append("). ");
+        }
+
+        sb.Append("Deterministic dispatch selects '").Append(dispatchPath)
+          .Append("' at confidence '").Append(dispatchConfidence).Append("'.");
+
+        return sb.ToString();
+    }
+
+    // ---- rationaleDescriptions ----
+
+    private static IReadOnlyDictionary<string, string> BuildRationaleDescriptions(
+        IReadOnlyCollection<string> topLevelCodes,
+        IReadOnlyList<DimensionScore> dimensions)
+    {
+        var codes = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var c in topLevelCodes)
+        {
+            codes.Add(c);
+        }
+        foreach (var d in dimensions)
+        {
+            foreach (var c in d.RationaleCodes) codes.Add(c);
+            foreach (var ded in d.Deductions) codes.Add(ded.Code);
+        }
+
+        var dict = new Dictionary<string, string>(codes.Count, StringComparer.Ordinal);
+        foreach (var c in codes)
+        {
+            dict[c] = ScoringRuleset.DescribeRationale(c);
+        }
+        return dict;
     }
 }

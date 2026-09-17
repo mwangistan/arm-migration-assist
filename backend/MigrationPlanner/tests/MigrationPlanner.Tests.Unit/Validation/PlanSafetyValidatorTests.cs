@@ -117,6 +117,32 @@ public sealed class PlanSafetyValidatorTests
         result.Violations.Should().ContainMatch("*native-arm64*");
     }
 
+    [Fact]
+    public void HallucinatedSkill_NotInAvailableOrMissing_ReturnsMissingSkillError()
+    {
+        var (assessment, score, plan) = BuildValidCase(workItemSkill: "hallucinated-skill");
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanMissingSkill);
+        result.Violations.Should().ContainMatch("*hallucinated-skill*");
+    }
+
+    [Fact]
+    public void SkillDeclaredInMissingSkills_Passes()
+    {
+        var (assessment, score, plan) = BuildValidCase(
+            workItemSkill: "future-skill",
+            declaredMissingSkill: "future-skill");
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeTrue(result.Violations.Any() ? result.Violations[0] : "");
+    }
+
     private static PlanSafetyValidator BuildValidator() =>
         new(new EmptyGuidanceStore());
 
@@ -126,7 +152,9 @@ public sealed class PlanSafetyValidatorTests
         string? extraEvidenceCitation = null,
         string? extraGuidanceCitation = null,
         string? unsafeText = null,
-        string? recommendedPathOverride = null)
+        string? recommendedPathOverride = null,
+        string? workItemSkill = null,
+        string? declaredMissingSkill = null)
     {
         var deps = new[]
         {
@@ -135,7 +163,7 @@ public sealed class PlanSafetyValidatorTests
         var assessment = ScoringAssessmentBuilder.Ready(dependencies: deps);
         var score = Scorer.Score(assessment);
         var digest = digestOverride
-            ?? MigrationPlanner.Infrastructure.Model.ScoreDigest.Compute(score);
+            ?? MigrationPlanner.Domain.Plan.ScoreDigest.Compute(score);
 
         var payload = new Dictionary<string, object?>
         {
@@ -175,8 +203,51 @@ public sealed class PlanSafetyValidatorTests
                     guidanceIds = Array.Empty<string>(),
                 },
             },
-            ["workItems"] = Array.Empty<object>(),
-            ["missingSkills"] = Array.Empty<object>(),
+            ["workItems"] = workItemSkill is null
+                ? (object)Array.Empty<object>()
+                : new[]
+                {
+                    new
+                    {
+                        id = "wi-test-item",
+                        sequence = 1,
+                        priority = "P1",
+                        title = "Test item",
+                        objective = "Exercise skill validation",
+                        agentOrSkill = workItemSkill,
+                        inputs = new[] { "input" },
+                        expectedOutputs = new[] { "output" },
+                        dependencies = Array.Empty<string>(),
+                        evidenceIds = new[] { "dep-known" },
+                        guidanceIds = Array.Empty<string>(),
+                        acceptanceTests = new[]
+                        {
+                            new
+                            {
+                                id = "at-test",
+                                description = "The test item completes.",
+                                expectedOutcome = "The test item completes.",
+                            },
+                        },
+                        approvalRequired = true,
+                        estimatedEffort = "small",
+                        risk = "low",
+                    },
+                },
+            ["missingSkills"] = declaredMissingSkill is null
+                ? (object)Array.Empty<object>()
+                : new[]
+                {
+                    new
+                    {
+                        proposedName = declaredMissingSkill,
+                        purpose = "Test missing skill",
+                        requiredInputs = new[] { "input" },
+                        expectedOutputs = new[] { "output" },
+                        justification = "Not offered by Feature 1 yet.",
+                        evidenceIds = Array.Empty<string>(),
+                    },
+                },
             ["validationPlan"] = new { objectives = Array.Empty<object>(), checks = Array.Empty<object>() },
             ["risks"] = Array.Empty<object>(),
             ["unknowns"] = Array.Empty<object>(),

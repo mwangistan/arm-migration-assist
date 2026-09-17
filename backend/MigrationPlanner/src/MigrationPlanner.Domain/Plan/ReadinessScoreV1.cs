@@ -20,7 +20,7 @@ public sealed record ReadinessScoreV1
 
     [JsonPropertyName("producer")]
     public ScoreProducer Producer { get; init; } =
-        new(Name: "arm-migration-assist-scorer", Version: "0.1.0", Ruleset: "scoring-v1");
+        new(Name: "arm-migration-assist-scorer", Version: "0.2.0", Ruleset: "scoring-v2");
 
     [JsonPropertyName("overallScore")]
     public int OverallScore { get; init; }
@@ -31,11 +31,11 @@ public sealed record ReadinessScoreV1
     [JsonPropertyName("band")]
     public ReadinessBand Band { get; init; } = ReadinessBand.InsufficientEvidence;
 
-    [JsonPropertyName("confidence")]
-    public ConfidenceLabel Confidence { get; init; } = ConfidenceLabel.Low;
+    [JsonPropertyName("evidenceCompleteness")]
+    public ConfidenceLabel EvidenceCompleteness { get; init; } = ConfidenceLabel.Low;
 
-    [JsonPropertyName("confidenceScore")]
-    public double ConfidenceScore { get; init; }
+    [JsonPropertyName("evidenceCompletenessScore")]
+    public double EvidenceCompletenessScore { get; init; }
 
     [JsonPropertyName("provisional")]
     public bool Provisional { get; init; } = true;
@@ -55,6 +55,13 @@ public sealed record ReadinessScoreV1
 
     [JsonPropertyName("rationaleCodes")]
     public IReadOnlyList<string> RationaleCodes { get; init; } = Array.Empty<string>();
+
+    [JsonPropertyName("rationaleDescriptions")]
+    public IReadOnlyDictionary<string, string> RationaleDescriptions { get; init; } =
+        new Dictionary<string, string>();
+
+    [JsonPropertyName("scoreSummary")]
+    public string ScoreSummary { get; init; } = string.Empty;
 
     [JsonPropertyName("evidenceIds")]
     public IReadOnlyList<string> EvidenceIds { get; init; } = Array.Empty<string>();

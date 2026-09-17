@@ -27,6 +27,7 @@ public sealed class MigrationPlanningService
     private readonly IWindowsOnArmGuidanceStore _guidanceStore;
     private readonly IGuidanceLookupFactory _guidanceLookupFactory;
     private readonly IAuditLogger _auditLogger;
+    private readonly IPlanCache _planCache;
 
     public MigrationPlanningService(
         IEvidenceValidator evidenceValidator,
@@ -36,7 +37,8 @@ public sealed class MigrationPlanningService
         IPlanSafetyValidator safetyValidator,
         IWindowsOnArmGuidanceStore guidanceStore,
         IGuidanceLookupFactory guidanceLookupFactory,
-        IAuditLogger auditLogger)
+        IAuditLogger auditLogger,
+        IPlanCache planCache)
     {
         _evidenceValidator = evidenceValidator;
         _scorer = scorer;
@@ -46,6 +48,7 @@ public sealed class MigrationPlanningService
         _guidanceStore = guidanceStore;
         _guidanceLookupFactory = guidanceLookupFactory;
         _auditLogger = auditLogger;
+        _planCache = planCache;
     }
 
     public async Task<PlanResult> PlanAsync(PlanRequest request, CancellationToken cancellationToken)
@@ -66,9 +69,35 @@ public sealed class MigrationPlanningService
         var score = _scorer.Score(assessment);
         var guidanceLookup = _guidanceLookupFactory.Create();
 
+        var digest = ScoreDigest.Compute(score);
+        if (_planCache.TryGet(digest, out var cached) && cached is not null)
+        {
+            EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha, assessment.SchemaVersion,
+                guidanceLookup.RetrievedGuidanceIds, "cache-hit", errorCode: null);
+            var warnings = new[]
+            {
+                $"Cache hit: returned validated plan produced at {cached.StoredAt:O} for the same scoreDigest.",
+            };
+            return PlanResult.Ok(cached.Plan, cached.Score, runId, warnings);
+        }
+
         var attempt1 = await AttemptAsync(assessment, score, guidanceLookup, retryHint: null, runId, cancellationToken)
             .ConfigureAwait(false);
-        if (attempt1.Failure is not null)
+        if (attempt1.ShapeErrors is not null)
+        {
+            var shapeHint = PlannerRetryHint.ForShapeInvalid(
+                diagnostic: string.Join(" | ", attempt1.ShapeErrors),
+                previousPlanJson: attempt1.RawJson ?? string.Empty);
+            var shapeRetry = await AttemptAsync(
+                assessment, score, guidanceLookup, shapeHint, runId, cancellationToken)
+                .ConfigureAwait(false);
+            if (shapeRetry.Failure is not null)
+            {
+                return shapeRetry.Failure;
+            }
+            attempt1 = shapeRetry;
+        }
+        else if (attempt1.Failure is not null)
         {
             return attempt1.Failure;
         }
@@ -79,22 +108,14 @@ public sealed class MigrationPlanningService
         {
             EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha, assessment.SchemaVersion,
                 guidanceLookup.RetrievedGuidanceIds, "success", errorCode: null);
-            return PlanResult.Ok(plan, score, runId, Array.Empty<string>());
+            _planCache.Store(digest, plan, score);
+            return PlanResult.Ok(plan, score, runId, attempt1.Observations);
         }
 
-        if (safety1.ErrorCode == PlannerErrorCode.PlanRecommendationInconsistent)
+        var retryHint = BuildRetryHint(safety1, plan, score, assessment, attempt1.RawJson ?? string.Empty);
+        if (retryHint is not null)
         {
-            var (expectedPath, expectedConfidence) = RecommendationDispatch.Choose(score);
-            var previousPath = ExtractString(plan, "recommendedPath") ?? "(unknown)";
-            var previousConfidence = ExtractString(plan, "confidence") ?? "(unknown)";
-            var hint = new PlannerRetryHint(
-                PreviousRecommendedPath: previousPath,
-                PreviousConfidence: previousConfidence,
-                ExpectedRecommendedPath: expectedPath,
-                ExpectedConfidence: expectedConfidence,
-                Diagnostic: safety1.Violations.Count > 0 ? safety1.Violations[0] : string.Empty);
-
-            var attempt2 = await AttemptAsync(assessment, score, guidanceLookup, hint, runId, cancellationToken)
+            var attempt2 = await AttemptAsync(assessment, score, guidanceLookup, retryHint, runId, cancellationToken)
                 .ConfigureAwait(false);
             if (attempt2.Failure is not null)
             {
@@ -107,10 +128,10 @@ public sealed class MigrationPlanningService
             {
                 EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha, assessment.SchemaVersion,
                     guidanceLookup.RetrievedGuidanceIds, "success-after-retry", errorCode: null);
-                var warnings = new[]
-                {
-                    $"Model recommendation corrected on retry: initial='{previousPath}' -> dispatch='{expectedPath}'.",
-                };
+                _planCache.Store(digest, plan2, score);
+                var warnings = new List<string> { BuildRetryWarning(retryHint) };
+                warnings.AddRange(attempt1.Observations);
+                warnings.AddRange(attempt2.Observations);
                 return PlanResult.Ok(plan2, score, runId, warnings);
             }
 
@@ -126,6 +147,154 @@ public sealed class MigrationPlanningService
             [.. safety1.Violations]);
     }
 
+    private static PlannerRetryHint? BuildRetryHint(
+        PlanSafetyResult safety, MigrationPlanV1 plan, ReadinessScoreV1 score,
+        Domain.Assessment.RepositoryAssessmentV1 assessment,
+        string previousPlanJson)
+    {
+        var diagnostic = safety.Violations.Count > 0 ? safety.Violations[0] : string.Empty;
+
+        if (safety.ErrorCode == PlannerErrorCode.PlanRecommendationInconsistent)
+        {
+            var (expectedPath, expectedConfidence) = RecommendationDispatch.Choose(score);
+            return PlannerRetryHint.ForRecommendation(
+                previousPath: ExtractString(plan, "recommendedPath") ?? "(unknown)",
+                previousConfidence: ExtractString(plan, "confidence") ?? "(unknown)",
+                expectedPath: expectedPath,
+                expectedConfidence: expectedConfidence,
+                diagnostic: diagnostic,
+                previousPlanJson: previousPlanJson);
+        }
+
+        if (safety.ErrorCode == PlannerErrorCode.PlanMissingSkill)
+        {
+            var unresolved = ExtractUnresolvedSkills(plan, assessment);
+            if (unresolved.Count == 0)
+            {
+                return null;
+            }
+            return PlannerRetryHint.ForMissingSkill(unresolved, diagnostic, previousPlanJson);
+        }
+
+        if (safety.ErrorCode == PlannerErrorCode.PlanEvidenceMissing)
+        {
+            var invalid = ExtractInvalidEvidenceIds(safety.Violations);
+            var allowed = CollectAllowedEvidenceIds(assessment);
+            if (invalid.Count == 0 || allowed.Count == 0)
+            {
+                return null;
+            }
+            return PlannerRetryHint.ForMissingEvidence(invalid, allowed, diagnostic, previousPlanJson);
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<string> ExtractInvalidEvidenceIds(IReadOnlyList<string> violations)
+    {
+        var set = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var v in violations)
+        {
+            var start = v.IndexOf('\'');
+            if (start < 0) continue;
+            var end = v.IndexOf('\'', start + 1);
+            if (end <= start) continue;
+            var id = v.Substring(start + 1, end - start - 1);
+            if (!string.IsNullOrWhiteSpace(id)) set.Add(id);
+        }
+        return set.ToArray();
+    }
+
+    private static IReadOnlyList<string> CollectAllowedEvidenceIds(
+        Domain.Assessment.RepositoryAssessmentV1 assessment)
+    {
+        var set = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var d in assessment.Dependencies)
+        {
+            if (!string.IsNullOrWhiteSpace(d.EvidenceId)) set.Add(d.EvidenceId);
+        }
+        foreach (var f in assessment.CodeFindings)
+        {
+            if (!string.IsNullOrWhiteSpace(f.EvidenceId)) set.Add(f.EvidenceId);
+        }
+        if (!string.IsNullOrWhiteSpace(assessment.BuildFindings.EvidenceId))
+        {
+            set.Add(assessment.BuildFindings.EvidenceId);
+        }
+        foreach (var u in assessment.Unknowns)
+        {
+            if (u.EvidenceIds is null) continue;
+            foreach (var eid in u.EvidenceIds)
+            {
+                if (!string.IsNullOrWhiteSpace(eid)) set.Add(eid);
+            }
+        }
+        return set.ToArray();
+    }
+
+    private static string BuildRetryWarning(PlannerRetryHint hint) => hint.Reason switch
+    {
+        PlannerRetryReason.RecommendationInconsistent =>
+            $"Model recommendation corrected on retry: initial='{hint.PreviousRecommendedPath}' -> dispatch='{hint.ExpectedRecommendedPath}'.",
+        PlannerRetryReason.SkillMissing =>
+            $"Model declared previously-hallucinated skill(s) in missingSkills on retry: {string.Join(", ", hint.UnresolvedSkills ?? Array.Empty<string>())}.",
+        PlannerRetryReason.ShapeInvalid =>
+            "Model plan shape corrected on retry after JSON Schema failure.",
+        PlannerRetryReason.MissingEvidence =>
+            $"Model plan corrected on retry: invented evidenceId(s) {string.Join(", ", hint.InvalidEvidenceIds ?? Array.Empty<string>())} replaced.",
+        _ => "Model plan corrected on retry.",
+    };
+
+    private static IReadOnlyList<string> ExtractUnresolvedSkills(
+        MigrationPlanV1 plan, Domain.Assessment.RepositoryAssessmentV1 assessment)
+    {
+        var available = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in assessment.AvailableSkills)
+        {
+            if (!string.IsNullOrEmpty(s.Name)) available.Add(s.Name);
+        }
+
+        var declaredMissing = new HashSet<string>(StringComparer.Ordinal);
+        if (plan.AdditionalProperties is not null
+            && plan.AdditionalProperties.TryGetValue("missingSkills", out var missingElement)
+            && missingElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var entry in missingElement.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object) continue;
+                if (entry.TryGetProperty("proposedName", out var proposedName)
+                    && proposedName.ValueKind == JsonValueKind.String)
+                {
+                    var name = proposedName.GetString();
+                    if (!string.IsNullOrEmpty(name)) declaredMissing.Add(name);
+                }
+            }
+        }
+
+        var unresolved = new SortedSet<string>(StringComparer.Ordinal);
+        if (plan.AdditionalProperties is not null
+            && plan.AdditionalProperties.TryGetValue("workItems", out var workItemsElement)
+            && workItemsElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var wi in workItemsElement.EnumerateArray())
+            {
+                if (wi.ValueKind != JsonValueKind.Object) continue;
+                if (wi.TryGetProperty("agentOrSkill", out var skillElement)
+                    && skillElement.ValueKind == JsonValueKind.String)
+                {
+                    var skill = skillElement.GetString() ?? string.Empty;
+                    if (!string.IsNullOrEmpty(skill)
+                        && !available.Contains(skill)
+                        && !declaredMissing.Contains(skill))
+                    {
+                        unresolved.Add(skill);
+                    }
+                }
+            }
+        }
+        return unresolved.ToArray();
+    }
+
     private async Task<AttemptOutcome> AttemptAsync(
         Domain.Assessment.RepositoryAssessmentV1 assessment,
         ReadinessScoreV1 score,
@@ -134,10 +303,10 @@ public sealed class MigrationPlanningService
         string runId,
         CancellationToken cancellationToken)
     {
-        string planJson;
+        PlannerModelResult modelResult;
         try
         {
-            planJson = await _model
+            modelResult = await _model
                 .GeneratePlanJsonAsync(assessment, score, guidanceLookup, cancellationToken, retryHint)
                 .ConfigureAwait(false);
         }
@@ -161,12 +330,22 @@ public sealed class MigrationPlanningService
             return AttemptOutcome.FromFailure(PlanResult.Fail(
                 PlannerErrorCode.ModelToolViolation, runId, ex.Message));
         }
+        catch (ModelRateLimitedException ex)
+        {
+            EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha, assessment.SchemaVersion,
+                guidanceLookup.RetrievedGuidanceIds, "model-rate-limited",
+                PlannerErrorCode.ModelRateLimited);
+            return AttemptOutcome.FromFailure(PlanResult.RateLimited(runId, ex.RetryAfter, ex.Message));
+        }
         catch (Exception ex)
         {
             EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha, assessment.SchemaVersion,
                 guidanceLookup.RetrievedGuidanceIds, "model-failed", PlannerErrorCode.ModelFailed);
             return AttemptOutcome.FromFailure(PlanResult.Fail(PlannerErrorCode.ModelFailed, runId, ex.Message));
         }
+
+        var planJson = modelResult.PlanJson;
+        var observations = modelResult.Observations;
 
         MigrationPlanV1? plan;
         try
@@ -178,9 +357,10 @@ public sealed class MigrationPlanningService
             {
                 EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha, assessment.SchemaVersion,
                     guidanceLookup.RetrievedGuidanceIds, "plan-shape-invalid", schemaResult.ErrorCode);
-                return AttemptOutcome.FromFailure(PlanResult.Fail(
+                var fallback = PlanResult.Fail(
                     schemaResult.ErrorCode ?? PlannerErrorCode.PlanShapeInvalid, runId,
-                    [.. schemaResult.Errors]));
+                    [.. schemaResult.Errors]);
+                return AttemptOutcome.FromShapeInvalid(planJson, schemaResult.Errors, fallback, observations);
             }
 
             plan = parsed.RootElement.Deserialize<MigrationPlanV1>(JsonOptions);
@@ -202,7 +382,7 @@ public sealed class MigrationPlanningService
                 "Model did not echo the requested assessmentId."));
         }
 
-        return AttemptOutcome.FromPlan(plan);
+        return AttemptOutcome.FromPlan(plan, planJson, observations);
     }
 
     private static string? ExtractString(MigrationPlanV1 plan, string key)
@@ -216,10 +396,19 @@ public sealed class MigrationPlanningService
         return element.GetString();
     }
 
-    private sealed record AttemptOutcome(MigrationPlanV1? Plan, PlanResult? Failure)
+    private sealed record AttemptOutcome(
+        MigrationPlanV1? Plan,
+        string? RawJson,
+        PlanResult? Failure,
+        IReadOnlyList<string>? ShapeErrors,
+        IReadOnlyList<string> Observations)
     {
-        public static AttemptOutcome FromPlan(MigrationPlanV1 plan) => new(plan, null);
-        public static AttemptOutcome FromFailure(PlanResult result) => new(null, result);
+        public static AttemptOutcome FromPlan(MigrationPlanV1 plan, string rawJson, IReadOnlyList<string> observations) =>
+            new(plan, rawJson, null, null, observations);
+        public static AttemptOutcome FromFailure(PlanResult result) =>
+            new(null, null, result, null, Array.Empty<string>());
+        public static AttemptOutcome FromShapeInvalid(string rawJson, IReadOnlyList<string> errors, PlanResult fallback, IReadOnlyList<string> observations) =>
+            new(null, rawJson, fallback, errors, observations);
     }
 
     private void EmitAudit(

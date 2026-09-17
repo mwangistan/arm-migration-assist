@@ -102,6 +102,17 @@ internal static class MigrationPlansEndpoint
 
             if (!result.IsSuccess)
             {
+                if (result.ErrorCode == PlannerErrorCode.ModelRateLimited)
+                {
+                    var seconds = (int)Math.Ceiling((result.RetryAfter ?? TimeSpan.FromSeconds(30)).TotalSeconds);
+                    context.Response.Headers.Append("Retry-After", seconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    return PlannerProblemDetailsFactory.Problem(
+                        StatusCodes.Status429TooManyRequests,
+                        PlannerErrorCode.ModelRateLimited,
+                        $"Rate limit reached upstream. Retry in {seconds} seconds.",
+                        result.Errors ?? Array.Empty<string>());
+                }
+
                 var statusCode = MapErrorStatus(result.ErrorCode);
                 return PlannerProblemDetailsFactory.Problem(
                     statusCode,
@@ -137,6 +148,8 @@ internal static class MigrationPlansEndpoint
         PlannerErrorCode.PlanRecommendationInconsistent => StatusCodes.Status422UnprocessableEntity,
         PlannerErrorCode.PlanEvidenceMissing => StatusCodes.Status422UnprocessableEntity,
         PlannerErrorCode.PlanGuidanceMissing => StatusCodes.Status422UnprocessableEntity,
+        PlannerErrorCode.PlanMissingSkill => StatusCodes.Status422UnprocessableEntity,
+        PlannerErrorCode.PlanUnderGranular => StatusCodes.Status422UnprocessableEntity,
         _ => StatusCodes.Status500InternalServerError,
     };
 }

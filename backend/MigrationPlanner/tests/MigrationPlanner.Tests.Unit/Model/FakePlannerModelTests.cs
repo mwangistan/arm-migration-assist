@@ -98,8 +98,8 @@ public sealed class FakePlannerModelTests
         RepositoryAssessmentV1 assessment)
     {
         var score = Scorer.Score(assessment);
-        var json = await Model.GeneratePlanJsonAsync(assessment, score, new NoopGuidance(), CancellationToken.None);
-        using var doc = JsonDocument.Parse(json);
+        var modelResult = await Model.GeneratePlanJsonAsync(assessment, score, new NoopGuidance(), CancellationToken.None);
+        using var doc = JsonDocument.Parse(modelResult.PlanJson);
         return (
             doc.RootElement.GetProperty("recommendedPath").GetString()!,
             doc.RootElement.GetProperty("confidence").GetString()!,

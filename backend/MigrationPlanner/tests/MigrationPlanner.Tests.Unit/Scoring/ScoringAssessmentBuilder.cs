@@ -16,6 +16,8 @@ internal static class ScoringAssessmentBuilder
         WindowsExperience? windows = null,
         ScanCoverage? coverage = null,
         IReadOnlyList<Unknown>? unknowns = null,
+        IReadOnlyList<string>? languages = null,
+        IReadOnlyList<string>? frameworks = null,
         string assessmentId = "assessment-scorer-tests")
     {
         var evidence = new[]
@@ -31,8 +33,8 @@ internal static class ScoringAssessmentBuilder
             Repository: new Repository("sample", "https://example.com/sample",
                 "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", "main"),
             Technology: new TechnologyInventory(
-                Languages: new[] { "csharp" },
-                Frameworks: Array.Empty<string>(),
+                Languages: languages ?? new[] { "csharp" },
+                Frameworks: frameworks ?? Array.Empty<string>(),
                 ProjectTypes: new[] { "desktop" },
                 BuildSystems: new[] { "msbuild" },
                 PackageManagers: new[] { "nuget" },

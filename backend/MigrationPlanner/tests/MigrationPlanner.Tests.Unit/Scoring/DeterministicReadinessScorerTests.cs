@@ -47,7 +47,7 @@ public sealed class DeterministicReadinessScorerTests
     {
         var score = Scorer.Score(ScoringAssessmentBuilder.Ready());
 
-        score.Producer.Ruleset.Should().Be("scoring-v1");
+        score.Producer.Ruleset.Should().Be("scoring-v2");
         score.Producer.Name.Should().Be("arm-migration-assist-scorer");
     }
 
@@ -129,7 +129,7 @@ public sealed class DeterministicReadinessScorerTests
     }
 
     [Fact]
-    public void MultipleCaps_ApplyLowestCeiling()
+    public void MultipleCaps_ApplyLowestCeiling_AndCapsAppliedListsOnlyEffective()
     {
         var driver = ScoringAssessmentBuilder.Dep("dep-drv", "drv-1",
             type: DependencyType.Driver, status: ArchitectureStatus.Blocked);
@@ -148,7 +148,11 @@ public sealed class DeterministicReadinessScorerTests
             build: build));
 
         score.OverallScore.Should().BeLessOrEqualTo(30);
-        score.CapsApplied.Should().HaveCount(2);
+        score.CapsApplied.Should().HaveCount(1,
+            because: "v2 lists only the effective (lowest-ceiling) cap; the no-target cap becomes informational");
+        score.CapsApplied[0].CapId.Should().Be(CapId.RequiredUnsupportedDriverLe30);
+        score.MajorBlockers.Should().Contain(b => b.BlockerId == "bl-no-arm64-target",
+            because: "blockers still surface for would-be caps that did not make capsApplied[]");
     }
 
     [Fact]
@@ -328,12 +332,12 @@ public sealed class DeterministicReadinessScorerTests
     }
 
     [Fact]
-    public void ConfidenceScore_IsBoundedAndBandedCorrectly()
+    public void EvidenceCompletenessScore_IsBoundedAndBandedCorrectly()
     {
         var score = Scorer.Score(ScoringAssessmentBuilder.Ready());
 
-        score.ConfidenceScore.Should().BeInRange(0, 1);
-        score.Confidence.Should().Be(score.ConfidenceScore switch
+        score.EvidenceCompletenessScore.Should().BeInRange(0, 1);
+        score.EvidenceCompleteness.Should().Be(score.EvidenceCompletenessScore switch
         {
             >= 0.75 => ConfidenceLabel.High,
             >= 0.50 => ConfidenceLabel.Medium,
@@ -349,5 +353,157 @@ public sealed class DeterministicReadinessScorerTests
         var score = Scorer.Score(assessment);
 
         score.GeneratedAt.Should().Be(assessment.GeneratedAt);
+    }
+
+    // ---- v2 behavior ----
+
+    [Fact]
+    public void InterpretedOnlyPython_NoArm64Target_DoesNotFireBuildCap()
+    {
+        var build = new BuildFindings(
+            EvidenceId: "build-py-001",
+            Arm64TargetExists: false,
+            Arm64EcTargetExists: false,
+            Arm64CiJobExists: false,
+            PackagingSupportsArm64: false,
+            TestsExist: true,
+            DetectedTargets: Array.Empty<string>(),
+            Evidence: new[] { new Evidence(SourceType.Manifest, "no arm64", Path: "pyproject.toml") });
+
+        var score = Scorer.Score(ScoringAssessmentBuilder.Ready(
+            build: build,
+            languages: new[] { "python" }));
+
+        score.CapsApplied.Should().NotContain(c => c.CapId == CapId.NoArm64OrArm64EcTargetLe60);
+        score.OverallScore.Should().BeGreaterThan(60,
+            because: "cap suppression allows the overall to reflect real dep signals for interpreted stacks");
+        score.RationaleCodes.Should().Contain("BUILD-CAP-SUPPRESSED-INTERPRETED");
+    }
+
+    [Fact]
+    public void CompiledDotnet_NoArm64Target_StillFiresBuildCap()
+    {
+        var build = new BuildFindings(
+            EvidenceId: "build-cs-001",
+            Arm64TargetExists: false,
+            Arm64EcTargetExists: false,
+            Arm64CiJobExists: false,
+            PackagingSupportsArm64: false,
+            TestsExist: true,
+            DetectedTargets: Array.Empty<string>(),
+            Evidence: new[] { new Evidence(SourceType.Manifest, "no arm64", Path: "src/App.csproj") });
+
+        var score = Scorer.Score(ScoringAssessmentBuilder.Ready(
+            build: build,
+            languages: new[] { "csharp" }));
+
+        score.CapsApplied.Should().Contain(c => c.CapId == CapId.NoArm64OrArm64EcTargetLe60);
+        score.RationaleCodes.Should().NotContain("BUILD-CAP-SUPPRESSED-INTERPRETED");
+    }
+
+    [Fact]
+    public void NonWindowsApp_WebUi_SkipsWindowsDimension()
+    {
+        var windows = new WindowsExperience(
+            WindowsVersionExists: false,
+            UiTechnology: UiTechnology.Web,
+            InstallerExists: false,
+            OfflineCapable: false,
+            AccessibilityEvidence: AccessibilityEvidenceLevel.None,
+            NotificationsIntegrated: false,
+            LifecycleIntegrated: false,
+            Evidence: new[] { new Evidence(SourceType.Manifest, "web ui", Path: "src/index.html") });
+
+        var score = Scorer.Score(ScoringAssessmentBuilder.Ready(windows: windows));
+
+        var winDim = score.Dimensions.Single(d => d.DimensionKey == DimensionKey.WindowsExperienceAndDeployment);
+        winDim.WeightPct.Should().Be(0);
+        winDim.WeightedContribution.Should().Be(0);
+        winDim.RationaleCodes.Should().Contain("WIN-DIM-SKIPPED-NOT-WINDOWS-APP");
+        score.Dimensions.Sum(d => d.WeightPct).Should().Be(100,
+            because: "remaining four dimensions absorb the 10% from Windows");
+    }
+
+    [Fact]
+    public void NonWindowsApp_UnknownUiWithNoPositiveSignals_SkipsWindowsDimension()
+    {
+        var windows = new WindowsExperience(
+            WindowsVersionExists: false,
+            UiTechnology: UiTechnology.Unknown,
+            InstallerExists: false,
+            OfflineCapable: false,
+            AccessibilityEvidence: AccessibilityEvidenceLevel.Unknown,
+            NotificationsIntegrated: false,
+            LifecycleIntegrated: false,
+            Evidence: new[] { new Evidence(SourceType.Manifest, "no ui detected", Path: "src/App.py") });
+
+        var score = Scorer.Score(ScoringAssessmentBuilder.Ready(windows: windows));
+
+        var winDim = score.Dimensions.Single(d => d.DimensionKey == DimensionKey.WindowsExperienceAndDeployment);
+        winDim.WeightPct.Should().Be(0);
+    }
+
+    [Fact]
+    public void WindowsApp_KeepsWindowsDimension()
+    {
+        var score = Scorer.Score(ScoringAssessmentBuilder.Ready());
+        var winDim = score.Dimensions.Single(d => d.DimensionKey == DimensionKey.WindowsExperienceAndDeployment);
+        winDim.WeightPct.Should().Be(10);
+    }
+
+    [Fact]
+    public void WpfFrameworkOverridesUnknownUi_KeepsWindowsDimension()
+    {
+        var windows = new WindowsExperience(
+            WindowsVersionExists: false,
+            UiTechnology: UiTechnology.Unknown,
+            InstallerExists: false,
+            OfflineCapable: false,
+            AccessibilityEvidence: AccessibilityEvidenceLevel.Unknown,
+            NotificationsIntegrated: false,
+            LifecycleIntegrated: false,
+            Evidence: new[] { new Evidence(SourceType.Manifest, "wpf project detected", Path: "src/App.csproj") });
+
+        var score = Scorer.Score(ScoringAssessmentBuilder.Ready(
+            windows: windows,
+            frameworks: new[] { "wpf" }));
+
+        var winDim = score.Dimensions.Single(d => d.DimensionKey == DimensionKey.WindowsExperienceAndDeployment);
+        winDim.WeightPct.Should().Be(10);
+    }
+
+    [Fact]
+    public void ScoreSummary_IsNonEmptyAndMentionsBandAndDispatch()
+    {
+        var score = Scorer.Score(ScoringAssessmentBuilder.Ready());
+
+        score.ScoreSummary.Should().NotBeNullOrWhiteSpace();
+        score.ScoreSummary.Should().Contain("ready-or-minor-changes");
+        score.ScoreSummary.Should().Contain("native-arm64");
+    }
+
+    [Fact]
+    public void RationaleDescriptions_ContainsEntryForEveryEmittedCode()
+    {
+        var driver = ScoringAssessmentBuilder.Dep("dep-drv", "legacy-driver",
+            type: DependencyType.Driver, status: ArchitectureStatus.Blocked);
+        var critical = ScoringAssessmentBuilder.Code("code-crit", Severity.Critical, "ARM-CODE-SIMD-01");
+
+        var score = Scorer.Score(ScoringAssessmentBuilder.Ready(
+            dependencies: new[] { driver },
+            codeFindings: new[] { critical }));
+
+        foreach (var code in score.RationaleCodes)
+        {
+            score.RationaleDescriptions.Should().ContainKey(code);
+            score.RationaleDescriptions[code].Should().NotBeNullOrWhiteSpace();
+        }
+        foreach (var dim in score.Dimensions)
+        {
+            foreach (var code in dim.RationaleCodes)
+            {
+                score.RationaleDescriptions.Should().ContainKey(code);
+            }
+        }
     }
 }

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using MigrationPlanner.Application.Abstractions;
 using MigrationPlanner.Application.Planning;
 using MigrationPlanner.Infrastructure.Auditing;
+using MigrationPlanner.Infrastructure.Caching;
 using MigrationPlanner.Infrastructure.Guidance;
 using MigrationPlanner.Infrastructure.Mcp;
 using MigrationPlanner.Infrastructure.Mcp.Tools;
@@ -23,7 +24,8 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         Action<EmbeddedGuidanceStoreOptions> configureCorpus,
         PlannerModelProvider modelProvider,
-        PhiModelOptions? phiOptions = null)
+        PhiModelOptions? phiOptions = null,
+        HostedModelOptions? hostedOptions = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configureCorpus);
@@ -46,14 +48,24 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPlanSafetyValidator, PlanSafetyValidator>();
         services.AddSingleton<IAuditLogger, LoggerAuditLogger>();
 
+        services.AddMemoryCache();
+        services.AddSingleton(new MemoryPlanCacheOptions());
+        services.AddSingleton<IPlanCache, MemoryPlanCache>();
+
         switch (modelProvider)
         {
             case PlannerModelProvider.Fake:
                 services.AddSingleton<IPlannerModel, FakePlannerModel>();
                 break;
             case PlannerModelProvider.Hosted:
-                throw new NotSupportedException(
-                    "Hosted (Azure OpenAI / tool-calling) provider is not implemented in this skeleton.");
+                if (hostedOptions is null)
+                {
+                    throw new InvalidOperationException(
+                        "HostedModelOptions must be supplied when PlannerModelProvider.Hosted is selected.");
+                }
+                services.AddSingleton(hostedOptions);
+                services.AddSingleton<IPlannerModel, HostedPlannerModel>();
+                break;
             case PlannerModelProvider.Phi:
                 if (phiOptions is null)
                 {

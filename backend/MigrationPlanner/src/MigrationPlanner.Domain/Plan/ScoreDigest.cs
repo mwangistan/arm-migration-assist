@@ -1,9 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using MigrationPlanner.Domain.Plan;
 
-namespace MigrationPlanner.Infrastructure.Model;
+namespace MigrationPlanner.Domain.Plan;
 
 /// <summary>
 /// Canonical SHA-256 digest of a deterministic <see cref="ReadinessScoreV1"/>.

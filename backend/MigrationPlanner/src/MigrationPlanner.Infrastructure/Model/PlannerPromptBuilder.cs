@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using MigrationPlanner.Application.Abstractions;
+using MigrationPlanner.Application.Planning;
 using MigrationPlanner.Domain.Assessment;
 using MigrationPlanner.Domain.Plan;
 
@@ -27,7 +28,9 @@ internal static class PlannerPromptBuilder
         RepositoryAssessmentV1 assessment,
         ReadinessScoreV1 score,
         IGuidanceLookup guidanceLookup,
-        PlannerRetryHint? retryHint = null)
+        PlannerProvenance provenance,
+        PlannerRetryHint? retryHint = null,
+        bool enableGuidanceLookupTool = false)
     {
         var index = guidanceLookup.ListIndex();
         var scoreDigest = ScoreDigest.Compute(score);
@@ -50,35 +53,254 @@ internal static class PlannerPromptBuilder
         builder.AppendLine();
         builder.Append(json);
 
+        AppendModelProvenance(builder, provenance);
+        AppendGranularityExpectations(builder, assessment, score);
+        AppendAllowedEvidenceIds(builder, assessment);
+
+        if (enableGuidanceLookupTool)
+        {
+            AppendGuidanceLookupToolUsage(builder);
+        }
+
         if (retryHint is not null)
         {
             builder.AppendLine();
             builder.AppendLine();
             builder.AppendLine("=== RETRY CORRECTION ===");
-            builder.AppendLine("Your previous attempt was rejected by the server. Reproduce the plan");
-            builder.AppendLine("EXACTLY, changing only the fields listed below plus anything strictly");
-            builder.AppendLine("required to keep alternatives[] internally consistent.");
+            builder.AppendLine("Your previous attempt was rejected by the server. Start from the JSON");
+            builder.AppendLine("under 'Previous plan' below and reproduce it VERBATIM, changing ONLY");
+            builder.AppendLine("the specific fields the correction rules call out.");
             builder.AppendLine();
-            builder.AppendLine($"Previous recommendedPath : \"{retryHint.PreviousRecommendedPath}\"");
-            builder.AppendLine($"Previous confidence      : \"{retryHint.PreviousConfidence}\"");
-            builder.AppendLine($"Required recommendedPath : \"{retryHint.ExpectedRecommendedPath}\"");
-            builder.AppendLine($"Required confidence      : \"{retryHint.ExpectedConfidence}\"");
             builder.AppendLine($"Server diagnostic        : {retryHint.Diagnostic}");
             builder.AppendLine();
-            builder.AppendLine("Rules for the retry:");
-            builder.AppendLine("  1. Set recommendedPath and confidence to the Required values above.");
-            builder.AppendLine("  2. alternatives[] MUST contain an entry with path equal to the");
-            builder.AppendLine("     Required recommendedPath and disposition=\"viable\". Change the");
-            builder.AppendLine("     previous recommendedPath's alternative entry to disposition=");
-            builder.AppendLine("     \"rejected\" or \"deferred\" as appropriate.");
-            builder.AppendLine("  3. Keep facts, inferences, workItems, validationPlan, risks,");
-            builder.AppendLine("     unknowns, missingSkills, requiredApprovals, and reusableOutputs");
-            builder.AppendLine("     unchanged unless the change in recommendedPath makes an entry");
-            builder.AppendLine("     internally inconsistent.");
-            builder.AppendLine("  4. Output the corrected JSON only. No prose.");
+
+            if (retryHint.Reason == PlannerRetryReason.RecommendationInconsistent)
+            {
+                builder.AppendLine($"Previous recommendedPath : \"{retryHint.PreviousRecommendedPath}\"");
+                builder.AppendLine($"Previous confidence      : \"{retryHint.PreviousConfidence}\"");
+                builder.AppendLine($"Required recommendedPath : \"{retryHint.ExpectedRecommendedPath}\"");
+                builder.AppendLine($"Required confidence      : \"{retryHint.ExpectedConfidence}\"");
+                builder.AppendLine();
+                builder.AppendLine("Rules for the retry (STRICT):");
+                builder.AppendLine("  1. Copy the entire 'Previous plan' JSON below into your output.");
+                builder.AppendLine("  2. Change recommendedPath to the Required value.");
+                builder.AppendLine("  3. Change confidence to the Required value.");
+                builder.AppendLine("  4. In alternatives[], flip the disposition of the entry whose");
+                builder.AppendLine("     path == Required recommendedPath to \"viable\", and flip the");
+                builder.AppendLine("     entry whose path == Previous recommendedPath to \"rejected\"");
+                builder.AppendLine("     or \"deferred\".");
+                builder.AppendLine("  5. Do NOT rewrite, reword, or reorder any other field. Every");
+                builder.AppendLine("     other value must match the Previous plan character-for-character.");
+                builder.AppendLine("  6. Output the corrected JSON only. No prose.");
+            }
+            else if (retryHint.Reason == PlannerRetryReason.SkillMissing)
+            {
+                var unresolved = retryHint.UnresolvedSkills ?? Array.Empty<string>();
+                builder.AppendLine("Unresolved skills (currently cited by workItems but neither in");
+                builder.AppendLine("assessment.availableSkills nor declared in plan.missingSkills):");
+                foreach (var skill in unresolved)
+                {
+                    builder.AppendLine($"  - \"{skill}\"");
+                }
+                builder.AppendLine();
+                builder.AppendLine("Rules for the retry (STRICT):");
+                builder.AppendLine("  1. Copy the entire 'Previous plan' JSON below into your output.");
+                builder.AppendLine("  2. For each unresolved skill listed above, add ONE new entry to");
+                builder.AppendLine("     missingSkills[] whose proposedName equals that skill name.");
+                builder.AppendLine("     Fill in purpose, requiredInputs, expectedOutputs,");
+                builder.AppendLine("     justification, and evidenceIds. writeAccess=false is fine.");
+                builder.AppendLine("  3. Keep every workItems[].agentOrSkill reference unchanged; they");
+                builder.AppendLine("     are now valid because the same names are declared in");
+                builder.AppendLine("     missingSkills[].");
+                builder.AppendLine("  4. Do NOT rewrite, reword, or reorder any other field. Every");
+                builder.AppendLine("     value outside missingSkills[] must match the Previous plan");
+                builder.AppendLine("     character-for-character. Do not change alternatives, risks,");
+                builder.AppendLine("     unknowns, validationPlan, requiredApprovals, or anything else.");
+                builder.AppendLine("  5. Output the corrected JSON only. No prose.");
+            }
+            else if (retryHint.Reason == PlannerRetryReason.ShapeInvalid)
+            {
+                builder.AppendLine("Rules for the retry (STRICT):");
+                builder.AppendLine("  1. Copy the entire 'Previous plan' JSON below into your output.");
+                builder.AppendLine("  2. Fix ONLY the specific fields the Server diagnostic names.");
+                builder.AppendLine("     Common causes:");
+                builder.AppendLine("       - alternatives[].estimatedEffort must be one of");
+                builder.AppendLine("         { \"small\", \"medium\", \"large\", \"unknown\" }.");
+                builder.AppendLine("       - alternatives[].risk must be one of");
+                builder.AppendLine("         { \"low\", \"medium\", \"high\", \"critical\" }.");
+                builder.AppendLine("       - workItems[].estimatedEffort and workItems[].risk use the");
+                builder.AppendLine("         same closed sets.");
+                builder.AppendLine("       - unknowns[].requiredSkill must be null OR a SkillReference");
+                builder.AppendLine("         (kebab-case with optional '/' namespaces, all lowercase).");
+                builder.AppendLine("       - risks[].severity must be one of");
+                builder.AppendLine("         { \"low\", \"medium\", \"high\", \"critical\" }.");
+                builder.AppendLine("       - workItems[].priority must be one of");
+                builder.AppendLine("         { \"P0\", \"P1\", \"P2\" }.");
+                builder.AppendLine("       - alternatives[].disposition must be one of");
+                builder.AppendLine("         { \"rejected\", \"deferred\", \"viable\" }.");
+                builder.AppendLine("  3. Do NOT rewrite, reword, or reorder any other field. Every");
+                builder.AppendLine("     other value must match the Previous plan character-for-character.");
+                builder.AppendLine("  4. Output the corrected JSON only. No prose.");
+            }
+            else if (retryHint.Reason == PlannerRetryReason.MissingEvidence)
+            {
+                var invalid = retryHint.InvalidEvidenceIds ?? Array.Empty<string>();
+                var allowed = retryHint.AllowedEvidenceIds ?? Array.Empty<string>();
+
+                builder.AppendLine("Invented evidenceId(s) currently cited by the previous plan");
+                builder.AppendLine("(they do NOT exist in the assessment and MUST be removed):");
+                foreach (var id in invalid)
+                {
+                    builder.AppendLine($"  - \"{id}\"");
+                }
+                builder.AppendLine();
+                builder.AppendLine("The COMPLETE list of evidenceIds that DO exist in this assessment.");
+                builder.AppendLine("You may cite only these values. Any other value will be rejected:");
+                foreach (var id in allowed)
+                {
+                    builder.AppendLine($"  - \"{id}\"");
+                }
+                builder.AppendLine();
+                builder.AppendLine("Rules for the retry (STRICT):");
+                builder.AppendLine("  1. Copy the entire 'Previous plan' JSON below into your output.");
+                builder.AppendLine("  2. Find every occurrence of each invented evidenceId above and");
+                builder.AppendLine("     replace it with the correct value from the allowed list. If");
+                builder.AppendLine("     you cannot determine which allowed id was intended, remove");
+                builder.AppendLine("     the invented id from that evidenceIds array. Empty arrays");
+                builder.AppendLine("     are permitted.");
+                builder.AppendLine("  3. Copy allowed evidenceId values CHARACTER-FOR-CHARACTER. They");
+                builder.AppendLine("     contain long hex suffixes; count the digits and echo each");
+                builder.AppendLine("     one exactly.");
+                builder.AppendLine("  4. Do NOT rewrite, reword, or reorder any other field. Every");
+                builder.AppendLine("     other value must match the Previous plan character-for-character.");
+                builder.AppendLine("  5. Output the corrected JSON only. No prose.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(retryHint.PreviousPlanJson))
+            {
+                builder.AppendLine();
+                builder.AppendLine("=== PREVIOUS PLAN ===");
+                builder.AppendLine(retryHint.PreviousPlanJson);
+            }
         }
 
         return builder.ToString();
+    }
+
+    private static void AppendModelProvenance(StringBuilder builder, PlannerProvenance provenance)
+    {
+        builder.AppendLine();
+        builder.AppendLine();
+        builder.AppendLine("=== REQUIRED modelProvenance VALUES ===");
+        builder.AppendLine("Copy these three values into plan.modelProvenance verbatim. Do NOT");
+        builder.AppendLine("substitute other model names, versions, or providers.");
+        builder.AppendLine($"  provider : \"{provenance.Provider}\"");
+        builder.AppendLine($"  name     : \"{provenance.Name}\"");
+        builder.AppendLine($"  version  : \"{provenance.Version}\"");
+    }
+
+    private static void AppendGuidanceLookupToolUsage(StringBuilder builder)
+    {
+        builder.AppendLine();
+        builder.AppendLine();
+        builder.AppendLine("=== TOOL AVAILABLE: lookup_windows_arm_guidance ===");
+        builder.AppendLine("The guidanceIndex in this prompt lists only ids + short summaries.");
+        builder.AppendLine("Snippet bodies are NOT inlined. You MAY call the function tool");
+        builder.AppendLine("lookup_windows_arm_guidance to fetch the full body of a specific");
+        builder.AppendLine("snippet before you cite it, using EITHER of these argument shapes:");
+        builder.AppendLine("  { \"guidanceId\": \"<id from guidanceIndex>\" }");
+        builder.AppendLine("  { \"topic\": \"arm64ec\" | \"arm64-target\" | \"packaging\" | ...}");
+        builder.AppendLine();
+        builder.AppendLine("Rules:");
+        builder.AppendLine("  - Only call the tool if you actually need the snippet body to write");
+        builder.AppendLine("    a defensible executiveSummary, scoreInterpretation, or risk. If");
+        builder.AppendLine("    the guidanceIndex summary is enough, cite the id directly.");
+        builder.AppendLine("  - Do NOT invent guidanceIds. Only ids in the guidanceIndex are");
+        builder.AppendLine("    valid tool inputs.");
+        builder.AppendLine("  - After you have the information you need, produce the final");
+        builder.AppendLine("    MigrationPlanV1 JSON object. Tool calls do not count as the plan.");
+        builder.AppendLine("  - You have a hard cap of 4 tool-call rounds. Prefer at most one or");
+        builder.AppendLine("    two well-chosen calls.");
+    }
+
+    private static void AppendGranularityExpectations(
+        StringBuilder builder, RepositoryAssessmentV1 assessment, ReadinessScoreV1 score)
+    {
+        var expectation = GranularityCalculator.Compute(assessment, score);
+        if (expectation.Buckets.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine();
+        builder.AppendLine("=== PLAN GRANULARITY EXPECTATIONS (per rule 20) ===");
+        builder.AppendLine("This assessment requires at LEAST " + expectation.MinimumWorkItems
+            + " workItems, drawn from the following buckets. Producing fewer, or");
+        builder.AppendLine("collapsing multiple buckets into a single \"setup\" work item, will fail");
+        builder.AppendLine("server validation with HTTP 422 planner.plan.underGranular.");
+        builder.AppendLine();
+        for (var i = 0; i < expectation.Buckets.Count; i++)
+        {
+            var b = expectation.Buckets[i];
+            builder.Append("  ").Append(i + 1).Append(". [").Append(b.Category).Append("] ")
+                .Append(b.Description);
+            if (b.EvidenceIds.Count > 0)
+            {
+                builder.Append("  (evidence: ").Append(string.Join(", ", b.EvidenceIds)).Append(')');
+            }
+            builder.AppendLine();
+        }
+        builder.AppendLine();
+        builder.AppendLine("Each workItem MUST cite the listed evidenceIds. If two buckets share");
+        builder.AppendLine("evidence, produce two separate work items with the same evidenceId(s).");
+    }
+
+    private static void AppendAllowedEvidenceIds(
+        StringBuilder builder, RepositoryAssessmentV1 assessment)
+    {
+        var ids = new SortedSet<string>(StringComparer.Ordinal);
+
+        foreach (var dep in assessment.Dependencies)
+        {
+            if (!string.IsNullOrWhiteSpace(dep.EvidenceId)) ids.Add(dep.EvidenceId);
+        }
+        foreach (var f in assessment.CodeFindings)
+        {
+            if (!string.IsNullOrWhiteSpace(f.EvidenceId)) ids.Add(f.EvidenceId);
+        }
+        if (!string.IsNullOrWhiteSpace(assessment.BuildFindings.EvidenceId))
+        {
+            ids.Add(assessment.BuildFindings.EvidenceId);
+        }
+        foreach (var u in assessment.Unknowns)
+        {
+            if (u.EvidenceIds is null) continue;
+            foreach (var eid in u.EvidenceIds)
+            {
+                if (!string.IsNullOrWhiteSpace(eid)) ids.Add(eid);
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine();
+        builder.AppendLine("=== ALLOWED evidenceId VALUES (per rule 6) ===");
+        builder.AppendLine("These are the ONLY evidenceIds that exist in this assessment. Any");
+        builder.AppendLine("plan citing an evidenceId not in this list will be rejected with HTTP");
+        builder.AppendLine("422 planner.plan.missingEvidence. Do NOT invent or guess; if no");
+        builder.AppendLine("evidence supports a field, use an empty evidenceIds array.");
+        builder.AppendLine();
+
+        if (ids.Count == 0)
+        {
+            builder.AppendLine("  (none)");
+            return;
+        }
+
+        foreach (var id in ids)
+        {
+            builder.Append("  - ").AppendLine(id);
+        }
     }
 
     private const string SystemPrompt = """
@@ -99,7 +321,8 @@ internal static class PlannerPromptBuilder
            reusableOutputs.
         3. Copy assessmentId, scoreDigest, and corpusVersion byte-for-byte
            from the input. schemaVersion is exactly "1.0". modelProvenance
-           always uses provider="foundry", name="phi-4", version="7.0.0".
+           MUST use the exact provider/name/version values supplied in the
+           "REQUIRED modelProvenance VALUES" section of the user prompt.
         4. recommendedPath is one of: native-arm64, arm64ec, staged, winui3,
            insufficient-evidence. confidence is one of: high, medium, low.
         5. RECOMMENDATION DISPATCH. Evaluate these in order and stop at the
@@ -184,6 +407,81 @@ internal static class PlannerPromptBuilder
             recommendedPath and whose "disposition" is "viable". Other
             considered paths appear alongside with disposition "rejected"
             or "deferred".
+        14. scoreInterpretation MUST paraphrase or lift verbatim the string
+            in deterministicScore.scoreSummary. That string is the
+            deterministic scorer's authoritative one-paragraph summary; do
+            not contradict it. You may add one or two sentences of
+            plain-language context, but do not invent conclusions the score
+            did not reach.
+        15. deterministicScore renamed its own confidence field to
+            "evidenceCompleteness" (with numeric "evidenceCompletenessScore"
+            in [0,1]). It measures how complete the input evidence is, NOT
+            how sure the recommendation is. The plan-level confidence you
+            emit is decided by step 5 above and is a separate value.
+        16. Skill honesty. workItems[].agentOrSkill MUST reference either a
+            name that appears in assessment.availableSkills[] OR a
+            proposedName you declare in plan.missingSkills[]. Never invent
+            skill names in workItems that are not in one of those two lists.
+            The server will reject with HTTP 422
+            planner.plan.missingSkill if any workItem cites an unknown
+            skill. When you need capabilities Feature 1 has not offered
+            yet (for example: dependency-management, ci-management,
+            packaging), declare each as a MissingSkill entry with purpose,
+            required inputs, expected outputs, justification, and
+            evidenceIds, and then cite the same proposedName from any
+            workItem that would use it.
+        17. Risk depth. Produce enough risks that a reviewer can act on
+            them. Concretely:
+              - At least one Risk per entry in
+                deterministicScore.majorBlockers (cite the same evidenceIds
+                the blocker points at).
+              - At least one Risk per required dependency with
+                architectureStatus == "emulation-only" or "blocked"
+                (evidenceIds should cite the dependency's evidenceId).
+              - Include severity and a concrete mitigation for each.
+              - Do not exceed 20 risks; consolidate related risks when the
+                mitigation is the same.
+        18. Alternative-level effort and risk. Each entry in alternatives[]
+            SHOULD include the optional "estimatedEffort" and "risk". If
+            included they MUST come from these closed sets exactly (no
+            other strings, no null):
+              estimatedEffort ∈ { "small", "medium", "large", "unknown" }
+              risk            ∈ { "low", "medium", "high", "critical" }
+            Same closed sets apply to workItems[].estimatedEffort and
+            workItems[].risk. Any other value fails schema validation and
+            the plan will be rejected.
+        19. Closed sets you MUST NOT drift from:
+              unknowns[].requiredSkill : either null OR a SkillReference
+                  matching ^[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$
+                  (kebab-case, optional "/" namespaces). Never a
+                  human-readable description like "Windows Experience
+                  Analysis" or a value with uppercase or spaces.
+              risks[].severity        ∈ { "low", "medium", "high", "critical" }
+              workItems[].priority    ∈ { "P0", "P1", "P2" }
+              alternatives[].disposition ∈ { "rejected", "deferred", "viable" }
+        20. workItem granularity. Prefer several focused work items over one
+            broad item. Aim for 4-10 workItems on moderate migrations, 2-4
+            on small ones, scaling with the assessment's blocker and
+            dependency counts. Produce, at minimum:
+              - one workItem per required dependency whose
+                architectureStatus is "blocked" or "emulation-only"; the
+                title MUST name the dep;
+              - one workItem per top-level build/CI/packaging change that
+                the score identifies (add-arm64-target, add-arm64-ci-job,
+                add-arm64-packaging, add-arm64-tests) — only for changes
+                the score's deductions actually surface;
+              - one workItem per critical code finding; the title MUST
+                name the ruleId and file.
+            Each workItem's objective MUST be 1-4 concrete sentences
+            naming what changes, in which files or configs, and what shape
+            the output takes. Each MUST include >= 1 input path drawn from
+            the assessment and >= 1 named expected output
+            (patch, workflow-yaml, wheel-build-recipe, packaging-manifest,
+            doc-page, test-file, etc.). Each MUST include >= 2
+            acceptanceTests with distinct expectedOutcomes (typically a
+            build check plus a functional check; add a perf or reliability
+            check when relevant). Do NOT combine multiple deps or multiple
+            file categories into a single "setup" work item.
 
         Reference: a valid MigrationPlanV1 looks EXACTLY like the JSON below.
         Only the field VALUES change per assessment; the KEYS and structure
@@ -226,14 +524,18 @@ internal static class PlannerPromptBuilder
               "disposition": "viable",
               "rationale": "Preferred: cheapest path for a managed .NET app with no x64-only native dependencies.",
               "evidenceIds": ["dep-example-01"],
-              "guidanceIds": ["add-arm-support-01"]
+              "guidanceIds": ["add-arm-support-01"],
+              "estimatedEffort": "small",
+              "risk": "low"
             },
             {
               "path": "arm64ec",
               "disposition": "rejected",
               "rationale": "Arm64EC only pays off when there is x64-only native code to preserve; this app has none.",
               "evidenceIds": ["dep-example-01"],
-              "guidanceIds": ["arm64ec-overview-01"]
+              "guidanceIds": ["arm64ec-overview-01"],
+              "estimatedEffort": "large",
+              "risk": "medium"
             }
           ],
           "workItems": [
@@ -241,8 +543,8 @@ internal static class PlannerPromptBuilder
               "id": "wi-add-arm64-target",
               "sequence": 1,
               "priority": "P0",
-              "title": "Add ARM64 configuration to the csproj",
-              "objective": "Add an ARM64 build configuration alongside the existing x64 target so the project produces native ARM64 binaries.",
+              "title": "Add ARM64 configuration to Example.csproj",
+              "objective": "Add an ARM64 PlatformTarget entry alongside the existing x64 target in src/Example/Example.csproj. Produce a patch that leaves the x64 configuration intact so both can be built side by side.",
               "agentOrSkill": "build/add-arm64-target",
               "inputs": ["src/Example/Example.csproj"],
               "expectedOutputs": ["patch"],
@@ -254,11 +556,100 @@ internal static class PlannerPromptBuilder
                   "id": "at-arm64-build-succeeds",
                   "description": "The ARM64/Release configuration builds without warnings.",
                   "expectedOutcome": "Zero MSBuild errors or warnings when building ARM64/Release."
+                },
+                {
+                  "id": "at-x64-build-still-succeeds",
+                  "description": "The existing x64 configuration still builds.",
+                  "expectedOutcome": "Zero MSBuild errors when building x64/Release."
                 }
               ],
               "approvalRequired": true,
               "estimatedEffort": "small",
               "risk": "low"
+            },
+            {
+              "id": "wi-add-arm64-ci-job",
+              "sequence": 2,
+              "priority": "P0",
+              "title": "Add windows-arm64 CI job to ci.yml",
+              "objective": "Add a windows-arm64 runner job to .github/workflows/ci.yml that mirrors the existing x64 job: restore, build ARM64/Release, run unit tests, and upload the arm64 binaries as an artifact.",
+              "agentOrSkill": "build/add-ci-job",
+              "inputs": [".github/workflows/ci.yml"],
+              "expectedOutputs": ["workflow-yaml"],
+              "dependencies": ["wi-add-arm64-target"],
+              "evidenceIds": ["build-example-01"],
+              "guidanceIds": ["add-arm-support-01"],
+              "acceptanceTests": [
+                {
+                  "id": "at-ci-arm64-job-passes",
+                  "description": "The new ARM64 CI job completes successfully.",
+                  "expectedOutcome": "GitHub Actions reports success for the windows-arm64 job on the main branch."
+                },
+                {
+                  "id": "at-ci-tests-run-on-arm64",
+                  "description": "Unit tests run under the ARM64 job.",
+                  "expectedOutcome": "Test summary shows non-zero passing tests and zero failures on ARM64."
+                }
+              ],
+              "approvalRequired": true,
+              "estimatedEffort": "medium",
+              "risk": "low"
+            },
+            {
+              "id": "wi-port-dep-example-native",
+              "sequence": 3,
+              "priority": "P1",
+              "title": "Port dep-example-native to ARM64 via source build",
+              "objective": "The dep-example-native package publishes only x64 binaries. Add a source-build recipe under scripts/build-deps/example-native/build.ps1 that compiles the ARM64 artifact from upstream sources, vendors it into the internal feed, and pins the version in the project's dependency manifest.",
+              "agentOrSkill": "dependency/source-build",
+              "inputs": ["scripts/build-deps/", "src/Example/Example.csproj"],
+              "expectedOutputs": ["build-recipe", "dependency-patch"],
+              "dependencies": [],
+              "evidenceIds": ["dep-example-01"],
+              "guidanceIds": ["add-arm-support-01"],
+              "acceptanceTests": [
+                {
+                  "id": "at-dep-built-arm64",
+                  "description": "The arm64 artifact for dep-example-native builds cleanly from source.",
+                  "expectedOutcome": "The build script produces an arm64-tagged artifact under the expected output directory."
+                },
+                {
+                  "id": "at-dep-loads-on-arm64",
+                  "description": "The app loads dep-example-native on an ARM64 device.",
+                  "expectedOutcome": "On startup, the process loads the arm64 artifact and completes initialization without a DllNotFoundException or BadImageFormatException."
+                }
+              ],
+              "approvalRequired": true,
+              "estimatedEffort": "large",
+              "risk": "high"
+            },
+            {
+              "id": "wi-add-arm64-packaging",
+              "sequence": 4,
+              "priority": "P2",
+              "title": "Produce ARM64 installer bundle",
+              "objective": "Extend the packaging under packaging/Product.wxs to emit an ARM64 payload alongside the existing x64 payload and produce a dual-arch bundle installer that selects the payload at install time based on the host machine architecture.",
+              "agentOrSkill": "packaging/add-arm64",
+              "inputs": ["packaging/Product.wxs", "packaging/Bundle.wxs"],
+              "expectedOutputs": ["packaging-patch", "installer-artifact"],
+              "dependencies": ["wi-add-arm64-target", "wi-port-dep-example-native"],
+              "evidenceIds": ["build-example-01"],
+              "guidanceIds": ["msix-arm64-packaging-01"],
+              "acceptanceTests": [
+                {
+                  "id": "at-installer-builds-dual-arch",
+                  "description": "The installer build produces a dual-arch bundle.",
+                  "expectedOutcome": "Packaging output contains both x64 and arm64 payloads inside a single bundle .exe."
+                },
+                {
+                  "id": "at-installer-runs-on-arm64",
+                  "description": "The bundle installs cleanly on an ARM64 device.",
+                  "expectedOutcome": "Install completes with exit code 0 on a Snapdragon X test device and the installed binary reports arm64 at runtime."
+                }
+              ],
+              "approvalRequired": true,
+              "estimatedEffort": "medium",
+              "risk": "medium"
             }
           ],
           "missingSkills": [
@@ -315,9 +706,14 @@ internal static class PlannerPromptBuilder
           ],
           "requiredApprovals": [
             {
-              "approvalId": "ap-build-changes",
-              "summary": "Human approval before modifying any project or CI files.",
-              "workItemIds": ["wi-add-arm64-target"]
+              "approvalId": "ap-build-and-ci-changes",
+              "summary": "Human approval before modifying project files, CI workflows, or packaging.",
+              "workItemIds": ["wi-add-arm64-target", "wi-add-arm64-ci-job", "wi-add-arm64-packaging"]
+            },
+            {
+              "approvalId": "ap-dependency-rebuild",
+              "summary": "Human approval before adding source-build recipes for third-party dependencies.",
+              "workItemIds": ["wi-port-dep-example-native"]
             }
           ],
           "reusableOutputs": [

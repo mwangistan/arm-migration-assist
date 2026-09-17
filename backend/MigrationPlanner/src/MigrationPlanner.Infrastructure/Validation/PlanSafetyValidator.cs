@@ -145,7 +145,62 @@ public sealed class PlanSafetyValidator : IPlanSafetyValidator
             return PlanSafetyResult.Fail(PlannerErrorCode.PlanGuidanceMissing, guidanceViolations.ToArray());
         }
 
+        var skillViolations = ValidateSkillCitations(plan, assessment);
+        if (skillViolations.Count > 0)
+        {
+            return PlanSafetyResult.Fail(PlannerErrorCode.PlanMissingSkill, skillViolations.ToArray());
+        }
+
+        var granularityViolations = ValidateWorkItemGranularity(plan, assessment, score);
+        if (granularityViolations.Count > 0)
+        {
+            return PlanSafetyResult.Fail(PlannerErrorCode.PlanUnderGranular, granularityViolations.ToArray());
+        }
+
         return PlanSafetyResult.Ok;
+    }
+
+    private static List<string> ValidateWorkItemGranularity(
+        MigrationPlanV1 plan, RepositoryAssessmentV1 assessment, ReadinessScoreV1 score)
+    {
+        var violations = new List<string>();
+
+        var recommendedPath = plan.AdditionalProperties is not null
+            && plan.AdditionalProperties.TryGetValue("recommendedPath", out var pathEl)
+            && pathEl.ValueKind == JsonValueKind.String
+                ? pathEl.GetString() ?? string.Empty
+                : string.Empty;
+        // insufficient-evidence plans intentionally have no workItems; skip the check.
+        if (string.Equals(recommendedPath, "insufficient-evidence", StringComparison.Ordinal))
+        {
+            return violations;
+        }
+
+        var expectation = Application.Planning.GranularityCalculator.Compute(assessment, score);
+        if (expectation.MinimumWorkItems == 0)
+        {
+            return violations;
+        }
+
+        var actualCount = 0;
+        if (plan.AdditionalProperties is not null
+            && plan.AdditionalProperties.TryGetValue("workItems", out var wiElement)
+            && wiElement.ValueKind == JsonValueKind.Array)
+        {
+            actualCount = wiElement.GetArrayLength();
+        }
+
+        if (actualCount < expectation.MinimumWorkItems)
+        {
+            var bucketSummary = string.Join(", ",
+                expectation.Buckets.Select(b => $"[{b.Category}] {b.Description}"));
+            violations.Add(
+                $"Plan has {actualCount} workItems but the assessment requires at least "
+                + $"{expectation.MinimumWorkItems} to cover: {bucketSummary}. Produce one work item "
+                + "per bucket; do not collapse multiple buckets into a single \"setup\" item.");
+        }
+
+        return violations;
     }
 
     private static List<string> ValidateTopLevelShape(MigrationPlanV1 plan)
@@ -299,6 +354,61 @@ public sealed class PlanSafetyValidator : IPlanSafetyValidator
             }
         }
         return ids;
+    }
+
+    private static List<string> ValidateSkillCitations(MigrationPlanV1 plan, RepositoryAssessmentV1 assessment)
+    {
+        var violations = new List<string>();
+
+        var available = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in assessment.AvailableSkills)
+        {
+            if (!string.IsNullOrEmpty(s.Name)) available.Add(s.Name);
+        }
+
+        var declaredMissing = new HashSet<string>(StringComparer.Ordinal);
+        if (plan.AdditionalProperties is not null &&
+            plan.AdditionalProperties.TryGetValue("missingSkills", out var missingElement) &&
+            missingElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var entry in missingElement.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object) continue;
+                if (entry.TryGetProperty("proposedName", out var proposedName)
+                    && proposedName.ValueKind == JsonValueKind.String)
+                {
+                    var name = proposedName.GetString();
+                    if (!string.IsNullOrEmpty(name)) declaredMissing.Add(name);
+                }
+            }
+        }
+
+        if (plan.AdditionalProperties is null ||
+            !plan.AdditionalProperties.TryGetValue("workItems", out var workItemsElement) ||
+            workItemsElement.ValueKind != JsonValueKind.Array)
+        {
+            return violations;
+        }
+
+        var idx = 0;
+        foreach (var wi in workItemsElement.EnumerateArray())
+        {
+            if (wi.ValueKind != JsonValueKind.Object) { idx++; continue; }
+            if (wi.TryGetProperty("agentOrSkill", out var skillElement)
+                && skillElement.ValueKind == JsonValueKind.String)
+            {
+                var skill = skillElement.GetString() ?? string.Empty;
+                if (!available.Contains(skill) && !declaredMissing.Contains(skill))
+                {
+                    violations.Add(
+                        $"Plan workItems[{idx}].agentOrSkill '{skill}' is not in assessment.availableSkills and is not declared in plan.missingSkills. "
+                        + "Add the skill to missingSkills[] or cite an available skill.");
+                }
+            }
+            idx++;
+        }
+
+        return violations;
     }
 
     private static IEnumerable<(string Owner, string Value)> CollectStringArray(MigrationPlanV1 plan, string arrayName)

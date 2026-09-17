@@ -71,6 +71,10 @@
     .pill.high { border-color: var(--accent-2); color: var(--accent-2); }
     .pill.medium { border-color: var(--warn); color: var(--warn); }
     .pill.low { border-color: var(--err); color: var(--err); }
+    .pill.ready-or-minor-changes { border-color: var(--accent-2); color: var(--accent-2); }
+    .pill.moderate-migration { border-color: var(--accent); color: var(--accent); }
+    .pill.significant-remediation { border-color: var(--warn); color: var(--warn); }
+    .pill.blocked-or-major-redesign { border-color: var(--err); color: var(--err); }
 
     .card { background: var(--panel-2); border: 1px solid var(--border);
       border-radius: 6px; padding: 14px; margin-top: 10px; }
@@ -241,6 +245,12 @@
         const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
         if (!res.ok) {
           const problem = await res.json().catch(() => ({}));
+          if (res.status === 429) {
+            const retryAfter = parseInt(res.headers.get("Retry-After") || "30", 10);
+            renderRateLimited(problem, elapsed, retryAfter);
+            setStatus(`Rate-limited upstream. Retry in ${retryAfter}s.`, "err");
+            return;
+          }
           renderError(problem, res.status, elapsed);
           setStatus(`Failed after ${elapsed}s.`, "err");
           return;
@@ -259,6 +269,23 @@
     function setStatus(text, cls) {
       $status.className = "status" + (cls ? " " + cls : "");
       $status.textContent = text;
+    }
+
+    function renderRateLimited(problem, elapsed, retryAfterSeconds) {
+      $output.innerHTML = `
+        <div class="card">
+          <h3 style="color: var(--warn);">Upstream rate limit reached</h3>
+          <p>The Phi-4 deployment is throttling requests. Wait about
+             <b>${retryAfterSeconds} seconds</b> and try again.</p>
+          <div class="kv">
+            <div class="k">HTTP</div><div class="v">429</div>
+            <div class="k">Elapsed</div><div class="v">${elapsed}s</div>
+            <div class="k">Code</div><div class="v"><code class="inline">${escapeHtml(problem.code ?? "planner.model.rateLimited")}</code></div>
+            <div class="k">Retry-After</div><div class="v">${retryAfterSeconds}s</div>
+          </div>
+          <p class="meta" style="margin-top: 10px;">Tip: The API caches validated plans by scoreDigest for 1 hour,
+             so repeat submissions of the same assessment do not consume additional Phi quota.</p>
+        </div>`;
     }
 
     function renderError(problem, http, elapsed) {
@@ -286,6 +313,7 @@
       const conf = plan.confidence ?? "(unknown)";
       const summary = plan.executiveSummary ?? "";
       const interp = plan.scoreInterpretation ?? "";
+      const scoreSummary = score?.scoreSummary ?? "";
       const facts = plan.facts ?? [];
       const workItems = plan.workItems ?? [];
       const alternatives = plan.alternatives ?? [];
@@ -293,9 +321,22 @@
       const risks = plan.risks ?? [];
       const unknowns = plan.unknowns ?? [];
 
+      const pathTitle = pathDescription(path);
+      const overall = score?.overallScore;
+      const uncapped = score?.uncappedScore;
+      const band = score?.band ?? "(unknown)";
+      const evComp = score?.evidenceCompleteness ?? "(unknown)";
+      const evCompScore = typeof score?.evidenceCompletenessScore === "number"
+        ? score.evidenceCompletenessScore.toFixed(2) : "?";
+      const overallCell = (typeof overall === "number")
+        ? `<b>${overall}</b>/100${uncapped !== overall ? ` <span class="empty">(uncapped ${uncapped})</span>` : ""}`
+        : "(unknown)";
+
       const headerKv = [
-        ["Recommended path", `<span class="pill ${escapeHtml(path)}">${escapeHtml(path)}</span>`],
-        ["Confidence",       `<span class="pill ${escapeHtml(conf)}">${escapeHtml(conf)}</span>`],
+        ["Recommended path", `<span class="pill ${escapeHtml(path)}" title="${escapeHtml(pathTitle)}">${escapeHtml(path)}</span>`],
+        ["Recommendation confidence", `<span class="pill ${escapeHtml(conf)}" title="How sure the planner is about the recommended path.">${escapeHtml(conf)}</span>`],
+        ["Overall score",    `${overallCell} &nbsp; <span class="pill" title="Banded readiness bucket derived from the overall score.">${escapeHtml(band)}</span>`],
+        ["Evidence completeness", `<span class="pill ${escapeHtml(evComp)}" title="How complete the assessment evidence is (independent of the recommendation).">${escapeHtml(evComp)}</span> <span class="empty">(${evCompScore})</span>`],
         ["Elapsed",          `${elapsed}s`],
         ["runId",            `<code class="inline">${escapeHtml(runId)}</code>`],
         ["Model",            `<code class="inline">${escapeHtml(plan.modelProvenance?.provider ?? "?")}/${escapeHtml(plan.modelProvenance?.name ?? "?")}</code>`],
@@ -316,7 +357,10 @@
         : `<li class="empty">(none)</li>`;
 
       const altList = alternatives.length
-        ? alternatives.map(a => `<li><span class="pill ${escapeHtml(a.path)}">${escapeHtml(a.path)}</span> &mdash; <b>${escapeHtml(a.disposition)}</b>: ${escapeHtml(a.rationale ?? "")}</li>`).join("")
+        ? alternatives.map(a => {
+            const badges = alternativeBadges(a, workItems, path);
+            return `<li><span class="pill ${escapeHtml(a.path)}">${escapeHtml(a.path)}</span> &mdash; <b>${escapeHtml(a.disposition)}</b>${badges}: ${escapeHtml(a.rationale ?? "")}</li>`;
+          }).join("")
         : `<li class="empty">(none)</li>`;
 
       const guidanceTags = citedGuidance.length
@@ -324,7 +368,7 @@
         : `<span class="empty">(none)</span>`;
 
       const warnHtml = (warnings && warnings.length)
-        ? `<div class="card"><h3 style="color: var(--warn);">Warnings</h3><ul>${warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("")}</ul></div>`
+        ? `<div class="card"><h3 style="color: ${warnings.some(w => w.startsWith("Cache hit:")) ? "var(--accent-2)" : "var(--warn)"};">${warnings.some(w => w.startsWith("Cache hit:")) ? "Cache" : "Warnings"}</h3><ul>${warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("")}</ul></div>`
         : "";
 
       $output.innerHTML = `
@@ -333,7 +377,24 @@
           <div class="kv">
             ${headerKv.map(([k,v]) => `<div class="k">${k}</div><div class="v">${v}</div>`).join("")}
           </div>
+          <details style="margin-top: 12px;">
+            <summary>What do these recommended paths mean?</summary>
+            <div class="kv" style="grid-template-columns: 180px 1fr; margin-top: 8px;">
+              <div class="k"><span class="pill native-arm64">native-arm64</span></div>
+              <div class="v">Build and ship the app as a pure ARM64 binary. Fastest, cleanest end state. Requires every required dependency to have an ARM64 build or a replacement.</div>
+              <div class="k"><span class="pill arm64ec">arm64ec</span></div>
+              <div class="v">Arm64EC — a hybrid binary format where ARM64 code runs natively and x64-only native code (COM, plugins, legacy DLLs) runs alongside under emulation but stays callable. Use when there is <em>compiled</em> x64-only code that must stay reachable and cannot be rebuilt. Windows 11 22H2+ toolchain.</div>
+              <div class="k"><span class="pill staged">staged</span></div>
+              <div class="v">Migrate incrementally. Ship the app running under x64 emulation on ARM64 today for time-to-value, then port the remaining emulation-only dependencies one at a time. Used when the blockers are surmountable but need work spread over time (e.g. Python apps with a handful of native wheels that lack ARM64 builds).</div>
+              <div class="k"><span class="pill winui3">winui3</span></div>
+              <div class="v">Modernize the UI to WinUI 3 as part of the ARM64 story. Recommended when the legacy UI stack (WinForms, WPF) is also holding back the Windows experience, so the ARM64 port doubles as UI modernization.</div>
+              <div class="k"><span class="pill insufficient-evidence">insufficient-evidence</span></div>
+              <div class="v">Assessment coverage is too low to place a numeric band. Rerun the scanner with broader coverage before acting.</div>
+            </div>
+          </details>
         </div>
+
+        ${scoreSummary ? `<div class="card"><h3>Deterministic score summary</h3><p>${escapeHtml(scoreSummary)}</p></div>` : ""}
 
         <div class="card">
           <h3>Executive summary</h3>
@@ -384,6 +445,43 @@
       push(plan.facts); push(plan.inferences); push(plan.alternatives);
       push(plan.workItems);
       return [...set];
+    }
+
+    function pathDescription(path) {
+      switch (path) {
+        case "native-arm64":
+          return "Build the app as pure ARM64. Fastest end state; requires every required dependency to have ARM64 support.";
+        case "arm64ec":
+          return "Arm64EC hybrid binary: ARM64 code runs natively; x64-only native code (COM, plugins, legacy DLLs) stays callable under emulation. Use when compiled x64-only code must stay reachable.";
+        case "staged":
+          return "Migrate incrementally: ship under x64 emulation now, then port emulation-only dependencies over time. Used when blockers are surmountable but need work spread out.";
+        case "winui3":
+          return "Modernize the UI to WinUI 3 as part of the ARM64 story. Recommended when the legacy UI stack is also holding the Windows experience back.";
+        case "insufficient-evidence":
+          return "Assessment coverage was too low to place a numeric band. Rerun the scanner with broader coverage before acting.";
+        default:
+          return "";
+      }
+    }
+
+    function alternativeBadges(alt, workItems, recommendedPath) {
+      const parts = [];
+      if (alt.estimatedEffort) {
+        parts.push(`<span class="tag" title="Effort to execute this alternative end-to-end">effort ${escapeHtml(alt.estimatedEffort)}</span>`);
+      }
+      if (alt.risk) {
+        parts.push(`<span class="tag" title="Overall risk of this alternative">risk ${escapeHtml(alt.risk)}</span>`);
+      }
+      if (alt.path === recommendedPath && Array.isArray(workItems) && workItems.length > 0) {
+        const buckets = {};
+        for (const w of workItems) {
+          const e = (w && w.estimatedEffort) ? w.estimatedEffort : "unknown";
+          buckets[e] = (buckets[e] || 0) + 1;
+        }
+        const summary = Object.keys(buckets).sort().map(k => `${buckets[k]} ${k}`).join(", ");
+        parts.push(`<span class="tag" title="Aggregated from workItems for the recommended path">work: ${escapeHtml(summary)}</span>`);
+      }
+      return parts.length ? ` ${parts.join(" ")}` : "";
     }
 
     function escapeHtml(s) {

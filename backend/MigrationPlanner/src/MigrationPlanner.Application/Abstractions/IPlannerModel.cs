@@ -22,7 +22,7 @@ public interface IPlannerModel
     /// should surface it in the prompt so the model can produce a corrected
     /// plan.
     /// </summary>
-    Task<string> GeneratePlanJsonAsync(
+    Task<PlannerModelResult> GeneratePlanJsonAsync(
         RepositoryAssessmentV1 assessment,
         ReadinessScoreV1 score,
         IGuidanceLookup guidanceLookup,
