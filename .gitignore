@@ -24,6 +24,9 @@ publish-path.txt
 artifacts/
 output/
 
+# Deployment scaffolding (kept local, not tracked in GitHub)
+infra/
+
 # Component-detection tool (downloaded, ~80 MB - do not commit). See tools/README.md.
 tools/component-detection*
 tools/_extract/
