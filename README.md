@@ -81,3 +81,10 @@ The product follows the six stages in the spec:
 Keep the boundaries simple: assessment produces facts with file evidence, the planner
 scores and recommends, automated migration produces reviewable patches, and validation
 records measured build/test outcomes.
+
+Feature 4 can use an approved Azure Foundry chat-model deployment for validation
+planning, evidence diagnosis, and coverage review. Deterministic command evidence
+remains authoritative; model configuration is supplied through environment variables.
+
+Feature 4's approval-gated local validation CLI, injectable AI workflow, and
+dashboard read model are documented in [backend/Validation/README.md](backend/Validation/README.md).
