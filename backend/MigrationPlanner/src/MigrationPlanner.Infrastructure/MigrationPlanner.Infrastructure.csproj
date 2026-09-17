@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>MigrationPlanner.Infrastructure</RootNamespace>
+    <AssemblyName>MigrationPlanner.Infrastructure</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MigrationPlanner.Application\MigrationPlanner.Application.csproj" />
+    <ProjectReference Include="..\MigrationPlanner.Domain\MigrationPlanner.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.AI.Inference" />
+    <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="JsonSchema.Net" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\contracts\RepositoryAssessmentV1.schema.json">
+      <Link>Resources\RepositoryAssessmentV1.schema.json</Link>
+      <LogicalName>MigrationPlanner.Infrastructure.Resources.RepositoryAssessmentV1.schema.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\contracts\MigrationPlanV1.schema.json">
+      <Link>Resources\MigrationPlanV1.schema.json</Link>
+      <LogicalName>MigrationPlanner.Infrastructure.Resources.MigrationPlanV1.schema.json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>MigrationPlanner.Api</RootNamespace>
+    <AssemblyName>MigrationPlanner.Api</AssemblyName>
+    <UserSecretsId>migrationplanner-api-4a2c-45ee-9c3b-000000000001</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MigrationPlanner.Application\MigrationPlanner.Application.csproj" />
+    <ProjectReference Include="..\MigrationPlanner.Domain\MigrationPlanner.Domain.csproj" />
+    <ProjectReference Include="..\MigrationPlanner.Infrastructure\MigrationPlanner.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MigrationPlanner.Tests.Integration" />
+  </ItemGroup>
+</Project>

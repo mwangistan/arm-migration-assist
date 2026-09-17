@@ -22,3 +22,18 @@ output/
 # OS
 Thumbs.db
 .DS_Store
+
+# Office documents
+*.docx
+*.pptx
+
+# Local test scratch & storage emulator artifacts
+tmp/
+AzuriteConfig
+__azurite_db_*.json
+__azurite_db_*__.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

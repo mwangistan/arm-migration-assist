@@ -1,0 +1,98 @@
+name: infra
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/infra.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/**'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'what-if (dry run) or deploy'
+        required: true
+        default: what-if
+        type: choice
+        options:
+          - what-if
+          - deploy
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write   # to post what-if summary on PRs
+
+concurrency:
+  group: infra-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  AZURE_LOCATION:       ${{ vars.AZURE_LOCATION }}
+  BICEP_FILE:           infra/main.bicep
+  PARAM_FILE:           infra/main.parameters.json
+
+jobs:
+  what-if:
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'what-if')
+    name: What-if
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: az deployment group what-if
+        run: |
+          az deployment group what-if \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file "$BICEP_FILE" \
+            --parameters "$PARAM_FILE" \
+            --parameters location="$AZURE_LOCATION"
+
+  deploy:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Ensure resource group
+        run: |
+          az group create \
+            --name "$AZURE_RESOURCE_GROUP" \
+            --location "$AZURE_LOCATION" \
+            --output none
+      - name: az deployment group create
+        id: deploy
+        run: |
+          az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "planner-$(date +%Y%m%d-%H%M%S)" \
+            --template-file "$BICEP_FILE" \
+            --parameters "$PARAM_FILE" \
+            --parameters location="$AZURE_LOCATION" \
+            --query "properties.outputs" \
+            --output json > outputs.json
+          cat outputs.json
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Infra deployment"
+            echo ""
+            echo "\`\`\`json"
+            cat outputs.json 2>/dev/null || echo "{}"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
