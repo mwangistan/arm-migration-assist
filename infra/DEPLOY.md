@@ -40,6 +40,7 @@ $rg         = "rg-arm-migration-assist"
 $acr        = "acrarmmigassist"
 $imageTag   = "v1"
 $image      = "arm-migration-assessment-api:$imageTag"
+$planner    = "https://ca-arm-migration-planner-api.delightfulcliff-b520a3d2.eastus2.azurecontainerapps.io"
 $createdBy  = "schisiya@microsoft.com"                 # edit to your identity (policy tag)
 
 az login
@@ -55,12 +56,12 @@ az acr build --registry $acr --image $image backend/Assessment
 # 2. Preview the backend changes (best practice).
 az deployment group what-if `
   --resource-group $rg --template-file infra/backend.bicep `
-  --parameters createdBy=$createdBy imageTag=$imageTag
+  --parameters migrationPlannerBaseUrl=$planner createdBy=$createdBy imageTag=$imageTag
 
 # 3. Deploy the backend Container App.
 az deployment group create `
   --resource-group $rg --name feature1-backend --template-file infra/backend.bicep `
-  --parameters createdBy=$createdBy imageTag=$imageTag
+  --parameters migrationPlannerBaseUrl=$planner createdBy=$createdBy imageTag=$imageTag
 
 # 4. Capture the backend URL.
 $backendUrl = az deployment group show -g $rg -n feature1-backend --query properties.outputs.backendUrl.value -o tsv
@@ -116,3 +117,5 @@ Start-Process $swaUrl
 - **Rebuilding the backend:** `.\infra\deploy-backend.ps1 -ImageTag v2` (build + deploy in one step).
 - **ACR auth:** the app pulls via a user-assigned managed identity (`id-ca-arm-migration-assessment-api`)
   granted `AcrPull`, so no registry credentials are stored anywhere.
+- **Planner dependency:** the backend requires `MigrationPlanner__BaseUrl` at startup; it is wired to
+  the existing `ca-arm-migration-planner-api` app.

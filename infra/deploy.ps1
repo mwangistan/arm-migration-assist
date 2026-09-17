@@ -24,6 +24,7 @@ param(
     [string] $ResourceGroup  = 'rg-arm-migration-assist',
     [string] $Acr            = 'acrarmmigassist',
     [string] $ImageTag       = 'v1',
+    [string] $PlannerBaseUrl = 'https://ca-arm-migration-planner-api.delightfulcliff-b520a3d2.eastus2.azurecontainerapps.io',
     [string] $CreatedBy      = 'schisiya@microsoft.com',
 
     [switch] $SkipBackend,
@@ -53,7 +54,7 @@ Invoke-Az account set --subscription $SubscriptionId | Out-Null
 if (-not $SkipBackend) {
     Write-Step "BACKEND"
     & $BackendScript -SubscriptionId $SubscriptionId -ResourceGroup $ResourceGroup `
-        -Acr $Acr -ImageTag $ImageTag -CreatedBy $CreatedBy `
+        -Acr $Acr -ImageTag $ImageTag -PlannerBaseUrl $PlannerBaseUrl -CreatedBy $CreatedBy `
         -SkipBuild:$SkipBuild | Out-Host
 } else {
     Write-Host "Skipping backend." -ForegroundColor DarkGray

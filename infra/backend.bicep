@@ -35,6 +35,9 @@ param acrName string = 'acrarmmigassist'
 @description('Container image tag to deploy (built and pushed by az acr build).')
 param imageTag string = 'latest'
 
+@description('Absolute HTTPS base URL of the Feature 2 migration planner API (required by the backend at startup).')
+param migrationPlannerBaseUrl string
+
 @description('Allowed CORS origin for the frontend (the Static Web App URL). Empty until the SWA hostname is known.')
 param frontendOrigin string = ''
 
@@ -83,11 +86,16 @@ resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 
 // ---- backend Container App ---------------------------------------------------
 // Environment variables use the ASP.NET Core '__' convention for nested config
-// keys (FrontendOrigins[0] -> FrontendOrigins__0).
+// keys (MigrationPlanner:BaseUrl -> MigrationPlanner__BaseUrl,
+// FrontendOrigins[0] -> FrontendOrigins__0).
 var baseEnv = [
   {
     name: 'ASPNETCORE_ENVIRONMENT'
     value: 'Production'
+  }
+  {
+    name: 'MigrationPlanner__BaseUrl'
+    value: migrationPlannerBaseUrl
   }
   {
     name: 'ARM_MIGRATION_WORKSPACE_ROOT'

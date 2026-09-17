@@ -21,6 +21,7 @@ param(
     [string] $ResourceGroup  = 'rg-arm-migration-assist',
     [string] $Acr            = 'acrarmmigassist',
     [string] $ImageTag       = 'v1',
+    [string] $PlannerBaseUrl = 'https://ca-arm-migration-planner-api.delightfulcliff-b520a3d2.eastus2.azurecontainerapps.io',
     [string] $CreatedBy      = 'schisiya@microsoft.com',
     [string] $BackendAppName = 'ca-arm-migration-assessment-api',
     [string] $DeploymentName = 'feature1-backend',
@@ -64,7 +65,7 @@ Write-Step "Deploying backend.bicep"
 $deployArgs = @(
     'deployment', 'group', 'create',
     '--resource-group', $ResourceGroup, '--name', $DeploymentName, '--template-file', $BicepFile,
-    '--parameters', "createdBy=$CreatedBy",
+    '--parameters', "migrationPlannerBaseUrl=$PlannerBaseUrl", "createdBy=$CreatedBy",
     "imageTag=$ImageTag", "backendAppName=$BackendAppName"
 )
 if ($FrontendOrigin) { $deployArgs += "frontendOrigin=$FrontendOrigin" }
