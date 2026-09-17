@@ -12,10 +12,11 @@ public interface IPlanCache
 {
     bool TryGet(string scoreDigest, out CachedPlan? cached);
 
-    void Store(string scoreDigest, MigrationPlanV1 plan, ReadinessScoreV1 score);
+    void Store(string scoreDigest, MigrationPlanV1 plan, ReadinessScoreV1 score, IReadOnlyList<string> observations);
 }
 
 public sealed record CachedPlan(
     MigrationPlanV1 Plan,
     ReadinessScoreV1 Score,
-    DateTimeOffset StoredAt);
+    DateTimeOffset StoredAt,
+    IReadOnlyList<string> Observations);

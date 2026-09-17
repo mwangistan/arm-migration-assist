@@ -143,6 +143,124 @@ public sealed class PlanSafetyValidatorTests
         result.IsSafe.Should().BeTrue(result.Violations.Any() ? result.Violations[0] : "");
     }
 
+    [Fact]
+    public void WorkItemInputNotInSkillSupportedInputs_ReturnsSkillIoMismatchError()
+    {
+        var (assessment, score, plan) = BuildValidCase(
+            workItemSkill: "build/add-arm64-target",
+            availableSkill: new Skill(
+                Name: "build/add-arm64-target",
+                Version: "0.1.0",
+                Description: "Adds ARM64 targets.",
+                WriteAccess: true,
+                SupportedInputs: new[] { "csproj" },
+                SupportedOutputs: new[] { "patch" }),
+            workItemInput: "input",
+            workItemOutput: "patch",
+            approveWorkItem: true);
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanSkillIoMismatch);
+        result.Violations.Should().ContainMatch("*input*");
+        result.Violations.Should().ContainMatch("*build/add-arm64-target*");
+    }
+
+    [Fact]
+    public void WorkItemOutputNotInSkillSupportedOutputs_ReturnsSkillIoMismatchError()
+    {
+        var (assessment, score, plan) = BuildValidCase(
+            workItemSkill: "build/add-arm64-target",
+            availableSkill: new Skill(
+                Name: "build/add-arm64-target",
+                Version: "0.1.0",
+                Description: "Adds ARM64 targets.",
+                WriteAccess: true,
+                SupportedInputs: new[] { "csproj" },
+                SupportedOutputs: new[] { "patch" }),
+            workItemInput: "csproj",
+            workItemOutput: "artifact",
+            approveWorkItem: true);
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanSkillIoMismatch);
+        result.Violations.Should().ContainMatch("*artifact*");
+    }
+
+    [Fact]
+    public void WorkItemIoMatchesSkill_Passes()
+    {
+        var (assessment, score, plan) = BuildValidCase(
+            workItemSkill: "build/add-arm64-target",
+            availableSkill: new Skill(
+                Name: "build/add-arm64-target",
+                Version: "0.1.0",
+                Description: "Adds ARM64 targets.",
+                WriteAccess: true,
+                SupportedInputs: new[] { "csproj" },
+                SupportedOutputs: new[] { "patch" }),
+            workItemInput: "csproj",
+            workItemOutput: "patch",
+            approveWorkItem: true);
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeTrue(result.Violations.Any() ? result.Violations[0] : "");
+    }
+
+    [Fact]
+    public void WriteCapableWorkItemWithoutApproval_ReturnsApprovalMissingError()
+    {
+        var (assessment, score, plan) = BuildValidCase(
+            workItemSkill: "build/add-arm64-target",
+            availableSkill: new Skill(
+                Name: "build/add-arm64-target",
+                Version: "0.1.0",
+                Description: "Adds ARM64 targets.",
+                WriteAccess: true,
+                SupportedInputs: new[] { "csproj" },
+                SupportedOutputs: new[] { "patch" }),
+            workItemInput: "csproj",
+            workItemOutput: "patch",
+            approveWorkItem: false);
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanApprovalMissing);
+        result.Violations.Should().ContainMatch("*wi-test-item*");
+        result.Violations.Should().ContainMatch("*build/add-arm64-target*");
+    }
+
+    [Fact]
+    public void ReadOnlySkillDoesNotRequireApproval_Passes()
+    {
+        var (assessment, score, plan) = BuildValidCase(
+            workItemSkill: "assessment/dependency-scan",
+            availableSkill: new Skill(
+                Name: "assessment/dependency-scan",
+                Version: "0.1.0",
+                Description: "Scans dependencies.",
+                WriteAccess: false,
+                SupportedInputs: new[] { "repository" },
+                SupportedOutputs: new[] { "dependency-findings" }),
+            workItemInput: "repository",
+            workItemOutput: "dependency-findings",
+            approveWorkItem: false);
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeTrue(result.Violations.Any() ? result.Violations[0] : "");
+    }
+
     private static PlanSafetyValidator BuildValidator() =>
         new(new EmptyGuidanceStore());
 
@@ -154,13 +272,21 @@ public sealed class PlanSafetyValidatorTests
         string? unsafeText = null,
         string? recommendedPathOverride = null,
         string? workItemSkill = null,
-        string? declaredMissingSkill = null)
+        string? declaredMissingSkill = null,
+        Skill? availableSkill = null,
+        string workItemInput = "input",
+        string workItemOutput = "output",
+        bool approveWorkItem = false)
     {
         var deps = new[]
         {
             ScoringAssessmentBuilder.Dep("dep-known", "Sample.Utilities"),
         };
         var assessment = ScoringAssessmentBuilder.Ready(dependencies: deps);
+        if (availableSkill is not null)
+        {
+            assessment = assessment with { AvailableSkills = new[] { availableSkill } };
+        }
         var score = Scorer.Score(assessment);
         var digest = digestOverride
             ?? MigrationPlanner.Domain.Plan.ScoreDigest.Compute(score);
@@ -215,8 +341,8 @@ public sealed class PlanSafetyValidatorTests
                         title = "Test item",
                         objective = "Exercise skill validation",
                         agentOrSkill = workItemSkill,
-                        inputs = new[] { "input" },
-                        expectedOutputs = new[] { "output" },
+                        inputs = new[] { workItemInput },
+                        expectedOutputs = new[] { workItemOutput },
                         dependencies = Array.Empty<string>(),
                         evidenceIds = new[] { "dep-known" },
                         guidanceIds = Array.Empty<string>(),
@@ -242,8 +368,8 @@ public sealed class PlanSafetyValidatorTests
                     {
                         proposedName = declaredMissingSkill,
                         purpose = "Test missing skill",
-                        requiredInputs = new[] { "input" },
-                        expectedOutputs = new[] { "output" },
+                        requiredInputs = new[] { workItemInput },
+                        expectedOutputs = new[] { workItemOutput },
                         justification = "Not offered by Feature 1 yet.",
                         evidenceIds = Array.Empty<string>(),
                     },
@@ -251,7 +377,17 @@ public sealed class PlanSafetyValidatorTests
             ["validationPlan"] = new { objectives = Array.Empty<object>(), checks = Array.Empty<object>() },
             ["risks"] = Array.Empty<object>(),
             ["unknowns"] = Array.Empty<object>(),
-            ["requiredApprovals"] = Array.Empty<object>(),
+            ["requiredApprovals"] = approveWorkItem
+                ? (object)new[]
+                {
+                    new
+                    {
+                        approvalId = "ap-test",
+                        summary = "Approve write-capable work items.",
+                        workItemIds = new[] { "wi-test-item" },
+                    },
+                }
+                : Array.Empty<object>(),
             ["reusableOutputs"] = Array.Empty<object>(),
         };
 

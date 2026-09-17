@@ -59,9 +59,10 @@ public sealed class HostedPlannerModel : IPlannerModel
 
         var systemPrompt = PlannerPromptBuilder.BuildSystemPrompt();
         var provenance = new PlannerProvenance(_options.ProvenanceProvider, _options.ProvenanceName, _options.ProvenanceVersion);
+        var toolsEnabled = _options.EnableGuidanceLookupTool && retryHint is null;
         var userPrompt = PlannerPromptBuilder.BuildUserPrompt(
             assessment, score, guidanceLookup, provenance, retryHint,
-            enableGuidanceLookupTool: _options.EnableGuidanceLookupTool);
+            enableGuidanceLookupTool: toolsEnabled);
 
         var options = new ChatCompletionsOptions
         {
@@ -73,7 +74,7 @@ public sealed class HostedPlannerModel : IPlannerModel
         options.Messages.Add(new ChatRequestSystemMessage(systemPrompt));
         options.Messages.Add(new ChatRequestUserMessage(userPrompt));
 
-        if (_options.EnableGuidanceLookupTool)
+        if (toolsEnabled)
         {
             options.Tools.Add(BuildGuidanceLookupToolDefinition());
         }

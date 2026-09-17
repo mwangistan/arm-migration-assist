@@ -26,6 +26,8 @@ public static class PlannerErrorCode
     public const string PlanEvidenceMissing = "planner.plan.missingEvidence";
     public const string PlanGuidanceMissing = "planner.plan.missingGuidance";
     public const string PlanMissingSkill = "planner.plan.missingSkill";
+    public const string PlanSkillIoMismatch = "planner.plan.skillIoMismatch";
+    public const string PlanApprovalMissing = "planner.plan.missingApproval";
     public const string PlanUnderGranular = "planner.plan.underGranular";
     public const string Internal = "planner.internal";
 }

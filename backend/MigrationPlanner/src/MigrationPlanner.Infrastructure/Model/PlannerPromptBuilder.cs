@@ -212,9 +212,10 @@ internal static class PlannerPromptBuilder
         builder.AppendLine("  { \"topic\": \"arm64ec\" | \"arm64-target\" | \"packaging\" | ...}");
         builder.AppendLine();
         builder.AppendLine("Rules:");
-        builder.AppendLine("  - Only call the tool if you actually need the snippet body to write");
-        builder.AppendLine("    a defensible executiveSummary, scoreInterpretation, or risk. If");
-        builder.AppendLine("    the guidanceIndex summary is enough, cite the id directly.");
+        builder.AppendLine("  - Prefer calling this tool AT LEAST ONCE for the highest-priority");
+        builder.AppendLine("    guidance you plan to cite (e.g. the snippet you will lean on for");
+        builder.AppendLine("    executiveSummary or the top risk). Reading the body catches");
+        builder.AppendLine("    nuance the one-line summary misses.");
         builder.AppendLine("  - Do NOT invent guidanceIds. Only ids in the guidanceIndex are");
         builder.AppendLine("    valid tool inputs.");
         builder.AppendLine("  - After you have the information you need, produce the final");

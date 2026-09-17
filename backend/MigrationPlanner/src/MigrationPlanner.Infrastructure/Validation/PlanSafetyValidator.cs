@@ -151,6 +151,18 @@ public sealed class PlanSafetyValidator : IPlanSafetyValidator
             return PlanSafetyResult.Fail(PlannerErrorCode.PlanMissingSkill, skillViolations.ToArray());
         }
 
+        var skillIoViolations = ValidateSkillIo(plan, assessment);
+        if (skillIoViolations.Count > 0)
+        {
+            return PlanSafetyResult.Fail(PlannerErrorCode.PlanSkillIoMismatch, skillIoViolations.ToArray());
+        }
+
+        var approvalViolations = ValidateWriteSkillApprovals(plan, assessment);
+        if (approvalViolations.Count > 0)
+        {
+            return PlanSafetyResult.Fail(PlannerErrorCode.PlanApprovalMissing, approvalViolations.ToArray());
+        }
+
         var granularityViolations = ValidateWorkItemGranularity(plan, assessment, score);
         if (granularityViolations.Count > 0)
         {
@@ -409,6 +421,186 @@ public sealed class PlanSafetyValidator : IPlanSafetyValidator
         }
 
         return violations;
+    }
+
+    private static List<string> ValidateSkillIo(MigrationPlanV1 plan, RepositoryAssessmentV1 assessment)
+    {
+        var violations = new List<string>();
+
+        var availableIo = new Dictionary<string, (HashSet<string> Inputs, HashSet<string> Outputs)>(StringComparer.Ordinal);
+        foreach (var s in assessment.AvailableSkills)
+        {
+            if (string.IsNullOrEmpty(s.Name)) continue;
+            availableIo[s.Name] = (
+                new HashSet<string>(s.SupportedInputs ?? Array.Empty<string>(), StringComparer.Ordinal),
+                new HashSet<string>(s.SupportedOutputs ?? Array.Empty<string>(), StringComparer.Ordinal));
+        }
+
+        var missingIo = new Dictionary<string, (HashSet<string> Inputs, HashSet<string> Outputs)>(StringComparer.Ordinal);
+        if (plan.AdditionalProperties is not null &&
+            plan.AdditionalProperties.TryGetValue("missingSkills", out var missingElement) &&
+            missingElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var entry in missingElement.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object) continue;
+                if (!entry.TryGetProperty("proposedName", out var nameEl)
+                    || nameEl.ValueKind != JsonValueKind.String) continue;
+                var name = nameEl.GetString();
+                if (string.IsNullOrEmpty(name)) continue;
+                missingIo[name] = (
+                    ReadStringSet(entry, "requiredInputs"),
+                    ReadStringSet(entry, "expectedOutputs"));
+            }
+        }
+
+        if (plan.AdditionalProperties is null ||
+            !plan.AdditionalProperties.TryGetValue("workItems", out var workItemsElement) ||
+            workItemsElement.ValueKind != JsonValueKind.Array)
+        {
+            return violations;
+        }
+
+        var idx = 0;
+        foreach (var wi in workItemsElement.EnumerateArray())
+        {
+            if (wi.ValueKind != JsonValueKind.Object) { idx++; continue; }
+            if (!wi.TryGetProperty("agentOrSkill", out var skillEl)
+                || skillEl.ValueKind != JsonValueKind.String) { idx++; continue; }
+
+            var skillName = skillEl.GetString() ?? string.Empty;
+            HashSet<string>? supportedInputs = null;
+            HashSet<string>? supportedOutputs = null;
+            string source;
+
+            if (availableIo.TryGetValue(skillName, out var av))
+            {
+                supportedInputs = av.Inputs;
+                supportedOutputs = av.Outputs;
+                source = "assessment.availableSkills";
+            }
+            else if (missingIo.TryGetValue(skillName, out var ms))
+            {
+                supportedInputs = ms.Inputs;
+                supportedOutputs = ms.Outputs;
+                source = "plan.missingSkills";
+            }
+            else
+            {
+                idx++;
+                continue;
+            }
+
+            var workItemInputs = ReadStringSet(wi, "inputs");
+            foreach (var input in workItemInputs)
+            {
+                if (!supportedInputs.Contains(input))
+                {
+                    violations.Add(
+                        $"Plan workItems[{idx}].inputs cites '{input}' which is not in {source} entry '{skillName}'. "
+                        + "workItem inputs must be a subset of the skill's declared inputs.");
+                }
+            }
+
+            var workItemOutputs = ReadStringSet(wi, "expectedOutputs");
+            foreach (var output in workItemOutputs)
+            {
+                if (!supportedOutputs.Contains(output))
+                {
+                    violations.Add(
+                        $"Plan workItems[{idx}].expectedOutputs cites '{output}' which is not in {source} entry '{skillName}'. "
+                        + "workItem outputs must be a subset of the skill's declared outputs.");
+                }
+            }
+
+            idx++;
+        }
+
+        return violations;
+    }
+
+    private static List<string> ValidateWriteSkillApprovals(MigrationPlanV1 plan, RepositoryAssessmentV1 assessment)
+    {
+        var violations = new List<string>();
+
+        var writeAccessByName = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var s in assessment.AvailableSkills)
+        {
+            if (!string.IsNullOrEmpty(s.Name)) writeAccessByName[s.Name] = s.WriteAccess;
+        }
+
+        var approved = new HashSet<string>(StringComparer.Ordinal);
+        if (plan.AdditionalProperties is not null &&
+            plan.AdditionalProperties.TryGetValue("requiredApprovals", out var approvalsEl) &&
+            approvalsEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var approval in approvalsEl.EnumerateArray())
+            {
+                if (approval.ValueKind != JsonValueKind.Object) continue;
+                if (!approval.TryGetProperty("workItemIds", out var idsEl)
+                    || idsEl.ValueKind != JsonValueKind.Array) continue;
+                foreach (var id in idsEl.EnumerateArray())
+                {
+                    if (id.ValueKind == JsonValueKind.String)
+                    {
+                        var value = id.GetString();
+                        if (!string.IsNullOrEmpty(value)) approved.Add(value);
+                    }
+                }
+            }
+        }
+
+        if (plan.AdditionalProperties is null ||
+            !plan.AdditionalProperties.TryGetValue("workItems", out var workItemsEl) ||
+            workItemsEl.ValueKind != JsonValueKind.Array)
+        {
+            return violations;
+        }
+
+        var idx = 0;
+        foreach (var wi in workItemsEl.EnumerateArray())
+        {
+            if (wi.ValueKind != JsonValueKind.Object) { idx++; continue; }
+            if (!wi.TryGetProperty("agentOrSkill", out var skillEl)
+                || skillEl.ValueKind != JsonValueKind.String) { idx++; continue; }
+            if (!wi.TryGetProperty("id", out var idEl) || idEl.ValueKind != JsonValueKind.String)
+            {
+                idx++;
+                continue;
+            }
+
+            var skillName = skillEl.GetString() ?? string.Empty;
+            var workItemId = idEl.GetString() ?? string.Empty;
+
+            if (writeAccessByName.TryGetValue(skillName, out var writeAccess)
+                && writeAccess
+                && !approved.Contains(workItemId))
+            {
+                violations.Add(
+                    $"Plan workItems[{idx}] (id='{workItemId}') cites write-capable skill '{skillName}' but is not covered by any requiredApprovals[].workItemIds. "
+                    + "Every write-capable work item must be listed in a named approval gate.");
+            }
+
+            idx++;
+        }
+
+        return violations;
+    }
+
+    private static HashSet<string> ReadStringSet(JsonElement obj, string propertyName)
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        if (obj.ValueKind != JsonValueKind.Object) return set;
+        if (!obj.TryGetProperty(propertyName, out var arr) || arr.ValueKind != JsonValueKind.Array) return set;
+        foreach (var item in arr.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                var value = item.GetString();
+                if (!string.IsNullOrEmpty(value)) set.Add(value);
+            }
+        }
+        return set;
     }
 
     private static IEnumerable<(string Owner, string Value)> CollectStringArray(MigrationPlanV1 plan, string arrayName)

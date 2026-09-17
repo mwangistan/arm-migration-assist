@@ -34,13 +34,13 @@ public sealed class MemoryPlanCache : IPlanCache
         return false;
     }
 
-    public void Store(string scoreDigest, MigrationPlanV1 plan, ReadinessScoreV1 score)
+    public void Store(string scoreDigest, MigrationPlanV1 plan, ReadinessScoreV1 score, IReadOnlyList<string> observations)
     {
         if (string.IsNullOrEmpty(scoreDigest) || _ttl <= TimeSpan.Zero)
         {
             return;
         }
-        var entry = new CachedPlan(plan, score, DateTimeOffset.UtcNow);
+        var entry = new CachedPlan(plan, score, DateTimeOffset.UtcNow, observations ?? Array.Empty<string>());
         _cache.Set(Key(scoreDigest), entry, _ttl);
     }
 

@@ -149,6 +149,8 @@ internal static class MigrationPlansEndpoint
         PlannerErrorCode.PlanEvidenceMissing => StatusCodes.Status422UnprocessableEntity,
         PlannerErrorCode.PlanGuidanceMissing => StatusCodes.Status422UnprocessableEntity,
         PlannerErrorCode.PlanMissingSkill => StatusCodes.Status422UnprocessableEntity,
+        PlannerErrorCode.PlanSkillIoMismatch => StatusCodes.Status422UnprocessableEntity,
+        PlannerErrorCode.PlanApprovalMissing => StatusCodes.Status422UnprocessableEntity,
         PlannerErrorCode.PlanUnderGranular => StatusCodes.Status422UnprocessableEntity,
         _ => StatusCodes.Status500InternalServerError,
     };
