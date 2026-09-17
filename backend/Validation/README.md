@@ -60,7 +60,7 @@ repeatable local execution, pass a `.runsettings` file:
 
 ```powershell
 dotnet run --project .\backend\Validation\Validation.csproj -- `
-  --settings .\backend\Validation\samples\dotnet-demo\validation.runsettings `
+  --settings .\path\to\validation.runsettings `
   plan <arguments...>
 ```
 
@@ -180,31 +180,21 @@ An optional `skippedCommands` object maps known, unapproved command IDs to expli
 waiver reasons. Skipped is not passed and does not make a required criterion validated.
 Not approving a command, without an explicit waiver, means not-run.
 
-### Dummy end-to-end data
+### End-to-end demo data
 
-When Feature 1–3 outputs are not available, create a disposable, clean Git target and
-matching dummy inputs:
+When Feature 1-3 outputs are not available, use one of the prepared reference
+repositories in the top-level `samples/` folder (Story 4.3) as the clean Git target,
+with a hand-written migration plan and validation options describing its expected
+build/test/smoke commands. Point the CLI's `--repository` argument at a clean clone of
+one of those repositories, generate a proposal, review it, and copy only the reviewed
+command IDs into `approval.json` before running.
 
-```powershell
-.\backend\Validation\samples\dotnet-demo\Setup-Demo.ps1
-```
+To exercise the failure path (e.g. a missing ARM64-specific dependency or asset),
+author a migration plan/options pair against a build configuration that is expected to
+fail on the target repository; the workflow demonstrates failure evidence, a
+`validation-failed` scorecard, and Foundry root-cause analysis the same way it does for
+a passing run.
 
-The script writes only beneath `artifacts\validation-demo` by default and refuses to
-overwrite an existing run. It creates a committed .NET 8 console repository, migration
-plan, validation options, Foundry runsettings, and prints the exact `plan` and `run`
-commands. The initial approval file still approves nothing: review `proposal.json` and
-copy only the reviewed command IDs into `approval.json`.
-
-An intentionally failing example is also available:
-
-```powershell
-.\backend\Validation\samples\dotnet-failure-demo\Setup-Demo.ps1
-```
-
-Its dummy project models an x64-only native dependency with no `win-arm64` asset. The
-approved build exits nonzero with a stable diagnostic, allowing the workflow to
-demonstrate failure evidence, a `validation-failed` scorecard, and Foundry root-cause
-analysis. The failure is confined to the generated disposable repository.
 
 For explicit mappings/smoke checks, add these optional fields to the options file,
 then generate a new proposal using new output filenames and review it again:
