@@ -38,20 +38,17 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Restore
-        run: dotnet restore src/MigrationPlanner/MigrationPlanner.csproj
+        run: dotnet restore MigrationPlanner.sln
 
       - name: Build
-        run: dotnet build src/MigrationPlanner/MigrationPlanner.csproj --configuration Release --no-restore
+        run: dotnet build MigrationPlanner.sln --configuration Release --no-restore
 
       - name: Test
-        run: |
-          if compgen -G 'tests/**/*.Tests.csproj' > /dev/null; then
-            dotnet test tests --configuration Release --nologo \
-              --logger "trx;LogFileName=test-results.trx" \
-              --results-directory TestResults
-          else
-            echo "No test projects present; skipping test step."
-          fi
+        run: >
+          dotnet test MigrationPlanner.sln
+          --configuration Release --no-build --nologo
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory TestResults
 
       - name: Upload test results
         if: always()

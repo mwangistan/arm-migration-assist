@@ -9,7 +9,7 @@ public sealed record DashboardCriterion(
     string Key, CheckSource Source, string SourceId, string? WorkItemId,
     string Category, string Description, ResultStatus Status, string Reason,
     IReadOnlyList<string> EvidenceIds, IReadOnlyList<string> SourceEvidenceIds, IReadOnlyList<string> GuidanceIds);
-    
+
 public sealed record ValidationDashboard(
     string SchemaVersion, string RunId, string MigrationPlanId, string CommitSha, string? Branch,
     OverallStatus Status, DashboardSummary Summary,

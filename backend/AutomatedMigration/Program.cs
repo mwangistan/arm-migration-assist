@@ -58,16 +58,16 @@ if (args.Contains("--publish"))
     var remote = GetOpt(args, "--remote");
     var branch = GetOpt(args, "--branch") ?? $"arm64-migration/{plan.PlanId}";
 
-    // Feature 1 provides the clone (its own git root, with a remote). Required.
+    // Publishing requires an operator-provided writable Git root with a remote.
     if (!IsOwnGitRoot(repoPath))
     {
-        Console.Error.WriteLine($"--publish requires a git clone at '{repoPath}' (provided by Feature 1). Aborting.");
+        Console.Error.WriteLine($"--publish requires an operator-provided Git worktree at '{repoPath}'. Aborting.");
         return;
     }
 
     var workRepo = Path.GetFullPath(repoPath);
     var baseBranch = Git.Run(workRepo, "rev-parse", "--abbrev-ref", "HEAD").Trim();
-    Console.WriteLine($"\nPublishing against clone: {workRepo} (base: {baseBranch})");
+    Console.WriteLine($"\nPublishing against worktree: {workRepo} (base: {baseBranch})");
 
     var publishResult = runner.Publish(plan, new PublishOptions(
         RepoPath: workRepo,

@@ -28,6 +28,7 @@ env:
   CONTAINER_APP_NAME:   ${{ vars.CONTAINER_APP_NAME }}
   IMAGE_REPO:           migration-planner-api
   DOCKERFILE:           backend/MigrationPlanner/Dockerfile
+  STATIC_WEB_APP_ORIGIN: ${{ vars.STATIC_WEB_APP_ORIGIN }}
 
 jobs:
   build-and-deploy:
@@ -36,6 +37,16 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Test migration planner
+        run: >
+          dotnet test backend/MigrationPlanner/MigrationPlanner.sln
+          --configuration Release
+          -p:TreatWarningsAsErrors=true
 
       - name: Compute image tag
         id: meta
@@ -66,10 +77,15 @@ jobs:
       - name: Update Container App
         run: |
           IMAGE="$ACR_NAME.azurecr.io/$IMAGE_REPO:${{ steps.meta.outputs.tag }}"
+          extra_args=()
+          if [ -n "$STATIC_WEB_APP_ORIGIN" ]; then
+            extra_args+=(--set-env-vars "MIGRATIONPLANNER_ALLOWED_ORIGINS=$STATIC_WEB_APP_ORIGIN")
+          fi
           az containerapp update \
             --name "$CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --image "$IMAGE" \
+            "${extra_args[@]}" \
             --output table
 
       - name: Smoke test /health

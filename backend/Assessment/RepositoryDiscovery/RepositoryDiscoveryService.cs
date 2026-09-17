@@ -1,0 +1,301 @@
+using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
+using ArmMigrationAssist.Assessment.CodeCompatibility;
+using ArmMigrationAssist.Assessment.DependencyScanner;
+using ArmMigrationAssist.RepositoryDiscovery.Models;
+using ArmMigrationAssist.RepositoryDiscovery.Jobs;
+using ArmMigrationAssist.RepositoryDiscovery.GitHub;
+using ArmMigrationAssist.RepositoryDiscovery.Scanning;
+using ArmMigrationAssist.RepositoryDiscovery.Validation;
+
+namespace ArmMigrationAssist.RepositoryDiscovery;
+
+public interface IRepositoryAssessmentService
+{
+    Task<RepositoryAssessment> DiscoverAsync(
+        string source,
+    CancellationToken cancellationToken = default,
+        RepositoryAccessOptions? accessOptions = null,
+        IProgress<AssessmentProgress>? progress = null);
+}
+
+public sealed record RepositoryAccessOptions(bool UseStoredGitHubCredentials = false);
+
+public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
+{
+    private const string Ruleset = "repository-discovery-1.2";
+    private static readonly string ProducerVersion = ResolveProducerVersion();
+    private readonly IGitHubRepositorySource gitHubRepositorySource;
+
+    public RepositoryDiscoveryService()
+        : this(new GitHubRepositorySource())
+    {
+    }
+
+    internal RepositoryDiscoveryService(IGitHubRepositorySource gitHubRepositorySource)
+    {
+        this.gitHubRepositorySource = gitHubRepositorySource;
+    }
+
+    private static string ResolveProducerVersion()
+    {
+        var assembly = typeof(RepositoryDiscoveryService).Assembly;
+        var informationalVersion = assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(informationalVersion))
+        {
+            return informationalVersion;
+        }
+
+        var assemblyVersion = assembly.GetName().Version;
+        return assemblyVersion is null
+            ? "1.0.0"
+            : $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{Math.Max(assemblyVersion.Build, 0)}";
+    }
+
+    public async Task<RepositoryAssessment> DiscoverAsync(
+        string source,
+        CancellationToken cancellationToken = default,
+        RepositoryAccessOptions? accessOptions = null,
+        IProgress<AssessmentProgress>? progress = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
+
+        progress?.Report(new AssessmentProgress("repository-intake", 5, "Opening the repository."));
+        var git = new GitClient(accessOptions?.UseStoredGitHubCredentials == true);
+        using var workspace = await new RepositoryIntake(
+            git,
+            gitHubRepositorySource,
+            accessOptions?.UseStoredGitHubCredentials == true)
+            .OpenAsync(source, cancellationToken);
+        progress?.Report(new AssessmentProgress("file-catalog", 20, "Cataloging tracked repository files."));
+        var catalog = await RepositoryFileCatalog.CreateAsync(
+            workspace.RootPath,
+            git,
+            cancellationToken,
+            workspace.KnownRelativePaths,
+            workspace.KnownTotalFiles,
+            workspace.KnownSkippedFiles);
+        progress?.Report(new AssessmentProgress(
+            "parallel-scanning",
+            40,
+            "Analyzing technology, dependencies, and architecture-sensitive code in parallel."));
+        var completedScanners = 0;
+        var technologyTask = RunScannerAsync(
+            "technology-discovery",
+            "Technology and build signal analysis completed.",
+            () => new RepositoryScanner().Scan(catalog, cancellationToken));
+        var dependencyTask = RunScannerAsync(
+            "dependency-scanner",
+            "Dependency manifest and binary analysis completed.",
+            () => new DependencyScanner().Scan(catalog.Files, cancellationToken));
+        var codeTask = RunScannerAsync(
+            "code-compatibility-scanner",
+            "Architecture-sensitive code analysis completed.",
+            () => new CodeCompatibilityScanner().Scan(catalog.Files, cancellationToken));
+        await Task.WhenAll(technologyTask, dependencyTask, codeTask);
+        var scan = await technologyTask;
+        var dependencyScan = await dependencyTask;
+        var codeFindings = await codeTask;
+        progress?.Report(new AssessmentProgress("finalizing", 95, "Validating assessment evidence."));
+
+        async Task<T> RunScannerAsync<T>(string phase, string message, Func<T> scanOperation)
+        {
+            var result = await Task.Run(scanOperation, cancellationToken);
+            var completed = Interlocked.Increment(ref completedScanners);
+            progress?.Report(new AssessmentProgress(phase, 40 + (completed * 16), message));
+            return result;
+        }
+
+        var unknowns = new List<AssessmentUnknown>();
+
+        var unresolvedDependencies = dependencyScan.Findings
+            .Where(finding => finding.ArchitectureStatus == "unknown")
+            .ToArray();
+        if (unresolvedDependencies.Length > 0)
+        {
+            unknowns.Add(new(
+                $"ARM64 availability could not be established from repository evidence for {unresolvedDependencies.Length} declared dependency or dependencies.",
+                "dependency",
+                null,
+                unresolvedDependencies.Select(finding => finding.EvidenceId).Take(100).ToArray()));
+        }
+
+        if (dependencyScan.MalformedManifestPaths.Count > 0)
+        {
+            var displayedPath = dependencyScan.MalformedManifestPaths[0];
+            var omittedCount = dependencyScan.MalformedManifestPaths.Count - 1;
+            var omittedSuffix = omittedCount > 0 ? $" and {omittedCount} more" : string.Empty;
+            unknowns.Add(new(
+                $"{dependencyScan.MalformedManifestPaths.Count} dependency manifest(s) could not be parsed; dependency coverage is incomplete: {displayedPath}{omittedSuffix}.",
+                "dependency",
+                null,
+                []));
+        }
+
+        if (!scan.OfflineCapabilityEstablished)
+        {
+            unknowns.Add(new(
+                "Meaningful offline capability could not be established from static repository signals.",
+                "windows-experience",
+                null,
+                []));
+        }
+
+        if (scan.WindowsExperience.AccessibilityEvidence == "unknown")
+        {
+            unknowns.Add(new(
+                "Accessibility coverage could not be established from static repository signals.",
+                "windows-experience",
+                null,
+                []));
+        }
+
+        if (catalog.SkippedFiles > 0)
+        {
+            unknowns.Add(new(
+                $"{catalog.SkippedFiles} tracked file(s) were not scanned because they were unsafe, missing, or exceeded scan limits.",
+                "scan-coverage",
+                null,
+                []));
+        }
+
+        var availableSkills = BuildAvailableSkills(catalog, codeFindings);
+
+        var assessment = new RepositoryAssessment(
+            SchemaVersion: "1.0",
+            AssessmentId: CreateAssessmentId(
+                workspace.RepositoryUrl,
+                workspace.CommitSha,
+                Ruleset),
+            GeneratedAt: DateTimeOffset.UtcNow,
+            Producer: new AssessmentProducer(
+                "arm-migration-assist-repository-discovery",
+                ProducerVersion,
+                Ruleset,
+                [
+                    new ScannerVersion("repository-intake", ProducerVersion),
+                    new ScannerVersion("technology-discovery", ProducerVersion),
+                    new ScannerVersion("dependency-scanner", ProducerVersion),
+                    new ScannerVersion("code-compatibility-scanner", ProducerVersion),
+                ]),
+            Repository: new RepositoryIdentity(
+                workspace.Name,
+                workspace.RepositoryUrl,
+                workspace.CommitSha,
+                workspace.DefaultBranch,
+                scan.License),
+            Technology: scan.Technology,
+            Dependencies: dependencyScan.Findings,
+            CodeFindings: codeFindings,
+            BuildFindings: scan.BuildFindings,
+            WindowsExperience: scan.WindowsExperience,
+            ScanCoverage: new ScanCoverage(
+                catalog.TotalFiles - catalog.SkippedFiles,
+                catalog.TotalFiles,
+                dependencyScan.ResolutionRate,
+                ["repository-intake", "technology-discovery", "dependency-scanner", "code-compatibility-scanner"],
+                []),
+            Unknowns: unknowns,
+            AvailableSkills: availableSkills);
+
+        RepositoryAssessmentValidator.EnsureValid(assessment);
+        return assessment;
+    }
+
+    private static IReadOnlyList<AvailableSkill> BuildAvailableSkills(
+        RepositoryFileCatalog catalog,
+        IReadOnlyList<CodeFinding> codeFindings)
+    {
+        var skills = new List<AvailableSkill>
+        {
+                new AvailableSkill(
+                    "assessment/repository-discovery",
+                    ProducerVersion,
+                    "Discovers repository identity and static technology, build, CI, and Windows experience signals.",
+                    false,
+                    ["github-url", "local-git-repository"],
+                    ["repository-assessment-v1", "technology-inventory"]),
+                new AvailableSkill(
+                    "assessment/dependency-scanner",
+                    ProducerVersion,
+                    "Inventories declared dependencies and classifies repository-visible architecture signals.",
+                    false,
+                    ["repository-file-catalog"],
+                    ["dependency-findings"]),
+                new AvailableSkill(
+                    "assessment/code-compatibility-scanner",
+                    ProducerVersion,
+                    "Detects architecture-sensitive source patterns with file and line evidence.",
+                    false,
+                    ["repository-file-catalog"],
+                    ["code-findings"]),
+        };
+        var buildInputs = catalog.Files
+            .Where(file => IsSupportedBuildInput(file.RelativePath))
+            .Select(file => file.RelativePath)
+            .Distinct(StringComparer.Ordinal)
+            .Take(50)
+            .ToArray();
+        if (buildInputs.Length > 0)
+        {
+            skills.Add(
+                new AvailableSkill(
+                    "build-config-generator",
+                    ProducerVersion,
+                    "Generates reviewable ARM64 changes for supported Docker, .NET, and Visual C++ build files.",
+                    true,
+                    buildInputs,
+                    ["patch"]));
+        }
+
+        skills.Add(
+                new AvailableSkill(
+                    "ci-pipeline-generator",
+                    ProducerVersion,
+                    "Generates reviewable ARM64 GitHub Actions or Azure Pipelines changes.",
+                    true,
+                    ["repository"],
+                    ["patch"]));
+        var codeInputs = codeFindings
+            .Select(finding => finding.File)
+            .Distinct(StringComparer.Ordinal)
+            .Take(50)
+            .ToArray();
+        if (codeInputs.Length > 0)
+        {
+            skills.Add(
+                new AvailableSkill(
+                    "code-transformer",
+                    ProducerVersion,
+                    "Generates approval-gated architecture compatibility patches for identified source files.",
+                    true,
+                    codeInputs,
+                    ["patch"]));
+        }
+
+        return skills;
+    }
+
+    private static bool IsSupportedBuildInput(string path)
+    {
+        var name = Path.GetFileName(path);
+        return name.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".vcxproj", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string CreateAssessmentId(
+        string repositoryUrl,
+        string commitSha,
+        string ruleset)
+    {
+        var identity = $"{repositoryUrl}\n{commitSha}\n{ruleset}";
+        var hash = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(identity)))
+            .ToLowerInvariant();
+        return $"assessment-{hash[..24]}";
+    }
+}

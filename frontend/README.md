@@ -1,50 +1,92 @@
-# Frontend
+# Migration Workspace Frontend
 
-Standalone React client for ARM Migration Assist, built with Vite.
+React and Fluent UI operational dashboard for repository assessment and
+migration planning. It submits a GitHub URL, streams assessment progress,
+automatically plans the migration, and presents the evidence, readiness score,
+work items, and acceptance criteria in one report.
 
-It is kept outside the API project so this application surface can grow
-independently as later features add planning, transformation, and validation
-endpoints.
+## Architecture
 
-Current screens include:
+The frontend is the product entrypoint for the whole workflow, not a module-
+specific dashboard. Its real-state workflow rail covers Connect, Assess, Plan,
+Transform, and Validate. It creates assessment jobs, consumes SSE with polling
+fallback, sends the completed assessment unchanged to the planner, and exposes
+Feature 3-compatible plan and report artifacts. Business rules remain in the
+backend contracts and validators.
 
-- repository intake and migration-target selection;
-- assessment overview and build signals;
-- dependency compatibility and filtering;
-- architecture-specific code findings;
-- scanner coverage and unresolved evidence;
-- printable report and JSON export.
-- AI migration-plan generation from the completed assessment;
-- recommended strategy, work items, risks, validation checks, and plan JSON export.
-
-The client calls `POST /assess` and then passes the resulting
-`RepositoryAssessmentV1` document to `POST /api/migration-plans` through
-`src/api.js`. The backend proxies plan generation to the configured Feature 2
-service so the browser does not depend on cross-origin access to that service.
-The planner response is retained as `{ runId, plan, score, warnings }`, and the
-Migration Plan tab renders the nested `plan` document.
+See [the end-to-end architecture](../docs/ARCHITECTURE.md).
 
 ## Run
 
-Start the backend from the repository root:
+Start the assessment API from the repository root:
 
-```powershell
-dotnet run --project .\backend\Assessment\ArmMigrationAssist.Api.csproj
+```pwsh
+dotnet run --project backend/Assessment/RepositoryDiscovery/RepositoryDiscovery.csproj -- serve
 ```
 
-Then start the frontend:
+Start the migration planner API in another terminal:
 
-```powershell
-cd .\frontend
+```pwsh
+dotnet run --project backend/MigrationPlanner/src/MigrationPlanner.Api/MigrationPlanner.Api.csproj
+```
+
+Then start Vite:
+
+```pwsh
+Set-Location frontend
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Vite proxies assessment and migration-plan
-requests to `http://localhost:5285`.
+Open `http://127.0.0.1:5173`.
 
-For a separately hosted backend, copy `.env.example` to `.env.local` and set:
+Vite proxies assessment requests to `http://127.0.0.1:5000` and migration plan
+requests to `http://127.0.0.1:5080`. For a deployed build, set
+`VITE_ASSESSMENT_API_URL` and `VITE_MIGRATION_PLANNER_API_URL` to their HTTPS
+origins.
 
-```text
-VITE_API_BASE_URL=https://your-api.example.com
+## Dashboard coverage
+
+- GitHub repository intake with loading, cancellation, and error states
+- automatic Git Credential Manager browser sign-in for protected repositories
+- repository identity and scan coverage
+- technology inventory
+- dependency architecture evidence
+- architecture-sensitive code findings
+- ARM64 build, CI, packaging, and Windows experience signals
+- explicit unknowns, print-ready reports, and JSON export
+- automatic readiness scoring and migration planning
+- Feature 3-compatible plan export and Markdown/HTML report downloads
+
+Authentication is initiated only after anonymous Git access fails. The existing
+dashboard remains the sole UI: it displays sign-in progress in the assessment
+status area and automatically retries after success. No token or account data is
+entered into or rendered by the web application.
+
+## Azure Static Web Apps
+
+The `frontend-static-web-app.yml` workflow verifies the frontend on pull
+requests and deploys the production build from `main`. Configure these GitHub
+repository settings before enabling deployment:
+
+| Setting | Kind | Value |
+|---------|------|-------|
+| `AZURE_STATIC_WEB_APPS_API_TOKEN` | Actions secret | Deployment token from the Static Web App |
+| `ASSESSMENT_API_URL` | Actions variable | HTTPS origin of the deployed assessment API |
+| `MIGRATION_PLANNER_API_URL` | Actions variable | HTTPS origin of the deployed planner API |
+
+Add the Static Web App origin to the assessment API's `DashboardOrigins`
+configuration (semicolon-separated) and the planner API's
+`MIGRATIONPLANNER_ALLOWED_ORIGINS` configuration (comma-separated). The
+deployed dashboard can assess public GitHub repositories. Git Credential
+Manager sign-in for protected repositories intentionally remains a local,
+loopback-only workflow; it is not exposed by the cloud deployment.
+
+## Verify
+
+```pwsh
+npm test
+npm run typecheck
+npm run lint
+npm run build
 ```

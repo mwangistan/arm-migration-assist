@@ -28,7 +28,7 @@ var caeName         = 'cae-${nameSuffix}'
 var appName         = 'ca-${nameSuffix}-planner-api'
 var foundryName     = 'foundry-${nameSuffix}'
 var uamiName        = 'id-${nameSuffix}-planner-api'
-var gptDeploymentNm = 'gpt-4o'
+var phiDeploymentNm = 'phi-4'
 
 // User-assigned MI is created first so RBAC can be granted before the Container App exists,
 // avoiding a chicken-and-egg cycle with AcrPull.
@@ -70,18 +70,18 @@ resource foundry 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (deployF
   }
 }
 
-resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = if (deployFoundry) {
+resource phi 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = if (deployFoundry) {
   parent: foundry
-  name: gptDeploymentNm
+  name: phiDeploymentNm
   sku: {
     name: 'GlobalStandard'
-    capacity: 10
+    capacity: 1
   }
   properties: {
     model: {
-      format: 'OpenAI'
-      name: 'gpt-4o'
-      version: '2024-11-20'
+      format: 'Microsoft'
+      name: 'Phi-4'
+      version: '7'
     }
     raiPolicyName: 'Microsoft.DefaultV2'
   }
@@ -125,7 +125,7 @@ resource cognitiveServicesUser 'Microsoft.Authorization/roleAssignments@2022-04-
   }
 }
 
-var llmEndpoint = deployFoundry ? 'https://${foundryName}.openai.azure.com/openai/deployments/${gptDeploymentNm}' : ''
+var foundryInferenceEndpoint = deployFoundry ? '${foundry!.properties.endpoint}models' : ''
 
 resource app 'Microsoft.App/containerApps@2024-03-01' = {
   name: appName
@@ -163,11 +163,11 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             memory: '1Gi'
           }
           env: [
-            { name: 'MIGRATIONPLANNER_LLM_ENDPOINT',    value: llmEndpoint }
-            { name: 'MIGRATIONPLANNER_LLM_DEPLOYMENT',  value: gptDeploymentNm }
-            { name: 'MIGRATIONPLANNER_SKELETON_ONLY',   value: 'false' }
-            { name: 'MIGRATIONPLANNER_ALLOWED_ORIGINS', value: allowedOrigins }
-            { name: 'AZURE_CLIENT_ID',                  value: uami.properties.clientId }
+            { name: 'MIGRATIONPLANNER_MODEL_PROVIDER',   value: deployFoundry ? 'Phi' : 'Fake' }
+            { name: 'MIGRATIONPLANNER_PHI_ENDPOINT',     value: foundryInferenceEndpoint }
+            { name: 'MIGRATIONPLANNER_PHI_DEPLOYMENT',   value: phiDeploymentNm }
+            { name: 'MIGRATIONPLANNER_ALLOWED_ORIGINS',  value: allowedOrigins }
+            { name: 'AZURE_CLIENT_ID',                   value: uami.properties.clientId }
           ]
         }
       ]
@@ -187,7 +187,5 @@ output acrName          string = acr.name
 output containerAppName string = app.name
 output containerAppFqdn string = app.properties.configuration.ingress.fqdn
 output foundryEndpoint  string = deployFoundry ? foundry!.properties.endpoint : ''
-output llmEndpoint      string = llmEndpoint
-output gptDeploymentName string = gptDeploymentNm
 output uamiClientId     string = uami.properties.clientId
 output resourceGroup    string = resourceGroup().name

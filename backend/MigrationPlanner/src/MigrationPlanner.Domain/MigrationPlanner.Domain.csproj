@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>MigrationPlanner.Domain</RootNamespace>
+    <AssemblyName>MigrationPlanner.Domain</AssemblyName>
+  </PropertyGroup>
+</Project>

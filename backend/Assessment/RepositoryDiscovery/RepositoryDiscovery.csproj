@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ArmMigrationAssist.RepositoryDiscovery</RootNamespace>
+    <AssemblyName>repository-discovery</AssemblyName>
+    <Version>1.2.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\DependencyScanner\**\*.cs"
+             Link="DependencyScanner\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\CodeCompatibility\**\*.cs"
+             Link="CodeCompatibility\%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\MigrationPlanner\contracts\RepositoryAssessmentV1.schema.json"
+                      LogicalName="ArmMigrationAssist.Contracts.RepositoryAssessmentV1.schema.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>RepositoryDiscovery.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

@@ -1,6 +1,6 @@
 # RUN_LOCAL
 
-Local build, test, and run instructions for the AI Migration Planner (Feature 2) skeleton.
+Local build, test, and run instructions for the AI Migration Planner (Feature 2).
 
 ## Prerequisites
 
@@ -48,7 +48,7 @@ MIGRATIONPLANNER_MODEL_PROVIDER
 | Value    | Behavior                                                                                                             |
 | -------- | -------------------------------------------------------------------------------------------------------------------- |
 | `Fake`   | Deterministic canned `MigrationPlanV1`-shaped JSON keyed by `assessmentId`.                                          |
-| `Hosted` | Reserved for the future function-calling provider (currently throws on startup).                                     |
+| `Hosted` | OpenAI-compatible hosted model with function calling. Requires the `Planner:Hosted` config or env overrides.         |
 | `Phi`    | Azure AI Foundry Phi deployment via `Azure.AI.Inference`. Requires the `Planner:Phi` config or env overrides below.  |
 
 Default when unset: `Fake`.
@@ -90,12 +90,11 @@ $env:MIGRATIONPLANNER_MODEL_PROVIDER = "Fake"
 dotnet run --project src/MigrationPlanner.Api
 ```
 
-## What this skeleton does not do
+## Runtime boundaries
 
-- No fixtures beyond what is required to exercise the API happy path.
+- The repository-level React application in `frontend/` is the sole browser UI.
 - No repository writes, shell execution, or outbound HTTP other than the
-  `Phi` provider's calls to its configured Azure AI Foundry endpoint.
-- No `Hosted` (function-calling) provider yet. Selecting it fails fast.
+  selected model provider's calls to its configured endpoint.
 
 ## Deployed environment (Azure Container Apps)
 

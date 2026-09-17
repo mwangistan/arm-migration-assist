@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>MigrationPlanner.Tests.Integration</RootNamespace>
+    <AssemblyName>MigrationPlanner.Tests.Integration</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\AutomatedMigration\AutomatedMigration.csproj" />
+    <ProjectReference Include="..\..\src\MigrationPlanner.Api\MigrationPlanner.Api.csproj" />
+    <ProjectReference Include="..\..\src\MigrationPlanner.Application\MigrationPlanner.Application.csproj" />
+    <ProjectReference Include="..\..\src\MigrationPlanner.Domain\MigrationPlanner.Domain.csproj" />
+    <ProjectReference Include="..\..\src\MigrationPlanner.Infrastructure\MigrationPlanner.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+</Project>
