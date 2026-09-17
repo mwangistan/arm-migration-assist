@@ -1,11 +1,14 @@
 # CI/CD
 
-Three GitHub Actions workflows drive delivery for the Migration Planner API.
+GitHub Actions independently deliver the two Container App APIs and the Static
+Web Apps frontend, so updating one service does not replace another.
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | [`ci.yml`](../.github/workflows/ci.yml) | PR + push to `main` + manual | `dotnet restore/build/test`, hadolint on the Dockerfile, `az bicep build` on the IaC. |
 | [`cd.yml`](../.github/workflows/cd.yml) | Push to `main` under `backend/MigrationPlanner/**` or `knowledge/windows-on-arm/**`, or manual dispatch | `az acr build` a new image tagged with the git SHA, then `az containerapp update` to roll the app, then hit `/health`. |
+| [`assessment-cd.yml`](../.github/workflows/assessment-cd.yml) | Push to `main` under `backend/Assessment/**`, or manual dispatch | Builds the read-only assessment API image, updates its existing Container App, then hits `/api/health`. |
+| [`frontend-static-web-app.yml`](../.github/workflows/frontend-static-web-app.yml) | Frontend changes on PR/push to `main`, or manual dispatch | Verifies React, injects both API origins, and deploys `frontend/dist` to the existing Static Web App. |
 | [`infra.yml`](../.github/workflows/infra.yml) | Push to `main` under `infra/**` (deploy), PR under `infra/**` (what-if), or manual dispatch | `az deployment group create` (or what-if) against [`infra/main.bicep`](../infra/main.bicep). |
 
 Authentication is **GitHub OIDC federation** — no client secret is stored in the repo.
@@ -91,6 +94,20 @@ Repository variables (non-secret; edit here to point at a different environment)
 | `AZURE_LOCATION` | `eastus2` |
 | `ACR_NAME` | `acrarmmigassist` |
 | `CONTAINER_APP_NAME` | `ca-arm-migration-planner-api` |
+| `ASSESSMENT_CONTAINER_APP_NAME` | Existing Feature 1 Container App name |
+| `ASSESSMENT_API_URL` | Feature 1 Container App HTTPS origin |
+| `MIGRATION_PLANNER_API_URL` | Feature 2 Container App HTTPS origin |
+| `STATIC_WEB_APP_ORIGIN` | Static Web App HTTPS origin allowed by both APIs |
+
+Set `AZURE_STATIC_WEB_APPS_API_TOKEN` as an Actions secret using the existing
+Static Web App deployment token. Set the Static Web App origin in both backend
+CORS configurations before deploying the frontend.
+
+Cloud jobs are configuration-gated. CI, frontend verification, Dockerfile lint,
+and Bicep compilation always run; Container App and Static Web Apps deployment
+jobs are skipped until their required repository variables above are populated.
+Once enabled by configuration, missing OIDC or deployment-token secrets fail the
+job rather than silently reporting a deployment.
 
 ## Adopting the Bicep template against the live environment
 

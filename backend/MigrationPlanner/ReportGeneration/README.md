@@ -52,7 +52,7 @@ Sections are ordered evidence → verdict → action, not by JSON field order:
 11. Missing skills + required approvals (gating items).
 12. Appendix — full plan and score JSON.
 
-## HTTP surface (not yet wired)
+## HTTP surface
 
 - `GET /api/migration-plans/{runId}/report.{ext}` — `ext ∈ { md, html }`.
 - 404 + Problem Details for unknown `runId`.
@@ -71,14 +71,8 @@ Sections are ordered evidence → verdict → action, not by JSON field order:
   prove the report was produced from an untampered score.
 - Renderers never emit secrets, raw source content, or full prompts.
 
-## Phased delivery
-
-1. Contracts, `MigrationReport` view model, `MigrationReportFactory`,
-   unit tests. **(done)**
-2. `MarkdownReportRenderer` + golden-file snapshot tests against the three
-   demo fixtures.
-3. `IPlanArtifactStore` + in-memory implementation, wired into the existing
-   planning service so runs are persisted on success.
-4. `HtmlReportRenderer` + golden-file snapshot tests.
-5. Report download endpoint + integration tests.
-6. Demo UI download buttons.
+Successful planning runs are retained in a bounded in-memory store. Markdown
+and self-contained HTML renderers, download endpoints, integration tests, and
+dashboard download actions are implemented. Reports expire when the API process
+restarts or the bounded store evicts an older run; durable storage remains a
+deployment concern.

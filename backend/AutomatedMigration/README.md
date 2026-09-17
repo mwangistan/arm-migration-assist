@@ -1,4 +1,4 @@
-# Feature 3: Automated Migration Actions
+# Automated Migration (Feature 3)
 
 Turns an approved **migration plan** into **reviewable ARM64 change files (diffs)**.
 This component never edits the target repo in place and never applies changes — it
@@ -15,8 +15,8 @@ Feature 3: Migration Actions  → .patch / .diff files  ← our output
 Feature 4: Validation   → builds / tests the generated diffs
 ```
 
-We consume `MigrationPlanV1` from the Planner. We do **not** clone repos or detect
-stacks — that is Feature 1's job.
+We consume `MigrationPlanV1` from the Planner and a caller-provided local
+worktree. Stack and compatibility detection remain Assessment responsibilities.
 
 ## What we read from the plan
 
@@ -91,7 +91,8 @@ The CLI ([Program.cs](Program.cs)) is a thin wrapper:
 dotnet run [planPath] [repoPath] [outputDir] [--publish [--push] [--remote <r>] [--branch <b>]]
 ```
 
-Publishing requires a real clone (from Feature 1); the default branch is
+Publishing requires an explicit writable Git worktree supplied by the operator;
+the default branch is
 `arm64-migration/<planId>`, and `--publish` is dry-run unless `--push` is given.
 
 ## Outputs (Feature 3 -> Feature 4 contract)
@@ -128,3 +129,11 @@ Feature 4 reads `branch` (build it), `generated[].acceptanceTests` (validate), a
 1. **3.1 `build-config-generator`** — the P0; every reference repo needs one valid ARM64 build/config change.
 2. **3.2 `ci-pipeline-generator`** — adds the ARM64 CI job.
 3. **3.3 `code-transformer`** — one solid pattern transform if time allows.
+
+## Architecture boundary
+
+The planner output is the control contract: Feature 3 selects only work items
+whose `agentOrSkill` it owns, preserves evidence and acceptance checks, and emits
+`migration-result.json` for Validation. Missing capabilities remain explicit in
+the plan and are never silently substituted. See
+[the end-to-end architecture](../../docs/ARCHITECTURE.md).

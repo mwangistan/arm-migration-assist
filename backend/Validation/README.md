@@ -1,17 +1,17 @@
-# Feature 4: Validation and Demo Experience
+# Validation (Feature 4)
 
-A .NET 8 validation engine and API-backed orchestration layer. It consumes a
-**materialized, clean Git working tree** produced by Feature 3 and records measured
-outcomes. It does not apply patches, clone repositories, switch branches, push commits,
-create pipelines, or claim readiness from a successful cross-build alone.
+An approval-gated .NET 8 validation engine and local CLI. It consumes a **materialized,
+clean Git working tree** produced by Feature 3 and records measured outcomes.
+It does not apply patches, retrieve repositories, switch branches, push commits, create
+pipelines, or claim readiness from a successful cross-build alone.
 
 ## Ownership and architecture
 
 | Component | Responsibility |
 |-----------|----------------|
 | Feature 2 `MigrationPlanV1` | Owns `validationPlan`, its eight check categories, target devices, and work-item acceptance tests. |
-| Feature 3 | Owns patches, build/pipeline changes, and optional clone/branch materialization. Patch files alone are not an execution target. |
-| `BuildValidation/Contracts.cs` | Read-only Feature 2 subset, prepared command plan, evidence, status, and report contracts. |
+| Feature 3 | Owns patches, build/pipeline changes, and optional worktree/branch materialization. Patch files alone are not an execution target. |
+| `BuildValidation/Contracts.cs` | Read-only Feature 2 subset, prepared command plan, approval, evidence, status, and report contracts. |
 | `RepositoryInspector.cs` | Checks effective Git configuration, root, full commit SHA, branch, index entries/flags, every tracked file's raw blob hash against the pinned commit, and untracked files. Supports Git worktrees and detached HEAD. |
 | `DeterministicPlanner.cs` | Conservative executable discovery, explicit bindings/smoke inputs, and manual/uncovered criteria. |
 | `AiContracts.cs`, `FoundryValidationAi.cs`, `ValidationWorkflow.cs` | Injectable AI planning → deterministic execution → AI evidence analysis → AI coverage review, with an Azure Foundry chat-model implementation. |
@@ -20,6 +20,8 @@ create pipelines, or claim readiness from a successful cross-build alone.
 | `Dashboard/ValidationDashboard.cs` | Versioned read model and JSON projection suitable for an API. No frontend pages or hosted web API are introduced. |
 | `Api/` | ASP.NET Core wrapper/orchestrator for asynchronous plan approval and run execution. It references the validation engine and persists API-owned JSON metadata outside target repositories. **Interim standalone host**: the overall backend architecture consolidates all four features into a single ASP.NET Core project and Docker image (see the `soph/feature/repo-assessment` branch's `backend/ArmMigrationAssist.Api.csproj`). Once that shared project is merged into `main`, this project's endpoints should move into a `ValidationController` registered there, and this standalone `Api/` host/Dockerfile should be retired in favor of the shared one. |
 | `tests/` | xUnit unit tests and local Git/process integration tests. Fixtures live under the repository's ignored `artifacts/` directory and are removed after tests. |
+| `Api/` | Independent ASP.NET Core wrapper/orchestrator for asynchronous plan approval and run execution. It references the validation engine and persists API-owned JSON metadata outside target repositories. Deploy it behind authentication and an execution-worker boundary; it is intentionally separate from the public assessment and planning APIs. |
+| `tests/` | xUnit unit tests and local Git/process/CLI integration tests. Fixtures live under the repository's ignored `artifacts/` directory and are removed after tests. |
 | `Api.Tests/` | TestServer/WebApplicationFactory coverage for API endpoints, queue lifecycle, recovery semantics, local-only middleware, and filesystem persistence. |
 
 Reference demos remain in the top-level `samples/` folder. `ICiValidationObserver`
@@ -74,10 +76,10 @@ ranges. Invalid or unavailable AI output cannot change deterministic results and
 the existing deterministic/manual fallback.
 
 Only read-only Git identity/discovery operations run during planning/verification;
-validation/build/smoke commands execute as part of the prepared plan. Before index/worktree
-inspection, effective Git configuration is checked and partial clones are rejected. Git
-fsmonitor, replacement objects and submodule recursion are disabled. Configured Git filters
-are not invoked: verification uses raw committed blob IDs and direct worktree byte hashing.
+validation/build/smoke commands require approval. Before index/worktree inspection,
+effective Git configuration is checked and partial Git object stores are rejected. Git fsmonitor,
+replacement objects and submodule recursion are disabled. Configured Git filters are
+not invoked: verification uses raw committed blob IDs and direct worktree byte hashing.
 Submodules, nonregular tracked files, assume-unchanged/skip-worktree flags, and unmerged
 entries are unsupported. Verification does not run `git status` or apply filters: the
 index must match the pinned tree and **all tracked file bytes** must match its blobs.
@@ -121,14 +123,31 @@ This version does not ingest manually asserted pass results.
 
 Docker images are uniquely tagged per prepared plan and are not automatically deleted;
 cleanup would itself be a write-capable command requiring approval. The executor does
-not install missing tools, repair the clone, enable emulation, or provision hardware.
+not install missing tools, repair the worktree, enable emulation, or provision hardware.
 Known unavailable SDK/workload/runtime/daemon errors become inconclusive; a missing
 executable or incompatible host is not-run. Other nonzero exits are failures.
 Later proof-read or artifact-hash errors add linked evidence diagnostics, preserving
 established failures (and not-run outcomes). Only a would-be pass is downgraded to
 inconclusive for unavailable proof.
 
-## API-only validation flow
+## Local CLI usage
+
+Run from the repository root. Use a separate materialized migration worktree as the target.
+Build outputs must already be ignored by that target's Git configuration; untracked
+files (including unignored build output) prevent a clean-commit validation claim.
+Keep proposal, approval, report, and evidence files **outside the target worktree**,
+or in a directory the target already ignores.
+
+Create `validation-options.json` with an evidence directory:
+
+```json
+{
+  "evidenceDirectory": "artifacts\\validation\\evidence"
+}
+```
+
+Prepare a proposal and an approval skeleton (full SHA and branch are optional inputs;
+the resolved full SHA and branch are always pinned in the proposal):
 
 Use a separate materialized migration clone as the target. Build outputs must already
 be ignored by that target's Git configuration; untracked files (including unignored
@@ -609,9 +628,9 @@ whoever deploys the image, not an executed deployment:
   (`AZURE_CLIENT_ID`, read by `DefaultAzureCredential`) — never
   an API key or connection string.
 - **Target repositories are local, not remote URLs**: `target.path` is always an
-  absolute path inside the container's filesystem. This API does not clone arbitrary
+  absolute path inside the container's filesystem. This API does not retrieve arbitrary
   Git URLs and does not translate host paths to container paths; another trusted
-  component is expected to clone/mount the repository at that absolute path before
+  component is expected to materialize or mount the repository at that absolute path before
   calling this API (e.g. an init container, a sidecar, or an Azure Files/volume mount
   populated out-of-band). Treat that mounting component, not this API, as the
   boundary that decides which repositories are reachable.

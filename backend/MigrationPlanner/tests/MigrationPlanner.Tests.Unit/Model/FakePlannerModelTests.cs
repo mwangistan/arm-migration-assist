@@ -88,6 +88,38 @@ public sealed class FakePlannerModelTests
         conf.Should().Be("low");
     }
 
+    [Fact]
+    public async Task MissingArm64Target_EmitsFeatureThreeBuildAndPipelineWork()
+    {
+        var build = new BuildFindings(
+            EvidenceId: "build-001",
+            Arm64TargetExists: false,
+            Arm64EcTargetExists: false,
+            Arm64CiJobExists: false,
+            PackagingSupportsArm64: true,
+            TestsExist: true,
+            DetectedTargets: new[] { "x64" },
+            Evidence: new[] { new Evidence(SourceType.Manifest, "x64 only", Path: "src/App.csproj") });
+        var assessment = ScoringAssessmentBuilder.Ready(build: build);
+        var score = Scorer.Score(assessment);
+
+        var modelResult = await Model.GeneratePlanJsonAsync(
+            assessment,
+            score,
+            new NoopGuidance(),
+            CancellationToken.None);
+        using var document = JsonDocument.Parse(modelResult.PlanJson);
+        var workItems = document.RootElement.GetProperty("workItems").EnumerateArray().ToArray();
+        var buildItem = workItems.Single(item =>
+            item.GetProperty("agentOrSkill").GetString() == "build-config-generator");
+        var pipelineItem = workItems.Single(item =>
+            item.GetProperty("agentOrSkill").GetString() == "ci-pipeline-generator");
+
+        buildItem.GetProperty("inputs")[0].GetString().Should().Be("src/App.csproj");
+        pipelineItem.GetProperty("dependencies")[0].GetString()
+            .Should().Be(buildItem.GetProperty("id").GetString());
+    }
+
     private static async Task<(string Path, string Confidence)> MapAsync(RepositoryAssessmentV1 assessment)
     {
         var (path, conf, _) = await MapWithScoreAsync(assessment);

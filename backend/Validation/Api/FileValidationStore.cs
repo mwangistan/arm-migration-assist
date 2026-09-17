@@ -392,11 +392,26 @@ public sealed class FileValidationStore : IValidationStore
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         string temp = Path.Combine(Path.GetDirectoryName(path)!, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
-        await File.WriteAllTextAsync(temp, ValidationJson.Serialize(value), cancellationToken);
-        if (File.Exists(path))
-            File.Replace(temp, path, null);
-        else
-            File.Move(temp, path);
+        try
+        {
+            await File.WriteAllTextAsync(temp, ValidationJson.Serialize(value), cancellationToken);
+            for (int attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    File.Move(temp, path, overwrite: true);
+                    return;
+                }
+                catch (IOException) when (attempt < 4)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(20 * (attempt + 1)), cancellationToken);
+                }
+            }
+        }
+        finally
+        {
+            if (File.Exists(temp)) File.Delete(temp);
+        }
     }
 
     private static async Task<T> ReadJsonAsync<T>(string path, CancellationToken cancellationToken) =>

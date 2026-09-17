@@ -103,25 +103,42 @@ public class Program
         // Force guidance-store construction so hash mismatches fail startup.
         _ = app.Services.GetRequiredService<IWindowsOnArmGuidanceStore>();
 
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api"))
+            {
+                context.Response.Headers.CacheControl = "no-store";
+            }
+
+            await next(context);
+        });
+
         if (options.AllowedOrigins.Length > 0)
         {
             app.UseCors(PlannerOptions.CorsPolicyName);
         }
 
-        app.UseDefaultFiles();
-        app.UseStaticFiles();
-
         app.MapMigrationPlansEndpoint();
+        app.MapMigrationReportsEndpoint();
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
-        app.MapFallbackToFile("index.html");
 
         app.Run();
     }
 
-    private static string ResolveDefaultCorpusRoot(string contentRoot)
+    internal static string ResolveDefaultCorpusRoot(string contentRoot)
     {
-        // src/MigrationPlanner.Api -> ../../../knowledge/windows-on-arm
-        var candidate = Path.GetFullPath(Path.Combine(contentRoot, "..", "..", "..", "knowledge", "windows-on-arm"));
-        return Directory.Exists(candidate) ? candidate : Path.Combine(contentRoot, "knowledge", "windows-on-arm");
+        var current = new DirectoryInfo(contentRoot);
+        while (current is not null)
+        {
+            var candidate = Path.Combine(current.FullName, "knowledge", "windows-on-arm");
+            if (File.Exists(Path.Combine(candidate, "corpus.json")))
+            {
+                return candidate;
+            }
+
+            current = current.Parent;
+        }
+
+        return Path.Combine(contentRoot, "knowledge", "windows-on-arm");
     }
 }

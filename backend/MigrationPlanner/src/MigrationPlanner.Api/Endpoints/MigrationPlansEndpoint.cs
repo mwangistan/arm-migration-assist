@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using MigrationPlanner.Application.Abstractions;
 using MigrationPlanner.Application.Planning;
+using MigrationPlanner.Application.Reporting;
 using MigrationPlanner.Domain.Assessment;
 using MigrationPlanner.Domain.Errors;
 using MigrationPlanner.Infrastructure.Guidance;
@@ -28,6 +29,7 @@ internal static class MigrationPlansEndpoint
         HttpContext context,
         IAssessmentSchemaValidator schemaValidator,
         MigrationPlanningService planningService,
+        IPlanArtifactStore artifactStore,
         CancellationToken cancellationToken)
     {
         JsonDocument document;
@@ -121,6 +123,7 @@ internal static class MigrationPlansEndpoint
                     result.Errors ?? Array.Empty<string>());
             }
 
+            artifactStore.Store(MigrationReportFactory.From(assessment, result));
             return Results.Ok(new
             {
                 runId = result.RunId,

@@ -437,4 +437,3 @@ public sealed class MigrationPlanningService
             OccurredAt: DateTimeOffset.UtcNow));
     }
 }
-

@@ -1,0 +1,1492 @@
+{
+  "schemaVersion": "1.0",
+  "assessmentId": "assessment-b5a29c9cc32e432cc9338f9b",
+  "generatedAt": "2026-09-17T14:48:04.138429+00:00",
+  "producer": {
+    "name": "arm-migration-assist-repository-discovery",
+    "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72",
+    "ruleset": "repository-discovery-1.2",
+    "scannerVersions": [
+      {
+        "name": "repository-intake",
+        "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72"
+      },
+      {
+        "name": "technology-discovery",
+        "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72"
+      },
+      {
+        "name": "dependency-scanner",
+        "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72"
+      },
+      {
+        "name": "code-compatibility-scanner",
+        "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72"
+      }
+    ]
+  },
+  "repository": {
+    "name": "ComfyUI",
+    "url": "https://github.com/comfyanonymous/ComfyUI",
+    "commitSha": "387f98aa2822f684b8597959a52a467d88cc4806",
+    "defaultBranch": "master",
+    "license": "GPL-3.0-only"
+  },
+  "technology": {
+    "languages": [
+      "python",
+      "shell"
+    ],
+    "frameworks": [
+      "pytorch"
+    ],
+    "projectTypes": [
+      "unknown"
+    ],
+    "buildSystems": [],
+    "packageManagers": [
+      "pip"
+    ],
+    "installers": [],
+    "ciSystems": [
+      "github-actions"
+    ]
+  },
+  "dependencies": [
+    {
+      "evidenceId": "dependency-843725321ce800b7823d",
+      "name": "aiohttp",
+      "version": "\u003E=3.11.8",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency aiohttp at version \u003E=3.11.8."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-fc3843ea62fb3fc3910f",
+      "name": "alembic",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency alembic."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-bf40c841f26a3c63e523",
+      "name": "av",
+      "version": "\u003E=17.0.0",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency av at version \u003E=17.0.0."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-7875e31caf01e0572bb3",
+      "name": "blake3",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency blake3."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-e22fb8cd8caa1567977b",
+      "name": "comfy-aimdo",
+      "version": "==0.5.5",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency comfy-aimdo at version ==0.5.5."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-5efcd0aec421efcfafcd",
+      "name": "comfy-angle",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency comfy-angle."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-3ec1150f155b8fd5051a",
+      "name": "comfy-kitchen",
+      "version": "==0.2.34",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency comfy-kitchen at version ==0.2.34."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-fc08762b6dd930acda43",
+      "name": "comfyui-embedded-docs",
+      "version": "==0.5.11",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency comfyui-embedded-docs at version ==0.5.11."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-86bb1c22b8b9e6529c7a",
+      "name": "comfyui-frontend-package",
+      "version": "==1.52.7",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency comfyui-frontend-package at version ==1.52.7."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-0209a8d233443e4ad955",
+      "name": "comfyui-workflow-templates",
+      "version": "==0.11.62",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency comfyui-workflow-templates at version ==0.11.62."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-651f6c9fa1f5f9f6799c",
+      "name": "einops",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency einops."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-e6c283166f5ddec2238a",
+      "name": "filelock",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency filelock."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-c199703bd4a2c639ef88",
+      "name": "kornia",
+      "version": "\u003E=0.7.1",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency kornia at version \u003E=0.7.1."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-9f5278f94de0f2330fdb",
+      "name": "numpy",
+      "version": "\u003E=1.25.0",
+      "ecosystem": "pypi",
+      "type": "native",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency numpy at version \u003E=1.25.0."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-5cc12dab4268dcbe3700",
+      "name": "Pillow",
+      "ecosystem": "pypi",
+      "type": "native",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency Pillow."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-8b2625ff7ee1d1d30a53",
+      "name": "psutil",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency psutil."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-cd069dc8547bbbb1c498",
+      "name": "pydantic",
+      "version": "~=2.0",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency pydantic at version ~=2.0."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-805f2565a46f25f6dd7a",
+      "name": "pydantic-settings",
+      "version": "~=2.0",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency pydantic-settings at version ~=2.0."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-b1e184a7144f74db052a",
+      "name": "PyOpenGL",
+      "version": "\u003E=3.1.8",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency PyOpenGL at version \u003E=3.1.8."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-7f9bd7f2a7df7f5a7391",
+      "name": "pytest",
+      "version": "\u003E=7.8.0",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "tests-unit/requirements.txt",
+          "observation": "Declares the pypi dependency pytest at version \u003E=7.8.0."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-44cd82dbc52e46a6a6ad",
+      "name": "pytest-aiohttp",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "tests-unit/requirements.txt",
+          "observation": "Declares the pypi dependency pytest-aiohttp."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-fea91d90d248f42f4cf6",
+      "name": "pytest-asyncio",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "tests-unit/requirements.txt",
+          "observation": "Declares the pypi dependency pytest-asyncio."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-dafb551d9a27fb237c90",
+      "name": "pyyaml",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency pyyaml."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-c2fbfd514f3ea1aed419",
+      "name": "requests",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency requests."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-fa140c3b2b779fd231dc",
+      "name": "safetensors",
+      "version": "\u003E=0.4.2",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency safetensors at version \u003E=0.4.2."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-3442d4117305f1f58da4",
+      "name": "scipy",
+      "ecosystem": "pypi",
+      "type": "native",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency scipy."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-2f3617105f3296a059d6",
+      "name": "sentencepiece",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency sentencepiece."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-bb4afeb038eec462365c",
+      "name": "simpleeval",
+      "version": "\u003E=1.0.0",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency simpleeval at version \u003E=1.0.0."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-1fec3d082a9a15b05c0a",
+      "name": "spandrel",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency spandrel."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-4c9ef52d52fba68c1646",
+      "name": "SQLAlchemy",
+      "version": "\u003E=2.0.0",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency SQLAlchemy at version \u003E=2.0.0."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-270709d5ed238556cc99",
+      "name": "tokenizers",
+      "version": "\u003E=0.13.3",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency tokenizers at version \u003E=0.13.3."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-ff049b7c4a994e34bedb",
+      "name": "torch",
+      "ecosystem": "pypi",
+      "type": "native",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency torch."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-649e8fa0e536ce7f332f",
+      "name": "torchaudio",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency torchaudio."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-fdfee7f25ce88bef9a44",
+      "name": "torchsde",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency torchsde."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-b35ad527ad90f7240528",
+      "name": "torchvision",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency torchvision."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-595a70b1a22872d2ae5a",
+      "name": "tqdm",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency tqdm."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-6b5cc84d468bee0568ce",
+      "name": "transformers",
+      "version": "\u003E=4.50.3",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency transformers at version \u003E=4.50.3."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-a33bde44e945be467683",
+      "name": "websocket-client",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "tests-unit/requirements.txt",
+          "observation": "Declares the pypi dependency websocket-client."
+        }
+      ],
+      "confidence": 0.55
+    },
+    {
+      "evidenceId": "dependency-d01eafc3fc88063cc987",
+      "name": "yarl",
+      "version": "\u003E=1.18.0",
+      "ecosystem": "pypi",
+      "type": "unknown",
+      "criticality": "required",
+      "architectureStatus": "unknown",
+      "availableArchitectures": [
+        "unknown"
+      ],
+      "replacementCandidates": [],
+      "evidence": [
+        {
+          "sourceType": "manifest",
+          "path": "requirements.txt",
+          "observation": "Declares the pypi dependency yarl at version \u003E=1.18.0."
+        }
+      ],
+      "confidence": 0.55
+    }
+  ],
+  "codeFindings": [
+    {
+      "evidenceId": "code-bee772150ea950a9a262",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "comfy/ops.py",
+      "line": 1197,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "comfy/ops.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-d8fcae520831fdbc3e4c",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "comfy/ops.py",
+      "line": 1199,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "comfy/ops.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-01f32f628a3a8c71316e",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "comfy/ops.py",
+      "line": 1311,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "comfy/ops.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-b6d360b3d8e80e77720a",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "comfy/ops.py",
+      "line": 1342,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "comfy/ops.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-bdb2ad060dfd95a200b0",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "comfy/ops.py",
+      "line": 1372,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "comfy/ops.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-5b442cb3164e6079ce5a",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "comfy/ops.py",
+      "line": 1543,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "comfy/ops.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-29668645e6d38fa98606",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "comfy_api_nodes/nodes_minimax.py",
+      "line": 49,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "comfy_api_nodes/nodes_minimax.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-173d76fa57352bb22a57",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "comfy_api_nodes/nodes_minimax.py",
+      "line": 170,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "comfy_api_nodes/nodes_minimax.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-fa1862ef1cceaf8351c4",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "comfy_api_nodes/nodes_minimax.py",
+      "line": 237,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "comfy_api_nodes/nodes_minimax.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-951349146b164a1d31d2",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "comfy_api_nodes/nodes_minimax.py",
+      "line": 301,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "comfy_api_nodes/nodes_minimax.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-5709132da865245c8964",
+      "ruleId": "ARM-CODE-DYNAMIC-NATIVE-01",
+      "category": "native-loading",
+      "severity": "medium",
+      "file": "comfy_extras/nodes_glsl.py",
+      "line": 29,
+      "description": "A native library is loaded dynamically.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "comfy_extras/nodes_glsl.py",
+          "observation": "Detected a dynamic native-library load."
+        }
+      ],
+      "confidence": 0.9
+    },
+    {
+      "evidenceId": "code-845886bcc044253617f0",
+      "ruleId": "ARM-CODE-DYNAMIC-NATIVE-01",
+      "category": "native-loading",
+      "severity": "medium",
+      "file": "comfy_extras/nodes_glsl.py",
+      "line": 30,
+      "description": "A native library is loaded dynamically.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "comfy_extras/nodes_glsl.py",
+          "observation": "Detected a dynamic native-library load."
+        }
+      ],
+      "confidence": 0.9
+    },
+    {
+      "evidenceId": "code-b617305c170832eded41",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_extras_test/test_seedvr2_nodes.py",
+      "line": 26,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_extras_test/test_seedvr2_nodes.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-2abae4e6ad96adbdd5c9",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_extras_test/test_seedvr2_nodes.py",
+      "line": 51,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_extras_test/test_seedvr2_nodes.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-7af5ae88a55536bf7078",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_extras_test/test_seedvr2_nodes.py",
+      "line": 55,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_extras_test/test_seedvr2_nodes.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-3d30fefc33da3df61bee",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_quant/test_mixed_precision.py",
+      "line": 344,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_quant/test_mixed_precision.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-5611ea31124e5b950eac",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_test/model_detection_test.py",
+      "line": 76,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_test/model_detection_test.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-3d17ceb0a9867b2fa66a",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_test/model_detection_test.py",
+      "line": 84,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_test/model_detection_test.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-aace821121d1a00e74dd",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_test/model_detection_test.py",
+      "line": 92,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_test/model_detection_test.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-1e783980f8cd8b8f2676",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_test/model_detection_test.py",
+      "line": 182,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_test/model_detection_test.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-efa2dab6e6e828ae1d99",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_test/model_detection_test.py",
+      "line": 183,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_test/model_detection_test.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-d5ccc050fba167805167",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_test/model_detection_test.py",
+      "line": 196,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_test/model_detection_test.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-07d36ddd828c6778134a",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_test/model_detection_test.py",
+      "line": 197,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_test/model_detection_test.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-b6f1d139ff466798f171",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_test/model_detection_test.py",
+      "line": 210,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_test/model_detection_test.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-4b92e91364291d65b865",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_test/model_detection_test.py",
+      "line": 211,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_test/model_detection_test.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-0f09bccdb35f2acfa408",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_test/model_detection_test.py",
+      "line": 222,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_test/model_detection_test.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    },
+    {
+      "evidenceId": "code-c59d0a62b5152fad1b99",
+      "ruleId": "ARM-CODE-SIMD-01",
+      "category": "simd",
+      "severity": "high",
+      "file": "tests-unit/comfy_test/model_detection_test.py",
+      "line": 231,
+      "description": "An x86 SIMD intrinsic or header is referenced.",
+      "evidence": [
+        {
+          "sourceType": "file",
+          "path": "tests-unit/comfy_test/model_detection_test.py",
+          "observation": "Detected an x86 SIMD intrinsic or header reference."
+        }
+      ],
+      "confidence": 0.95
+    }
+  ],
+  "buildFindings": {
+    "evidenceId": "build-a411db87a55ff51b5b35",
+    "arm64TargetExists": false,
+    "arm64EcTargetExists": false,
+    "arm64CiJobExists": false,
+    "packagingSupportsArm64": false,
+    "testsExist": true,
+    "detectedTargets": [],
+    "evidence": [
+      {
+        "sourceType": "file",
+        "path": "tests-unit/app_test/test_db_init_locking.py",
+        "observation": "Detected an automated test project or test file."
+      }
+    ]
+  },
+  "windowsExperience": {
+    "windowsVersionExists": false,
+    "uiTechnology": "unknown",
+    "installerExists": false,
+    "offlineCapable": false,
+    "accessibilityEvidence": "unknown",
+    "notificationsIntegrated": false,
+    "lifecycleIntegrated": false,
+    "evidence": [
+      {
+        "sourceType": "artifact",
+        "artifact": "tracked-file-inventory",
+        "observation": "Inspected 1212 tracked file(s) for Windows experience signals."
+      }
+    ]
+  },
+  "scanCoverage": {
+    "filesScanned": 1207,
+    "filesTotal": 1212,
+    "dependencyResolutionRate": 0,
+    "scannersCompleted": [
+      "repository-intake",
+      "technology-discovery",
+      "dependency-scanner",
+      "code-compatibility-scanner"
+    ],
+    "scannersFailed": []
+  },
+  "unknowns": [
+    {
+      "description": "ARM64 availability could not be established from repository evidence for 39 declared dependency or dependencies.",
+      "area": "dependency",
+      "evidenceIds": [
+        "dependency-843725321ce800b7823d",
+        "dependency-fc3843ea62fb3fc3910f",
+        "dependency-bf40c841f26a3c63e523",
+        "dependency-7875e31caf01e0572bb3",
+        "dependency-e22fb8cd8caa1567977b",
+        "dependency-5efcd0aec421efcfafcd",
+        "dependency-3ec1150f155b8fd5051a",
+        "dependency-fc08762b6dd930acda43",
+        "dependency-86bb1c22b8b9e6529c7a",
+        "dependency-0209a8d233443e4ad955",
+        "dependency-651f6c9fa1f5f9f6799c",
+        "dependency-e6c283166f5ddec2238a",
+        "dependency-c199703bd4a2c639ef88",
+        "dependency-9f5278f94de0f2330fdb",
+        "dependency-5cc12dab4268dcbe3700",
+        "dependency-8b2625ff7ee1d1d30a53",
+        "dependency-cd069dc8547bbbb1c498",
+        "dependency-805f2565a46f25f6dd7a",
+        "dependency-b1e184a7144f74db052a",
+        "dependency-7f9bd7f2a7df7f5a7391",
+        "dependency-44cd82dbc52e46a6a6ad",
+        "dependency-fea91d90d248f42f4cf6",
+        "dependency-dafb551d9a27fb237c90",
+        "dependency-c2fbfd514f3ea1aed419",
+        "dependency-fa140c3b2b779fd231dc",
+        "dependency-3442d4117305f1f58da4",
+        "dependency-2f3617105f3296a059d6",
+        "dependency-bb4afeb038eec462365c",
+        "dependency-1fec3d082a9a15b05c0a",
+        "dependency-4c9ef52d52fba68c1646",
+        "dependency-270709d5ed238556cc99",
+        "dependency-ff049b7c4a994e34bedb",
+        "dependency-649e8fa0e536ce7f332f",
+        "dependency-fdfee7f25ce88bef9a44",
+        "dependency-b35ad527ad90f7240528",
+        "dependency-595a70b1a22872d2ae5a",
+        "dependency-6b5cc84d468bee0568ce",
+        "dependency-a33bde44e945be467683",
+        "dependency-d01eafc3fc88063cc987"
+      ]
+    },
+    {
+      "description": "Meaningful offline capability could not be established from static repository signals.",
+      "area": "windows-experience",
+      "evidenceIds": []
+    },
+    {
+      "description": "Accessibility coverage could not be established from static repository signals.",
+      "area": "windows-experience",
+      "evidenceIds": []
+    },
+    {
+      "description": "5 tracked file(s) were not scanned because they were unsafe, missing, or exceeded scan limits.",
+      "area": "scan-coverage",
+      "evidenceIds": []
+    }
+  ],
+  "availableSkills": [
+    {
+      "name": "assessment/repository-discovery",
+      "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72",
+      "description": "Discovers repository identity and static technology, build, CI, and Windows experience signals.",
+      "writeAccess": false,
+      "supportedInputs": [
+        "github-url",
+        "local-git-repository"
+      ],
+      "supportedOutputs": [
+        "repository-assessment-v1",
+        "technology-inventory"
+      ]
+    },
+    {
+      "name": "assessment/dependency-scanner",
+      "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72",
+      "description": "Inventories declared dependencies and classifies repository-visible architecture signals.",
+      "writeAccess": false,
+      "supportedInputs": [
+        "repository-file-catalog"
+      ],
+      "supportedOutputs": [
+        "dependency-findings"
+      ]
+    },
+    {
+      "name": "assessment/code-compatibility-scanner",
+      "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72",
+      "description": "Detects architecture-sensitive source patterns with file and line evidence.",
+      "writeAccess": false,
+      "supportedInputs": [
+        "repository-file-catalog"
+      ],
+      "supportedOutputs": [
+        "code-findings"
+      ]
+    },
+    {
+      "name": "ci-pipeline-generator",
+      "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72",
+      "description": "Generates reviewable ARM64 GitHub Actions or Azure Pipelines changes.",
+      "writeAccess": true,
+      "supportedInputs": [
+        "repository"
+      ],
+      "supportedOutputs": [
+        "patch"
+      ]
+    },
+    {
+      "name": "code-transformer",
+      "version": "1.2.0\u002Bdd3a561d689beb3721b63e3adee58da1a16c6a72",
+      "description": "Generates approval-gated architecture compatibility patches for identified source files.",
+      "writeAccess": true,
+      "supportedInputs": [
+        "comfy/ops.py",
+        "comfy_api_nodes/nodes_minimax.py",
+        "comfy_extras/nodes_glsl.py",
+        "tests-unit/comfy_extras_test/test_seedvr2_nodes.py",
+        "tests-unit/comfy_quant/test_mixed_precision.py",
+        "tests-unit/comfy_test/model_detection_test.py"
+      ],
+      "supportedOutputs": [
+        "patch"
+      ]
+    }
+  ]
+}

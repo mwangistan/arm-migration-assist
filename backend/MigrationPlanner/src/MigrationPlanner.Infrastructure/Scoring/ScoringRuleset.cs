@@ -222,4 +222,3 @@ internal static class ScoringRuleset
         return code;
     }
 }
-
