@@ -142,14 +142,18 @@ public sealed class FakePlannerModel : IPlannerModel
 
         var expectation = GranularityCalculator.Compute(assessment, score);
         var items = new List<object>();
+        string? buildWorkItemId = null;
         var seq = 1;
         foreach (var bucket in expectation.Buckets)
         {
             var slug = SlugifyForId(bucket.Description);
             var id = $"wi-{bucket.Category}-{slug}";
             if (id.Length > 60) id = id[..60].TrimEnd('-');
-            var skill = $"fake/{bucket.Category}-{slug}";
-            if (skill.Length > 120) skill = skill[..120].TrimEnd('-');
+            var skill = ResolveSkill(bucket);
+            var dependencies = skill == "ci-pipeline-generator" && buildWorkItemId is not null
+                ? new[] { buildWorkItemId }
+                : Array.Empty<string>();
+            var inputs = ResolveInputs(assessment, bucket, skill);
             items.Add(new
             {
                 id,
@@ -158,9 +162,9 @@ public sealed class FakePlannerModel : IPlannerModel
                 title = bucket.Description,
                 objective = bucket.Description + " Produce the concrete change and validate on ARM64.",
                 agentOrSkill = skill,
-                inputs = new[] { "assessment" },
+                inputs,
                 expectedOutputs = new[] { "patch" },
-                dependencies = Array.Empty<string>(),
+                dependencies,
                 evidenceIds = bucket.EvidenceIds,
                 guidanceIds = Array.Empty<string>(),
                 acceptanceTests = new[]
@@ -182,6 +186,10 @@ public sealed class FakePlannerModel : IPlannerModel
                 estimatedEffort = bucket.Category == "dep" ? "large" : "medium",
                 risk = bucket.Category == "dep" ? "high" : "low",
             });
+            if (skill == "build-config-generator")
+            {
+                buildWorkItemId = id;
+            }
         }
         return items.ToArray();
     }
@@ -203,22 +211,70 @@ public sealed class FakePlannerModel : IPlannerModel
 
         foreach (var bucket in expectation.Buckets)
         {
-            var slug = SlugifyForId(bucket.Description);
-            var skill = $"fake/{bucket.Category}-{slug}";
-            if (skill.Length > 120) skill = skill[..120].TrimEnd('-');
+            var skill = ResolveSkill(bucket);
             if (available.Contains(skill) || !declared.Add(skill)) continue;
             missing.Add(new
             {
                 proposedName = skill,
-                purpose = $"Fake-provider stand-in skill for bucket '{bucket.Category}': {bucket.Description}",
-                requiredInputs = new[] { "assessment" },
+                purpose = $"Migration capability required for '{bucket.Description}'",
+                requiredInputs = new[] { "migration-plan-v1", "repository-workspace" },
                 expectedOutputs = new[] { "patch" },
-                justification = "Fake provider does not implement real skills; the plan declares them so the orchestrator can catch skill hallucinations without failing on the fake path.",
+                justification = "The required migration generator is not present in the assessment skill catalog.",
                 evidenceIds = bucket.EvidenceIds,
-                writeAccess = false,
+                writeAccess = true,
             });
         }
         return missing.ToArray();
+    }
+
+    private static string ResolveSkill(GranularityCalculator.ExpectedBucket bucket)
+    {
+        if (bucket.Description.Contains("CI job", StringComparison.OrdinalIgnoreCase))
+        {
+            return "ci-pipeline-generator";
+        }
+
+        return bucket.Category == "build"
+            && !bucket.Description.Contains("test suite", StringComparison.OrdinalIgnoreCase)
+                ? "build-config-generator"
+                : "code-transformer";
+    }
+
+    private static string[] ResolveInputs(
+        RepositoryAssessmentV1 assessment,
+        GranularityCalculator.ExpectedBucket bucket,
+        string skill)
+    {
+        IEnumerable<string?> paths = bucket.Category switch
+        {
+            "code" => assessment.CodeFindings
+                .Where(finding => bucket.EvidenceIds.Contains(finding.EvidenceId, StringComparer.Ordinal))
+                .Select(finding => finding.File),
+            "dep" => assessment.Dependencies
+                .Where(dependency => bucket.EvidenceIds.Contains(dependency.EvidenceId, StringComparer.Ordinal))
+                .SelectMany(dependency => dependency.Evidence.Select(evidence => evidence.Path)),
+            _ => assessment.BuildFindings.Evidence.Select(evidence => evidence.Path),
+        };
+
+        if (skill == "build-config-generator")
+        {
+            paths = paths.Where(path => path is not null && IsSupportedBuildInput(path));
+        }
+
+        return paths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!)
+            .Distinct(StringComparer.Ordinal)
+            .Take(8)
+            .ToArray();
+    }
+
+    private static bool IsSupportedBuildInput(string path)
+    {
+        var name = Path.GetFileName(path);
+        return name.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".vcxproj", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string SlugifyForId(string text)

@@ -38,4 +38,54 @@ public sealed class MigrationPlansEndpointTests : IClassFixture<PlannerWebApplic
         root.TryGetProperty("runId", out var runId).Should().BeTrue();
         runId.GetString().Should().NotBeNullOrWhiteSpace();
     }
+
+    [Theory]
+    [InlineData("md", "text/markdown", "# sample-repo migration report")]
+    [InlineData("html", "text/html", "<!doctype html>")]
+    public async Task GetReport_SuccessfulPlanningRun_ReturnsDownload(
+        string extension,
+        string mediaType,
+        string expectedContent)
+    {
+        using var client = _factory.CreateClient();
+        var planResponse = await client.PostAsJsonAsync(
+            "/api/migration-plans",
+            MinimalValidAssessmentFactory.Build($"assessment-report-{extension}"));
+        using var planBody = await planResponse.Content.ReadFromJsonAsync<JsonDocument>();
+        var runId = planBody!.RootElement.GetProperty("runId").GetString();
+
+        var response = await client.GetAsync($"/api/migration-plans/{runId}/report.{extension}");
+        var report = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType!.MediaType.Should().Be(mediaType);
+        response.Content.Headers.ContentDisposition!.FileName
+            .Should().Be($"migration-report-{runId}.{extension}");
+        report.Should().Contain(expectedContent);
+        report.Should().Contain("Score digest");
+        if (extension == "html")
+        {
+            report.ToLowerInvariant().Should().NotContain("<script");
+        }
+    }
+
+    [Fact]
+    public async Task GetReport_UnknownRun_Returns404()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/migration-plans/missing-run/report.md");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetReport_UnsupportedFormat_Returns415()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/migration-plans/missing-run/report.pdf");
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnsupportedMediaType);
+    }
 }

@@ -103,6 +103,7 @@ public class Program
         }
 
         app.MapMigrationPlansEndpoint();
+        app.MapMigrationReportsEndpoint();
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
         app.Run();

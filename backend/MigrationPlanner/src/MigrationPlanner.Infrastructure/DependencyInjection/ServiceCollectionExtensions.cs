@@ -1,12 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
 using MigrationPlanner.Application.Abstractions;
 using MigrationPlanner.Application.Planning;
+using MigrationPlanner.Application.Reporting;
 using MigrationPlanner.Infrastructure.Auditing;
 using MigrationPlanner.Infrastructure.Caching;
 using MigrationPlanner.Infrastructure.Guidance;
 using MigrationPlanner.Infrastructure.Mcp;
 using MigrationPlanner.Infrastructure.Mcp.Tools;
 using MigrationPlanner.Infrastructure.Model;
+using MigrationPlanner.Infrastructure.Reporting;
 using MigrationPlanner.Infrastructure.Schema;
 using MigrationPlanner.Infrastructure.Scoring;
 using MigrationPlanner.Infrastructure.Validation;
@@ -51,6 +53,9 @@ public static class ServiceCollectionExtensions
         services.AddMemoryCache();
         services.AddSingleton(new MemoryPlanCacheOptions());
         services.AddSingleton<IPlanCache, MemoryPlanCache>();
+        services.AddSingleton<IPlanArtifactStore, MemoryPlanArtifactStore>();
+        services.AddSingleton<IMigrationReportRenderer, MarkdownReportRenderer>();
+        services.AddSingleton<IMigrationReportRenderer, HtmlReportRenderer>();
 
         switch (modelProvider)
         {

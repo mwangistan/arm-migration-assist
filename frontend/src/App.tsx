@@ -14,18 +14,30 @@ import {
 import {
   ArrowDownload20Regular,
   ArrowRight20Regular,
+  Checkmark16Regular,
   Dismiss20Regular,
   Print20Regular,
   Search20Regular,
 } from '@fluentui/react-icons';
 import {
   AssessmentApiError,
-  assessRepository,
+  assessRepositoryWithProgress,
+  cancelAssessmentJob,
   cancelGitHubAuthentication,
   getGitHubAuthentication,
+  migrationReportUrl,
+  planMigration,
   startGitHubAuthentication,
+  type AssessmentJob,
+  type AssessmentProgress,
 } from './api';
-import type { CodeFinding, DependencyFinding, RepositoryAssessment } from './types';
+import type {
+  CodeFinding,
+  DependencyFinding,
+  MigrationPlanningResult,
+  MigrationWorkItem,
+  RepositoryAssessment,
+} from './types';
 
 type BadgeColor =
   | 'brand'
@@ -152,20 +164,189 @@ function EmptyRow({ columns, message }: { columns: number; message: string }) {
   );
 }
 
-function AssessmentResults({ assessment }: { assessment: RepositoryAssessment }) {
+function downloadJson(value: unknown, fileName: string) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadReport(runId: string, extension: 'md' | 'html') {
+  const anchor = document.createElement('a');
+  anchor.href = migrationReportUrl(runId, extension);
+  anchor.download = `migration-report-${runId}.${extension}`;
+  anchor.click();
+}
+
+function workItemColor(priority: string): BadgeColor {
+  if (priority === 'P0') return 'danger';
+  if (priority === 'P1') return 'warning';
+  return 'informative';
+}
+
+function PlanningResults({
+  planning,
+  pending,
+  error,
+}: {
+  planning: MigrationPlanningResult | null;
+  pending: boolean;
+  error: string | null;
+}) {
+  if (pending) {
+    return (
+      <section className="content-section planning-section" id="migration-plan" aria-labelledby="planning-heading">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Migration planning</p>
+            <h3 id="planning-heading">Building the migration path</h3>
+          </div>
+          <Spinner size="small" label="Planning" />
+        </div>
+        <ProgressBar aria-label="Migration planning in progress" />
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="content-section planning-section" id="migration-plan" aria-labelledby="planning-heading">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Migration planning</p>
+            <h3 id="planning-heading">Plan unavailable</h3>
+          </div>
+        </div>
+        <MessageBar intent="error"><MessageBarBody>{error}</MessageBarBody></MessageBar>
+      </section>
+    );
+  }
+
+  if (!planning) return null;
+
+  const { plan, score, warnings } = planning;
+  return (
+    <section className="content-section planning-section" id="migration-plan" aria-labelledby="planning-heading">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Migration planning</p>
+          <h3 id="planning-heading">Recommended path</h3>
+        </div>
+        <StatusBadge meta={{
+          label: score.provisional ? 'Provisional' : titleCase(plan.confidence),
+          color: score.provisional ? 'warning' : 'success',
+        }} />
+      </div>
+
+      <div className="planning-summary">
+        <div className="readiness-score" aria-label={`Readiness score ${score.overallScore} out of 100`}>
+          <span className="score-value">{score.overallScore}</span>
+          <span className="score-total">/ 100</span>
+          <strong>{titleCase(score.band)}</strong>
+          <span>{Math.round(score.evidenceCompletenessScore * 100)}% evidence completeness</span>
+        </div>
+        <div className="recommendation-copy">
+          <div className="recommendation-title">
+            <span>Recommended</span>
+            <strong>{titleCase(plan.recommendedPath)}</strong>
+          </div>
+          <p>{plan.executiveSummary}</p>
+        </div>
+      </div>
+
+      <div className="dimension-grid" aria-label="Readiness dimensions">
+        {score.dimensions.map((dimension) => (
+          <div className="dimension" key={dimension.dimensionKey}>
+            <div>
+              <span>{titleCase(dimension.dimensionKey)}</span>
+              <strong>{dimension.rawScore}</strong>
+            </div>
+            <ProgressBar value={dimension.rawScore / 100} aria-label={`${titleCase(dimension.dimensionKey)} ${dimension.rawScore}`} />
+            <small>{dimension.weightPct}% weight</small>
+          </div>
+        ))}
+      </div>
+
+      {score.majorBlockers.length > 0 ? (
+        <div className="blocker-list" aria-label="Major blockers">
+          {score.majorBlockers.map((blocker) => (
+            <div key={blocker.blockerId}>
+              <StatusBadge meta={{ label: titleCase(blocker.category), color: 'danger' }} />
+              <span>{blocker.description}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {warnings.length > 0 ? (
+        <MessageBar className="planning-warning" intent="warning">
+          <MessageBarBody>{warnings.join(' ')}</MessageBarBody>
+        </MessageBar>
+      ) : null}
+
+      <div className="work-items-heading">
+        <h4>Migration work</h4>
+        <span>{pluralize(plan.workItems.length, 'work item')}</span>
+      </div>
+      {plan.workItems.length === 0 ? (
+        <p className="empty-state-inline">No migration work items were generated.</p>
+      ) : (
+        <div className="work-item-list">
+          {plan.workItems.map((item) => <WorkItemRow item={item} key={item.id} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function WorkItemRow({ item }: { item: MigrationWorkItem }) {
+  return (
+    <article className="work-item">
+      <div className="work-item-index">{String(item.sequence).padStart(2, '0')}</div>
+      <div className="work-item-body">
+        <div className="work-item-title">
+          <div>
+            <Badge appearance="tint" color={workItemColor(item.priority)} size="small">{item.priority}</Badge>
+            <Badge appearance="outline" color="informative" size="small">{titleCase(item.agentOrSkill)}</Badge>
+          </div>
+          <span>{titleCase(item.estimatedEffort)} effort / {titleCase(item.risk)} risk</span>
+        </div>
+        <h5>{item.title}</h5>
+        <p>{item.objective}</p>
+        <div className="acceptance-list">
+          {item.acceptanceTests.map((test) => (
+            <div key={test.id}>
+              <Checkmark16Regular aria-hidden="true" />
+              <p><strong>{test.description}</strong>{test.expectedOutcome}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function AssessmentResults({
+  assessment,
+  planning,
+  planningPending,
+  planningError,
+}: {
+  assessment: RepositoryAssessment;
+  planning: MigrationPlanningResult | null;
+  planningPending: boolean;
+  planningError: string | null;
+}) {
   const coverage = assessment.scanCoverage.filesTotal === 0
     ? 0
     : assessment.scanCoverage.filesScanned / assessment.scanCoverage.filesTotal;
   const commitSha = assessment.repository.commitSha;
 
   function downloadAssessment() {
-    const blob = new Blob([JSON.stringify(assessment, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${assessment.repository.name}-assessment.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadJson(assessment, `${assessment.repository.name}-assessment.json`);
   }
 
   function printAssessment() {
@@ -202,6 +383,31 @@ function AssessmentResults({ assessment }: { assessment: RepositoryAssessment })
           >
             Export JSON
           </Button>
+          {planning ? (
+            <>
+              <Button
+                appearance="secondary"
+                icon={<ArrowDownload20Regular />}
+                onClick={() => downloadJson(planning.plan, `${assessment.repository.name}-migration-plan.json`)}
+              >
+                Export plan
+              </Button>
+              <Button
+                appearance="secondary"
+                icon={<ArrowDownload20Regular />}
+                onClick={() => downloadReport(planning.runId, 'md')}
+              >
+                Report .md
+              </Button>
+              <Button
+                appearance="secondary"
+                icon={<ArrowDownload20Regular />}
+                onClick={() => downloadReport(planning.runId, 'html')}
+              >
+                Report .html
+              </Button>
+            </>
+          ) : null}
         </div>
       </section>
 
@@ -241,6 +447,7 @@ function AssessmentResults({ assessment }: { assessment: RepositoryAssessment })
 
       <div className="assessment-layout">
         <aside className="section-rail" aria-label="Assessment sections">
+          <a href="#migration-plan">Migration plan</a>
           <a href="#coverage">Coverage</a>
           <a href="#technology">Technology</a>
           <a href="#dependencies">Dependencies</a>
@@ -250,6 +457,7 @@ function AssessmentResults({ assessment }: { assessment: RepositoryAssessment })
         </aside>
 
         <div className="assessment-content">
+          <PlanningResults planning={planning} pending={planningPending} error={planningError} />
           <section className="content-section" id="coverage" aria-labelledby="coverage-heading">
             <div className="section-heading">
               <div>
@@ -490,12 +698,42 @@ function AssessmentResults({ assessment }: { assessment: RepositoryAssessment })
 export default function App() {
   const [source, setSource] = useState('');
   const [assessment, setAssessment] = useState<RepositoryAssessment | null>(null);
+  const [planning, setPlanning] = useState<MigrationPlanningResult | null>(null);
+  const [planningError, setPlanningError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<AssessmentProgress>({
+    phase: 'idle',
+    percent: 0,
+    message: 'Ready.',
+  });
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [authenticationMessage, setAuthenticationMessage] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const authenticationSessionRef = useRef<string | null>(null);
+  const assessmentJobRef = useRef<AssessmentJob | null>(null);
+
+  function updateAssessmentProgress(nextProgress: AssessmentProgress) {
+    setProgress(nextProgress);
+  }
+
+  async function runAssessment(
+    normalizedSource: string,
+    signal: AbortSignal,
+    authenticationSessionId?: string,
+  ) {
+    try {
+      return await assessRepositoryWithProgress(
+        normalizedSource,
+        updateAssessmentProgress,
+        signal,
+        authenticationSessionId,
+        (job) => { assessmentJobRef.current = job; },
+      );
+    } finally {
+      assessmentJobRef.current = null;
+    }
+  }
 
   async function authenticateAndRetry(
     normalizedSource: string,
@@ -519,7 +757,7 @@ export default function App() {
         throw new Error(session.message ?? 'GitHub sign-in did not complete.');
       }
 
-      return await assessRepository(normalizedSource, signal, session.sessionId);
+      return await runAssessment(normalizedSource, signal, session.sessionId);
     } finally {
       if (authenticationSessionRef.current === session.sessionId) {
         authenticationSessionRef.current = null;
@@ -539,7 +777,10 @@ export default function App() {
     setInputError(null);
     setError(null);
     setAssessment(null);
+    setPlanning(null);
+    setPlanningError(null);
     setAuthenticationMessage(null);
+    setProgress({ phase: 'queued', percent: 0, message: 'Submitting assessment.' });
     setLoading(true);
     const nextController = new AbortController();
     controllerRef.current = nextController;
@@ -547,7 +788,7 @@ export default function App() {
     try {
       let result: RepositoryAssessment;
       try {
-        result = await assessRepository(normalizedSource, nextController.signal);
+        result = await runAssessment(normalizedSource, nextController.signal);
       } catch (requestError) {
         if (!(requestError instanceof AssessmentApiError && requestError.authenticationRequired)) {
           throw requestError;
@@ -558,6 +799,15 @@ export default function App() {
 
       setAuthenticationMessage(null);
       setAssessment(result);
+      setProgress({ phase: 'migration-planning', percent: 0, message: 'Scoring readiness and building the migration plan.' });
+      try {
+        const plan = await planMigration(result, nextController.signal);
+        setPlanning(plan);
+        setProgress({ phase: 'completed', percent: 100, message: 'Assessment and migration plan completed.' });
+      } catch (requestError) {
+        if (requestError instanceof DOMException && requestError.name === 'AbortError') throw requestError;
+        setPlanningError(requestError instanceof Error ? requestError.message : 'Migration planning failed.');
+      }
     } catch (requestError) {
       if (!(requestError instanceof DOMException && requestError.name === 'AbortError')) {
         setError(requestError instanceof Error ? requestError.message : 'Assessment failed.');
@@ -574,6 +824,11 @@ export default function App() {
     const authenticationSessionId = authenticationSessionRef.current;
     authenticationSessionRef.current = null;
     controllerRef.current?.abort();
+    const assessmentJob = assessmentJobRef.current;
+    assessmentJobRef.current = null;
+    if (assessmentJob) {
+      void cancelAssessmentJob(assessmentJob).catch(() => undefined);
+    }
     if (authenticationSessionId) {
       void cancelGitHubAuthentication(authenticationSessionId).catch(() => undefined);
     }
@@ -585,11 +840,13 @@ export default function App() {
         <div className="global-header-inner">
           <a className="brand" href="#top" aria-label="Arm Migration Assist home">
             <span className="brand-mark" aria-hidden="true">
-              <i /><i /><i /><i />
+              <svg viewBox="0 0 36 36" role="presentation">
+                <path d="M8 27 18 7l10 20h-6l-4-9-4 9H8Z" />
+                <path className="brand-cut" d="M15.8 24h4.4L18 19.2 15.8 24Z" />
+              </svg>
             </span>
             <span>Arm Migration Assist</span>
           </a>
-          <Badge appearance="tint" color="brand">Feature 1</Badge>
         </div>
       </header>
 
@@ -630,7 +887,9 @@ export default function App() {
                 type="submit"
                 disabled={loading}
               >
-                {loading ? 'Assessing repository' : 'Run assessment'}
+                {loading
+                  ? progress.phase === 'migration-planning' ? 'Planning migration' : 'Assessing repository'
+                  : 'Run assessment'}
               </Button>
               {loading ? (
                 <Button
@@ -652,18 +911,25 @@ export default function App() {
             </MessageBar>
           ) : null}
           {loading ? (
-            <div className="request-status" role="status" aria-live="polite">
-              <span>{authenticationMessage ? 'Waiting for GitHub sign-in' : 'Downloading and scanning a read-only snapshot'}</span>
-              <span>
-                {authenticationMessage ?? 'Results will appear when evidence collection is complete.'}
-              </span>
+            <div className="pipeline-status" role="status" aria-live="polite">
+              <div>
+                <strong>{authenticationMessage ? 'Waiting for GitHub sign-in' : titleCase(progress.phase)}</strong>
+                <span>{progress.phase === 'migration-planning' ? 'Planning' : `${progress.percent}%`}</span>
+              </div>
+              <ProgressBar value={progress.phase === 'migration-planning' ? undefined : progress.percent / 100} />
+              <p>{authenticationMessage ?? progress.message}</p>
             </div>
           ) : null}
         </section>
 
         <div className="workspace">
           {assessment ? (
-            <AssessmentResults assessment={assessment} />
+            <AssessmentResults
+              assessment={assessment}
+              planning={planning}
+              planningPending={loading && progress.phase === 'migration-planning'}
+              planningError={planningError}
+            />
           ) : !loading ? (
             <section className="empty-workspace" aria-label="Assessment status">
               <div className="empty-glyph" aria-hidden="true"><span /></div>

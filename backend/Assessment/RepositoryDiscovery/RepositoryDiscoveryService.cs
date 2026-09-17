@@ -78,13 +78,36 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
             workspace.KnownRelativePaths,
             workspace.KnownTotalFiles,
             workspace.KnownSkippedFiles);
-        progress?.Report(new AssessmentProgress("technology-discovery", 40, "Discovering technology and build signals."));
-        var scan = new RepositoryScanner().Scan(catalog, cancellationToken);
-        progress?.Report(new AssessmentProgress("dependency-scanner", 60, "Scanning dependency manifests and binaries."));
-        var dependencyScan = new DependencyScanner().Scan(catalog.Files, cancellationToken);
-        progress?.Report(new AssessmentProgress("code-compatibility-scanner", 80, "Scanning architecture-sensitive source code."));
-        var codeFindings = new CodeCompatibilityScanner().Scan(catalog.Files, cancellationToken);
+        progress?.Report(new AssessmentProgress(
+            "parallel-scanning",
+            40,
+            "Analyzing technology, dependencies, and architecture-sensitive code in parallel."));
+        var completedScanners = 0;
+        var technologyTask = RunScannerAsync(
+            "technology-discovery",
+            "Technology and build signal analysis completed.",
+            () => new RepositoryScanner().Scan(catalog, cancellationToken));
+        var dependencyTask = RunScannerAsync(
+            "dependency-scanner",
+            "Dependency manifest and binary analysis completed.",
+            () => new DependencyScanner().Scan(catalog.Files, cancellationToken));
+        var codeTask = RunScannerAsync(
+            "code-compatibility-scanner",
+            "Architecture-sensitive code analysis completed.",
+            () => new CodeCompatibilityScanner().Scan(catalog.Files, cancellationToken));
+        await Task.WhenAll(technologyTask, dependencyTask, codeTask);
+        var scan = await technologyTask;
+        var dependencyScan = await dependencyTask;
+        var codeFindings = await codeTask;
         progress?.Report(new AssessmentProgress("finalizing", 95, "Validating assessment evidence."));
+
+        async Task<T> RunScannerAsync<T>(string phase, string message, Func<T> scanOperation)
+        {
+            var result = await Task.Run(scanOperation, cancellationToken);
+            var completed = Interlocked.Increment(ref completedScanners);
+            progress?.Report(new AssessmentProgress(phase, 40 + (completed * 16), message));
+            return result;
+        }
 
         var unknowns = new List<AssessmentUnknown>();
 
@@ -197,6 +220,27 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
                     false,
                     ["repository-file-catalog"],
                     ["code-findings"]),
+                new AvailableSkill(
+                    "build-config-generator",
+                    ProducerVersion,
+                    "Generates reviewable ARM64 changes for supported Docker, .NET, and Visual C++ build files.",
+                    true,
+                    ["migration-plan-v1", "repository-workspace"],
+                    ["unified-diff"]),
+                new AvailableSkill(
+                    "ci-pipeline-generator",
+                    ProducerVersion,
+                    "Generates reviewable ARM64 GitHub Actions or Azure Pipelines changes.",
+                    true,
+                    ["migration-plan-v1", "repository-workspace"],
+                    ["unified-diff"]),
+                new AvailableSkill(
+                    "code-transformer",
+                    ProducerVersion,
+                    "Generates approval-gated architecture compatibility patches for identified source files.",
+                    true,
+                    ["migration-plan-v1", "repository-workspace"],
+                    ["unified-diff"]),
             ]);
 
         RepositoryAssessmentValidator.EnsureValid(assessment);

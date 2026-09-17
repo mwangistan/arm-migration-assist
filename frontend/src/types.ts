@@ -110,3 +110,99 @@ export interface RepositoryAssessment {
   }>;
   availableSkills: AvailableSkill[];
 }
+
+export interface ReadinessDimension {
+  dimensionKey: string;
+  weightPct: number;
+  rawScore: number;
+  weightedContribution: number;
+  confidence: number;
+  rationaleCodes: string[];
+  evidenceIds: string[];
+}
+
+export interface ReadinessScore {
+  schemaVersion: string;
+  assessmentId: string;
+  generatedAt: string;
+  overallScore: number;
+  uncappedScore: number;
+  band: string;
+  evidenceCompleteness: string;
+  evidenceCompletenessScore: number;
+  provisional: boolean;
+  provisionalReasons: string[];
+  dimensions: ReadinessDimension[];
+  capsApplied: Array<{
+    capId: string;
+    ceiling: number;
+    description: string;
+    triggeredBy: string[];
+  }>;
+  majorBlockers: Array<{
+    blockerId: string;
+    category: string;
+    description: string;
+    evidenceIds: string[];
+  }>;
+  scoreSummary: string;
+}
+
+export interface MigrationAcceptanceTest {
+  id: string;
+  description: string;
+  expectedOutcome: string;
+}
+
+export interface MigrationWorkItem {
+  id: string;
+  sequence: number;
+  priority: string;
+  title: string;
+  objective: string;
+  agentOrSkill: string;
+  inputs: string[];
+  expectedOutputs: string[];
+  dependencies: string[];
+  evidenceIds: string[];
+  guidanceIds: string[];
+  acceptanceTests: MigrationAcceptanceTest[];
+  approvalRequired: boolean;
+  estimatedEffort: string;
+  risk: string;
+}
+
+export interface MigrationPlan {
+  schemaVersion: string;
+  planId: string;
+  assessmentId: string;
+  generatedAt: string;
+  modelProvenance: {
+    provider: string;
+    name: string;
+    version: string;
+  };
+  recommendedPath: string;
+  confidence: string;
+  executiveSummary: string;
+  scoreInterpretation: string;
+  workItems: MigrationWorkItem[];
+  alternatives: Array<{
+    path: string;
+    disposition: string;
+    rationale: string;
+  }>;
+  risks: Array<Record<string, unknown>>;
+  unknowns: Array<Record<string, unknown>>;
+  missingSkills: Array<Record<string, unknown>>;
+  requiredApprovals: Array<Record<string, unknown>>;
+  validationPlan: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface MigrationPlanningResult {
+  runId: string;
+  plan: MigrationPlan;
+  score: ReadinessScore;
+  warnings: string[];
+}
