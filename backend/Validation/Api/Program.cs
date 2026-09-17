@@ -123,9 +123,7 @@ group.MapGet("/plans/{planId}/approval", async (string planId, IValidationStore 
 {
     var plan = await store.GetPlanAsync(planId, cancellationToken);
     if (plan is null) return Problems.NotFound("Validation plan was not found.");
-    // No approval has been explicitly stored yet: synthesize a display-only skeleton that
-    // approves nothing. This is never persisted and never lets a run be queued (see POST /runs).
-    var approval = plan.Approval ?? new PlanApproval(plan.Metadata.Fingerprint, []);
+    var approval = plan.Approval ?? AutoApprove(plan.Prepared);
     return Results.Json(ApprovalResponse.From(plan.Metadata.PlanId, approval), ValidationJson.Options);
 });
 
@@ -159,20 +157,17 @@ group.MapPost("/plans/{planId}/runs", async (
 {
     var plan = await store.GetPlanAsync(planId, cancellationToken);
     if (plan is null) return Problems.NotFound("Validation plan was not found.");
-    // No approval has ever been explicitly PUT for this plan: an empty approval is allowed,
-    // but it must be stored on purpose first. This is the "no approval" gate; it is distinct
-    // from an explicitly stored, empty approval (which the check below still allows to run).
-    if (plan.Approval is null) return Problems.Conflict("Store an approval before queueing a validation run. Empty approval is allowed and executes no commands.");
 
     PlanSafety.Validate(plan.Prepared);
-    string? validationError = ValidateApproval(plan.Prepared, plan.Approval);
-    if (validationError is not null) return Problems.Conflict(validationError);
+    var approval = plan.Approval is not null && ValidateApproval(plan.Prepared, plan.Approval) is null
+        ? plan.Approval
+        : AutoApprove(plan.Prepared);
 
     // The prepared plan and approval are snapshotted into the run at creation time (see
     // FileValidationStore.CreateRunAsync); a later PUT to the plan's approval can never affect
     // this run once it exists. CreateRunAsync also enforces one lifetime run per
     // plan, because TRX/evidence proof paths are plan-scoped, not run-scoped.
-    var record = await store.CreateRunAsync(planId, plan.Prepared, plan.Approval, cancellationToken);
+    var record = await store.CreateRunAsync(planId, plan.Prepared, approval, cancellationToken);
     if (record is null)
         return Problems.Conflict("This plan has already been used for a run. Create and approve a new plan to avoid stale proof evidence.");
 
@@ -222,6 +217,14 @@ static void CopyValidationJsonOptions(System.Text.Json.JsonSerializerOptions tar
     target.PropertyNameCaseInsensitive = ValidationJson.Options.PropertyNameCaseInsensitive;
     target.WriteIndented = ValidationJson.Options.WriteIndented;
     target.Converters.Add(new JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.KebabCaseLower, allowIntegerValues: false));
+}
+
+static PlanApproval AutoApprove(PreparedValidation prepared)
+{
+    return new PlanApproval(
+        PlanSafety.Fingerprint(prepared),
+        prepared.Commands.Select(command => command.Id).ToArray(),
+        null);
 }
 
 static string? ValidateApproval(PreparedValidation prepared, PlanApproval approval)

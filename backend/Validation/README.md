@@ -14,10 +14,12 @@ pipelines, or claim readiness from a successful cross-build alone.
 | `BuildValidation/Contracts.cs` | Read-only Feature 2 subset, prepared command plan, approval, evidence, status, and report contracts. |
 | `RepositoryInspector.cs` | Checks effective Git configuration, root, full commit SHA, branch, index entries/flags, every tracked file's raw blob hash against the pinned commit, and untracked files. Supports Git worktrees and detached HEAD. |
 | `DeterministicPlanner.cs` | Conservative executable discovery, explicit bindings/smoke inputs, and manual/uncovered criteria. |
-| `AiContracts.cs`, `FoundryValidationAi.cs`, `ValidationWorkflow.cs` | Injectable AI planning → approval boundary → deterministic execution → AI evidence analysis → AI coverage review, with an Azure Foundry chat-model implementation. |
-| `ValidationExecutor.cs`, `ProcessRunner.cs` | Runner eligibility, approved command execution, bounded output capture, timeout/cancellation, proof parsing, dependency gating, and post-run repository verification. |
+| `AiContracts.cs`, `FoundryValidationAi.cs`, `ValidationWorkflow.cs` | Injectable AI planning → deterministic execution → AI evidence analysis → AI coverage review, with an Azure Foundry chat-model implementation. |
+| `ValidationExecutor.cs`, `ProcessRunner.cs` | Runner eligibility, command execution, bounded output capture, timeout/cancellation, proof parsing, dependency gating, and post-run repository verification. |
 | `ScorecardBuilder.cs` | Deterministic criterion aggregation, overall status, and coverage gaps. |
 | `Dashboard/ValidationDashboard.cs` | Versioned read model and JSON projection suitable for an API. No frontend pages or hosted web API are introduced. |
+| `Api/` | ASP.NET Core wrapper/orchestrator for asynchronous plan approval and run execution. It references the validation engine and persists API-owned JSON metadata outside target repositories. **Interim standalone host**: the overall backend architecture consolidates all four features into a single ASP.NET Core project and Docker image (see the `soph/feature/repo-assessment` branch's `backend/ArmMigrationAssist.Api.csproj`). Once that shared project is merged into `main`, this project's endpoints should move into a `ValidationController` registered there, and this standalone `Api/` host/Dockerfile should be retired in favor of the shared one. |
+| `tests/` | xUnit unit tests and local Git/process integration tests. Fixtures live under the repository's ignored `artifacts/` directory and are removed after tests. |
 | `Api/` | Independent ASP.NET Core wrapper/orchestrator for asynchronous plan approval and run execution. It references the validation engine and persists API-owned JSON metadata outside target repositories. Deploy it behind authentication and an execution-worker boundary; it is intentionally separate from the public assessment and planning APIs. |
 | `tests/` | xUnit unit tests and local Git/process/CLI integration tests. Fixtures live under the repository's ignored `artifacts/` directory and are removed after tests. |
 | `Api.Tests/` | TestServer/WebApplicationFactory coverage for API endpoints, queue lifecycle, recovery semantics, local-only middleware, and filesystem persistence. |
@@ -28,7 +30,7 @@ exact commit, and run reference. There is no CI provider implementation or pipel
 provisioning. CI observations are not automatically promoted into trusted local results.
 CI-specific requirements without observed evidence stay not-run.
 
-## Workflow and approval
+## Workflow
 
 1. `ValidationWorkflow.PrepareAsync` inspects the repository and reads the migration
    plan. It discovers tracked `.csproj`, `.vcxproj`, and `Dockerfile` artifacts.
@@ -37,13 +39,11 @@ CI-specific requirements without observed evidence stay not-run.
    build-artifact contents), the migration validation plan, acceptance tests, and the
    deterministic proposal. It can add custom commands, propose criterion bindings,
    and describe manual checks. It cannot modify the detected command templates.
-3. A human or authenticated approval-owning application reviews the **complete**
-   prepared plan: executable, argument array, relative cwd, environment overrides,
-   timeout, dependencies, target surface, proof requirements, and criterion mappings.
-   `PlanApproval` binds approved command IDs to a canonical SHA-256 fingerprint of
-   the entire proposal, including repository identity and acceptance meanings.
-   Empty/missing approvals execute no validation commands. Plan changes invalidate approval.
-4. `RunAsync` freezes the input, verifies identity again, executes approved commands
+3. The prepared plan is treated as the execution contract: executable, argument array,
+   relative cwd, environment overrides, timeout, dependencies, target surface, proof
+   requirements, and criterion mappings. All commands are executed automatically unless
+   a caller explicitly stores a narrower approval for a custom workflow.
+4. `RunAsync` freezes the input, verifies identity again, executes the prepared commands
    without implicit shell expansion, and collects evidence. Failed/unavailable
    prerequisites prevent dependent execution. A final repository check downgrades
    successes to inconclusive if the source tree or identity changed during the run.
@@ -55,21 +55,13 @@ CI-specific requirements without observed evidence stay not-run.
 
 ## Azure Foundry model integration
 
-The CLI enables all three AI stages when both environment variables are set. For
-repeatable local execution, pass a `.runsettings` file:
-
-```powershell
-dotnet run --project .\backend\Validation\Validation.csproj -- `
-  --settings .\path\to\validation.runsettings `
-  plan <arguments...>
-```
-
+The API host enables all three AI stages when both environment variables are set.
 Authentication uses `DefaultAzureCredential` and the `https://ai.azure.com/.default`
 scope. No API key or access token is stored in configuration or written to validation
 evidence. If neither variable is set, the deterministic/manual workflow remains
 available. Setting only one variable is treated as a configuration error.
 Only `ARM_MIGRATION_FOUNDRY_ENDPOINT` and `ARM_MIGRATION_FOUNDRY_MODEL` are accepted
-from the runsettings file.
+from the host configuration.
 
 Each AI request contains exactly two chat roles:
 
@@ -157,28 +149,14 @@ Create `validation-options.json` with an evidence directory:
 Prepare a proposal and an approval skeleton (full SHA and branch are optional inputs;
 the resolved full SHA and branch are always pinned in the proposal):
 
-```powershell
-dotnet run --project .\backend\Validation\Validation.csproj -- plan `
-  .\migration-plan.json C:\work\migrated-repo .\validation-options.json `
-  .\artifacts\validation\proposal.json .\artifacts\validation\approval.json `
-  <full-commit-sha> <migration-branch>
-```
+Use a separate materialized migration clone as the target. Build outputs must already
+be ignored by that target's Git configuration; untracked files (including unignored
+build output) prevent a clean-commit validation claim. Keep proposal, report, and
+evidence files **outside the target clone**, or in a directory the target already ignores.
 
-The generated approval has an empty `approvedCommandIds` array. Inspect the proposal
-and fill in **only the reviewed command IDs**, including required dependencies.
-Do not change its fingerprint to accept unreviewed changes.
-
-```json
-{
-  "planFingerprint": "<fingerprint from the generated approval>",
-  "approvedCommandIds": ["dotnet-build-<discovered-id>"],
-  "skippedCommands": {}
-}
-```
-
-An optional `skippedCommands` object maps known, unapproved command IDs to explicit
-waiver reasons. Skipped is not passed and does not make a required criterion validated.
-Not approving a command, without an explicit waiver, means not-run.
+The API accepts a prepared migration plan, validates repository identity and plan
+structure, stores the prepared proposal, and queues validation execution directly from
+that plan without a CLI subprocess hop.
 
 ### End-to-end demo data
 
@@ -281,10 +259,165 @@ Endpoint table:
 | `GET /api/v1/validation/plans/{planId}` | Returns persisted plan metadata and proposal data. |
 | `GET /api/v1/validation/plans/{planId}/approval` | Returns the approval document, or a display-only skeleton (approves nothing) if none has been explicitly stored yet. The skeleton is never persisted by this call. |
 | `PUT /api/v1/validation/plans/{planId}/approval` | Accepts approved command IDs plus optional skipped-command reasons and persists them as the plan's one explicit approval (an empty approved-command list is a valid, intentional choice). The server always binds the stored plan fingerprint; a supplied mismatched fingerprint is rejected with `409`. |
-| `POST /api/v1/validation/plans/{planId}/runs` | Returns `409` if no approval has ever been explicitly stored (`PUT /approval` first; an explicit empty approval is allowed and satisfies this). Otherwise revalidates the stored proposal/approval, snapshots both into a new run directory (a later `PUT /approval` can never change an already-queued run), and queues execution. A plan has exactly one run in its lifetime: this returns `409` if any run — `queued`, `running`, or already terminal (`completed`/`failed`/`cancelled`) — was ever created for the plan, TRX/evidence proof paths being plan-scoped. Returns `503` if the run queue is full; the newly created run is still immediately marked `failed` (never left orphaned) and, because it was created, it still consumes the plan's one-run lifetime. There is no in-place retry: create and approve a new plan to run validation again. Otherwise returns `202` with run links. |
+| `POST /api/v1/validation/plans/{planId}/runs` | Uses the plan's explicitly stored approval if one was set via `PUT /approval` and it still matches the plan's fingerprint; otherwise auto-approves every discovered/planned command (there is no approval gate — a plan can be run immediately after creation). Revalidates the stored proposal/approval, snapshots both into a new run directory (a later `PUT /approval` can never change an already-queued run), and queues execution. A plan has exactly one run in its lifetime: this returns `409` if any run — `queued`, `running`, or already terminal (`completed`/`failed`/`cancelled`) — was ever created for the plan, TRX/evidence proof paths being plan-scoped. Returns `503` if the run queue is full; the newly created run is still immediately marked `failed` (never left orphaned) and, because it was created, it still consumes the plan's one-run lifetime. There is no in-place retry: create a new plan to run validation again. Otherwise returns `202` with run links. |
 | `GET /api/v1/validation/runs/{runId}` | Returns `queued`, `running`, `completed`, `failed`, or `cancelled`, timestamps, summary, and sanitized error text. |
 | `GET /api/v1/validation/runs/{runId}/report` | Returns `409` while `queued`/`running` (polling again may eventually succeed), a distinct terminal `409` if the run `failed` or was `cancelled` (a report will never become available), `404` for missing IDs/artifacts, then the `ValidationReport` JSON. |
 | `GET /api/v1/validation/runs/{runId}/dashboard` | Same `409`/`404`/`200` semantics as `/report`, for the dashboard JSON. |
+
+### `POST /api/v1/validation/plans` request payload
+
+The API has no configured or default repository: every field, including which
+repository to validate, is supplied by the caller in this request body. All property
+names use `camelCase` (matching `ValidationJson`'s naming policy) and are matched
+case-insensitively.
+
+Top-level shape (`CreatePlanRequest`):
+
+```jsonc
+{
+  "migrationPlan": { /* MigrationPlan — required, see below */ },
+  "target": { /* RepositoryTarget — required, see below */ },
+  "options": { /* PlanningOptions — required, see below */ },
+  "includeProposal": false   // optional, default false; when true, echoes the full
+                              // prepared proposal (criteria/commands) back in the response
+}
+```
+
+#### `migrationPlan` (required)
+
+```jsonc
+{
+  "schemaVersion": "1.0",          // required; only MigrationPlanV1 (a "1.x" string) is supported
+  "planId": "my-migration-plan",   // required, non-empty
+  "validationPlan": {
+    "targetDevices": ["arm64-vm"], // required, at least one entry
+    // All eight of the following arrays are required (each may be empty, but the
+    // key itself must be present). Every check needs a non-empty id, description,
+    // and expectedOutcome; evidenceIds/guidanceIds are optional string arrays.
+    "buildChecks": [
+      { "id": "vc-build", "description": "Build succeeds", "expectedOutcome": "ARM64 build succeeds" }
+    ],
+    "functionalChecks": [],
+    "reliabilityChecks": [],
+    "performanceChecks": [],
+    "powerChecks": [],
+    "offlineChecks": [],
+    "accessibilityChecks": [],
+    "windowsExperienceChecks": []
+  },
+  "workItems": [
+    // Required array (may be empty). Each item needs a non-empty id and an
+    // acceptanceTests array; each test needs a non-empty id, description, and
+    // expectedOutcome.
+    {
+      "id": "wi-one",
+      "acceptanceTests": [
+        { "id": "at-one", "description": "Acceptance scenario", "expectedOutcome": "Expected behavior" }
+      ]
+    }
+  ]
+}
+```
+
+#### `target` (required) — `RepositoryTarget`
+
+```jsonc
+{
+  "path": "C:\\path\\to\\local-repo",      // required; must be an absolute, non-link path
+                                            // to a clean Git working-tree root (not a subdirectory)
+  "commitSha": "<40- or 64-char hex sha>", // optional; if set, must exactly match HEAD
+  "branch": "main"                         // optional; if set, must exactly match the current branch name
+}
+```
+
+`path` is always a local filesystem path already present on the machine/container
+running the API — the API never clones a remote URL. If `commitSha`/`branch` are
+omitted, whatever is currently checked out at `path` is accepted (still requiring a
+clean, submodule-free working tree that exactly matches its own index and commit).
+
+#### `options` (required) — `PlanningOptions`
+
+```jsonc
+{
+  "evidenceDirectory": "C:\\path\\to\\evidence", // required, absolute path; must not be
+                                                   // inside target.path or inside the API's storage root
+  "mappings": [                                   // optional
+    { "commandId": "dotnet-build-<discovered-id>", "criterionKeys": ["validation:vc-build"] }
+  ],
+  "nativeSmokeChecks": [                          // optional
+    {
+      "projectPath": "native/App.vcxproj",        // must match a Git-relative path in the repository
+      "executable": "native\\ARM64\\Release\\App.exe",
+      "arguments": ["--smoke"],
+      "criterionKeys": ["validation:vc-startup"]
+    }
+  ],
+  "containerSmokeChecks": [                       // optional
+    {
+      "dockerfilePath": "Dockerfile",             // must match a Git-relative path in the repository
+      "arguments": ["python", "-m", "app.smoke"],
+      "criterionKeys": ["validation:vc-container"]
+    }
+  ]
+}
+```
+
+`mappings`/`nativeSmokeChecks`/`containerSmokeChecks` may be omitted entirely; only
+`evidenceDirectory` is mandatory inside `options`.
+
+#### Minimal working example
+
+This is the smallest payload accepted end-to-end (build-only checks, no work items,
+no smoke/mapping options):
+
+```json
+{
+  "migrationPlan": {
+    "schemaVersion": "1.0",
+    "planId": "demo-plan",
+    "validationPlan": {
+      "targetDevices": ["arm64-vm"],
+      "buildChecks": [
+        { "id": "vc-build", "description": "Build succeeds", "expectedOutcome": "ARM64 build succeeds" }
+      ],
+      "functionalChecks": [],
+      "reliabilityChecks": [],
+      "performanceChecks": [],
+      "powerChecks": [],
+      "offlineChecks": [],
+      "accessibilityChecks": [],
+      "windowsExperienceChecks": []
+    },
+    "workItems": []
+  },
+  "target": {
+    "path": "C:\\path\\to\\local-repo",
+    "commitSha": "0123456789abcdef0123456789abcdef01234567",
+    "branch": "main"
+  },
+  "options": {
+    "evidenceDirectory": "C:\\path\\to\\evidence"
+  },
+  "includeProposal": false
+}
+```
+
+#### Validation errors (`400 Bad Request`)
+
+The API rejects the request before any planning or repository access, with a
+`ProblemDetails` body describing which condition failed, for:
+
+- a missing/null request body
+- a missing `migrationPlan`, or one failing any of the required-field checks above
+- a missing/empty `target.path` or `options.evidenceDirectory`
+- a `target.path` or `options.evidenceDirectory` that is not an absolute path, or that
+  resolves through a symbolic link/reparse point
+- `options.evidenceDirectory` nested inside `target.path`
+- `options.evidenceDirectory` nested inside the API's own storage root
+- the API's storage root nested inside `target.path`
+- repository/planning input that otherwise fails safe-planning validation (e.g. the
+  repository does not exist, is not a Git working-tree root, is dirty, has a mismatched
+  `commitSha`/`branch`, or contains submodules)
 
 The API uses the same `ValidationJson` camel-case and kebab-case enum conventions as
 the engine. Validation/client-input failures (malformed requests, unsafe/invalid paths,
@@ -524,12 +657,11 @@ replacement may require downtime; a shared volume alone does not enable safe sca
 ### API Foundry configuration
 
 The API never accepts Foundry endpoint or model values per request. Configure AI once
-at process startup either with the same environment variables used by the CLI:
+at process startup with environment variables or application configuration:
 
 ```powershell
 $env:ARM_MIGRATION_FOUNDRY_ENDPOINT = "https://<foundry-endpoint>"
 $env:ARM_MIGRATION_FOUNDRY_MODEL = "<deployment-name>"
-dotnet run --project .\backend\Validation\Api\Validation.Api.csproj
 ```
 
 or with application configuration:
@@ -592,10 +724,9 @@ container-only scope. They do not imply measurements have taken place.
 ## AI extension and guardrails
 
 Pass implementations of `IValidationPlanner`, `IEvidenceAnalyzer`, and
-`ICoverageReviewer` to `ValidationWorkflow`. The CLI configures
+`ICoverageReviewer` to `ValidationWorkflow`. The API composition root configures
 `FoundryValidationAiClient` for all three stages when both
-`ARM_MIGRATION_FOUNDRY_ENDPOINT` and `ARM_MIGRATION_FOUNDRY_MODEL` are set; otherwise
-planning is deterministic and evidence analysis and coverage review use their
+`ARM_MIGRATION_FOUNDRY_ENDPOINT` and `ARM_MIGRATION_FOUNDRY_MODEL` are set; otherwiseplanning is deterministic and evidence analysis and coverage review use their
 deterministic fallbacks. Each interface has a typed request/response in `AiContracts.cs`
 and a cancellation token.
 For example, an API composition root can construct:
@@ -607,7 +738,8 @@ var workflow = new ValidationWorkflow(
     repositories, processes, myPlanner, myEvidenceAnalyzer, myCoverageReviewer);
 var proposal = await workflow.PrepareAsync(migration, target, options, cancellationToken);
 // Return the proposal to an authenticated reviewer; do not let an AI produce approval.
-var report = await workflow.RunAsync(proposal, humanApproval, cancellationToken);
+var defaultApproval = new PlanApproval(PlanSafety.Fingerprint(proposal), proposal.Commands.Select(c => c.Id).ToList());
+var report = await workflow.RunAsync(proposal, defaultApproval, cancellationToken);
 var dashboardJson = ValidationDashboard.FromReport(report).ToJson();
 ```
 
