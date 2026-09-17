@@ -15,12 +15,7 @@ public class Program
         var options = new PlannerOptions();
         builder.Configuration.GetSection(PlannerOptions.SectionName).Bind(options);
 
-        var providerEnv = Environment.GetEnvironmentVariable("MIGRATIONPLANNER_MODEL_PROVIDER");
-        if (!string.IsNullOrWhiteSpace(providerEnv) &&
-            Enum.TryParse<PlannerModelProvider>(providerEnv, ignoreCase: true, out var provider))
-        {
-            options.ModelProvider = provider;
-        }
+        options.ModelProvider = PlannerProviderResolver.Resolve(builder.Configuration);
 
         var corpusRootEnv = Environment.GetEnvironmentVariable("MIGRATIONPLANNER_CORPUS_ROOT");
         if (!string.IsNullOrWhiteSpace(corpusRootEnv))
@@ -68,6 +63,18 @@ public class Program
             var deploymentEnv = Environment.GetEnvironmentVariable("MIGRATIONPLANNER_HOSTED_DEPLOYMENT");
             if (!string.IsNullOrWhiteSpace(deploymentEnv)) hostedOptions.DeploymentName = deploymentEnv;
 
+            // Bicep in infra/main.bicep currently emits MIGRATIONPLANNER_LLM_* names; accept them as a fallback so the container app doesn't need to be reconfigured before the next infra deploy.
+            if (string.IsNullOrWhiteSpace(hostedOptions.Endpoint))
+            {
+                var llmEndpoint = Environment.GetEnvironmentVariable("MIGRATIONPLANNER_LLM_ENDPOINT");
+                if (!string.IsNullOrWhiteSpace(llmEndpoint)) hostedOptions.Endpoint = llmEndpoint;
+            }
+            if (string.IsNullOrWhiteSpace(hostedOptions.DeploymentName))
+            {
+                var llmDeployment = Environment.GetEnvironmentVariable("MIGRATIONPLANNER_LLM_DEPLOYMENT");
+                if (!string.IsNullOrWhiteSpace(llmDeployment)) hostedOptions.DeploymentName = llmDeployment;
+            }
+
             var keyEnv = Environment.GetEnvironmentVariable("MIGRATIONPLANNER_HOSTED_API_KEY");
             if (!string.IsNullOrWhiteSpace(keyEnv)) hostedOptions.ApiKey = keyEnv;
 
@@ -100,8 +107,9 @@ public class Program
 
         var app = builder.Build();
 
-        // Force guidance-store construction so hash mismatches fail startup.
+        // Force construction of critical singletons so misconfiguration fails startup rather than the first request.
         _ = app.Services.GetRequiredService<IWindowsOnArmGuidanceStore>();
+        _ = app.Services.GetRequiredService<IPlannerModel>();
 
         app.Use(async (context, next) =>
         {
