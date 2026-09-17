@@ -227,6 +227,56 @@ describe('App', () => {
     vi.unstubAllGlobals();
   });
 
+  it('rejects malformed repository URLs without contacting the assessment service', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
+      target: { value: 'https://github.com/example/sample-app/issues' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
+
+    expect(await screen.findByText(
+      'Use an HTTPS GitHub URL in the form https://github.com/owner/repository.',
+    )).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('shows an actionable message when the assessment service is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
+      target: { value: 'https://github.com/example/sample-app' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
+
+    expect(await screen.findByText(
+      'The assessment service is unavailable. Check your connection and try again.',
+    )).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'From evidence to execution.' })).toBeInTheDocument();
+  });
+
+  it('keeps assessment results available when migration planning is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse(assessmentJob(), 202))
+      .mockResolvedValueOnce(jsonResponse(assessment))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch')));
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
+      target: { value: 'https://github.com/example/sample-app' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
+
+    expect(await screen.findByRole('heading', { name: 'sample-app' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Plan unavailable' })).toBeInTheDocument();
+    expect(screen.getByText(
+      'The migration planner is unavailable. Your assessment results are still available.',
+    )).toBeInTheDocument();
+  });
+
   it('runs an assessment and presents dependency and code findings', async () => {
     vi.stubEnv('VITE_ASSESSMENT_API_URL', 'https://assessment.example.test/');
     vi.stubEnv('VITE_MIGRATION_PLANNER_API_URL', 'https://planner.example.test/');

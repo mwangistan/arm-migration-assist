@@ -269,8 +269,7 @@ h1 {
 }
 
 .form-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   gap: 8px;
   align-items: center;
   width: 100%;
@@ -283,6 +282,7 @@ h1 {
 }
 
 .form-actions > button:first-child {
+  flex: 1;
   width: 100%;
 }
 

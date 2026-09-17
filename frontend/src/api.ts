@@ -185,6 +185,35 @@ function migrationPlannerApiUrl(path: string) {
   return configuredBase ? `${configuredBase.replace(/\/+$/, '')}${path}` : path;
 }
 
+async function fetchService(
+  input: string,
+  init: RequestInit | undefined,
+  unavailableMessage: string,
+) {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error;
+    throw new Error(unavailableMessage, { cause: error });
+  }
+}
+
+function fetchAssessmentService(path: string, init?: RequestInit) {
+  return fetchService(
+    assessmentApiUrl(path),
+    init,
+    'The assessment service is unavailable. Check your connection and try again.',
+  );
+}
+
+function fetchMigrationPlanner(path: string, init?: RequestInit) {
+  return fetchService(
+    migrationPlannerApiUrl(path),
+    init,
+    'The migration planner is unavailable. Your assessment results are still available.',
+  );
+}
+
 function problemMessage(value: unknown) {
   if (!isRecord(value)) {
     return 'Assessment failed.';
@@ -350,7 +379,7 @@ function isMigrationPlanningResult(value: unknown): value is MigrationPlanningRe
 }
 
 async function getAssessmentJob(path: string, signal?: AbortSignal): Promise<AssessmentJob> {
-  const response = await fetch(assessmentApiUrl(path), { signal });
+  const response = await fetchAssessmentService(path, { signal });
   const payload = await readJson(response);
   if (!response.ok || !isAssessmentJob(payload)) {
     throw new Error(response.ok
@@ -455,7 +484,7 @@ export async function assessRepositoryWithProgress(
   authenticationSessionId?: string,
   onJobCreated?: (job: AssessmentJob) => void,
 ): Promise<RepositoryAssessment> {
-  const response = await fetch(assessmentApiUrl('/api/assessment-jobs'), {
+  const response = await fetchAssessmentService('/api/assessment-jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ source, authenticationSessionId }),
@@ -481,7 +510,7 @@ export async function assessRepositoryWithProgress(
     );
   }
 
-  const resultResponse = await fetch(assessmentApiUrl(completed.resultUrl), { signal });
+  const resultResponse = await fetchAssessmentService(completed.resultUrl, { signal });
   const result = await readJson(resultResponse);
   if (!resultResponse.ok) {
     throw new AssessmentApiError(
@@ -498,7 +527,7 @@ export async function assessRepositoryWithProgress(
 }
 
 export async function cancelAssessmentJob(job: AssessmentJob): Promise<void> {
-  const response = await fetch(assessmentApiUrl(job.statusUrl), { method: 'DELETE' });
+  const response = await fetchAssessmentService(job.statusUrl, { method: 'DELETE' });
   if (!response.ok && response.status !== 404 && response.status !== 409) {
     throw new Error('The assessment job could not be canceled.');
   }
@@ -508,7 +537,7 @@ export async function planMigration(
   assessment: RepositoryAssessment,
   signal?: AbortSignal,
 ): Promise<MigrationPlanningResult> {
-  const response = await fetch(migrationPlannerApiUrl('/api/migration-plans'), {
+  const response = await fetchMigrationPlanner('/api/migration-plans', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(assessment),
@@ -540,7 +569,7 @@ export async function assessRepository(
   signal?: AbortSignal,
   authenticationSessionId?: string,
 ): Promise<RepositoryAssessment> {
-  const response = await fetch(assessmentApiUrl('/api/assessments'), {
+  const response = await fetchAssessmentService('/api/assessments', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ source, authenticationSessionId }),
@@ -566,7 +595,7 @@ export async function assessRepository(
 export async function startGitHubAuthentication(
   signal?: AbortSignal,
 ): Promise<GitHubAuthenticationSession> {
-  const response = await fetch(assessmentApiUrl('/api/auth/github/sessions'), {
+  const response = await fetchAssessmentService('/api/auth/github/sessions', {
     method: 'POST',
     headers: { 'X-Arm-Migration-Client': 'dashboard' },
     signal,
@@ -585,7 +614,7 @@ export async function getGitHubAuthentication(
   sessionId: string,
   signal?: AbortSignal,
 ): Promise<GitHubAuthenticationSession> {
-  const response = await fetch(assessmentApiUrl(`/api/auth/github/sessions/${encodeURIComponent(sessionId)}`), {
+  const response = await fetchAssessmentService(`/api/auth/github/sessions/${encodeURIComponent(sessionId)}`, {
     signal,
   });
   const payload = await readJson(response);
@@ -601,7 +630,7 @@ export async function getGitHubAuthentication(
 }
 
 export async function cancelGitHubAuthentication(sessionId: string): Promise<void> {
-  const response = await fetch(assessmentApiUrl(`/api/auth/github/sessions/${encodeURIComponent(sessionId)}`), {
+  const response = await fetchAssessmentService(`/api/auth/github/sessions/${encodeURIComponent(sessionId)}`, {
     method: 'DELETE',
     headers: { 'X-Arm-Migration-Client': 'dashboard' },
   });

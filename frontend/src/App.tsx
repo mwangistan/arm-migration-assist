@@ -69,6 +69,29 @@ const technologyGroups = [
   ['CI systems', 'ciSystems'],
 ] as const;
 
+const githubRepositorySegment = /^[A-Za-z0-9_.-]+$/;
+
+function isGitHubRepositoryUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const segments = url.pathname.split('/').filter(Boolean);
+    const repository = segments[1]?.replace(/\.git$/i, '') ?? '';
+
+    return url.protocol === 'https:'
+      && url.hostname.toLowerCase() === 'github.com'
+      && url.port === ''
+      && url.username === ''
+      && url.password === ''
+      && url.search === ''
+      && url.hash === ''
+      && segments.length === 2
+      && githubRepositorySegment.test(segments[0])
+      && githubRepositorySegment.test(repository);
+  } catch {
+    return false;
+  }
+}
+
 function pluralize(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -945,6 +968,11 @@ export default function App() {
       return;
     }
 
+    if (!isGitHubRepositoryUrl(normalizedSource)) {
+      setInputError('Use an HTTPS GitHub URL in the form https://github.com/owner/repository.');
+      return;
+    }
+
     setInputError(null);
     setError(null);
     setAssessment(null);
@@ -1023,8 +1051,8 @@ export default function App() {
             </span>
           </a>
           <div className="header-assurances" aria-label="Product safeguards">
-            <span>Read-only analysis</span>
-            <span>Approval-gated change</span>
+            <span>No source execution</span>
+            <span>Human approval required</span>
           </div>
         </div>
       </header>
@@ -1033,10 +1061,10 @@ export default function App() {
         <section className="intake-band" aria-labelledby="page-title">
           <div className="intake-grid">
             <div className="page-intro">
-              <p className="eyebrow">ARM Migration Assist</p>
-              <h1 id="page-title">Plan your Windows on Arm migration</h1>
+              <p className="eyebrow">Windows on Arm</p>
+              <h1 id="page-title">Plan your app for Windows on Arm</h1>
               <p className="page-context">
-                Assess readiness, choose a strategy, and prepare approved ARM64 work.
+                Assess a GitHub repository and get an evidence-linked migration plan.
               </p>
               <div className="trust-row" aria-label="Analysis guarantees">
                 <span><Checkmark16Regular aria-hidden="true" /> Commit-pinned</span>
@@ -1047,9 +1075,8 @@ export default function App() {
 
             <div className="intake-workbench">
               <div className="intake-heading">
-                <span>01 / Connect</span>
-                <strong>Analyze a repository</strong>
-                <p>Enter a GitHub URL. Protected repositories use local sign-in.</p>
+                <strong>Start with a repository</strong>
+                <p>Public or protected with local GitHub sign-in.</p>
               </div>
               <form className="assessment-form" onSubmit={handleSubmit} noValidate>
                 <Field
