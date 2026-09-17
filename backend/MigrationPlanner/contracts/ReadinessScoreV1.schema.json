@@ -13,14 +13,16 @@
     "overallScore",
     "uncappedScore",
     "band",
-    "confidence",
-    "confidenceScore",
+    "evidenceCompleteness",
+    "evidenceCompletenessScore",
     "provisional",
     "provisionalReasons",
     "dimensions",
     "capsApplied",
     "majorBlockers",
     "rationaleCodes",
+    "rationaleDescriptions",
+    "scoreSummary",
     "evidenceIds"
   ],
   "properties": {
@@ -70,13 +72,13 @@
         "insufficient-evidence"
       ]
     },
-    "confidence": {
-      "description": "Banded confidence label, independent of readiness.",
+    "evidenceCompleteness": {
+      "description": "Banded evidence-completeness label. Independent of readiness. Renamed from 'confidence' in scoring-v2 to disambiguate from MigrationPlanV1.confidence.",
       "enum": ["high", "medium", "low"]
     },
-    "confidenceScore": {
+    "evidenceCompletenessScore": {
       "$comment": "Numeric precision should stay at 2 decimal places for canonicalization stability.",
-      "description": "Raw confidence in the closed interval [0.0, 1.0] before banding.",
+      "description": "Raw evidence-completeness in the closed interval [0.0, 1.0] before banding.",
       "type": "number",
       "minimum": 0,
       "maximum": 1
@@ -118,6 +120,21 @@
       "maxItems": 500,
       "uniqueItems": true,
       "items": {"$ref": "#/$defs/RationaleCode"}
+    },
+    "rationaleDescriptions": {
+      "description": "Map from rationale code to a one-line human description. Includes an entry for every code that appears anywhere in the score. Codes without a curated description use the code string itself as description.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      }
+    },
+    "scoreSummary": {
+      "description": "Deterministic one-paragraph summary of the score, safe for the planner model to lift into MigrationPlanV1.scoreInterpretation.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
     },
     "evidenceIds": {
       "description": "All evidence IDs the scorer touched, deduplicated. The plan validator uses this list to check that every evidenceId in the plan is drawn from evidence the scorer actually observed.",

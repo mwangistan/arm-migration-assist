@@ -303,6 +303,14 @@
           "maxItems": 20,
           "uniqueItems": true,
           "items": {"$ref": "#/$defs/GuidanceId"}
+        },
+        "estimatedEffort": {
+          "description": "Optional (schema 1.1): rough effort estimate to execute this alternative end-to-end.",
+          "enum": ["small", "medium", "large", "unknown"]
+        },
+        "risk": {
+          "description": "Optional (schema 1.1): overall risk level of executing this alternative.",
+          "enum": ["low", "medium", "high", "critical"]
         }
       }
     },
