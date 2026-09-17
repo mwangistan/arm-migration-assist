@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <RootNamespace>MigrationPlanner.Application</RootNamespace>
-    <AssemblyName>MigrationPlanner.Application</AssemblyName>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\MigrationPlanner.Domain\MigrationPlanner.Domain.csproj" />
-  </ItemGroup>
-</Project>
