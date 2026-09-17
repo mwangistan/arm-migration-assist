@@ -1,0 +1,205 @@
+{
+  "schemaVersion": "1.0",
+  "catalogVersion": "2026-09-17.1",
+  "generatedAt": "2026-09-17T00:00:00Z",
+  "skills": [
+    {
+      "name": "assessment/repository-discovery",
+      "version": "0.1.0",
+      "category": "assessment",
+      "description": "Discovers repository structure, language mix, and scanner inputs. Produces a partial RepositoryAssessmentV1.",
+      "writeAccess": false,
+      "supportedInputs": ["repository"],
+      "supportedOutputs": ["assessment"]
+    },
+    {
+      "name": "assessment/dependency-scan",
+      "version": "0.1.0",
+      "category": "assessment",
+      "description": "Scans NuGet, vcpkg, and native package manifests to produce dependency findings with ARM64 status.",
+      "writeAccess": false,
+      "supportedInputs": ["repository", "lockfiles"],
+      "supportedOutputs": ["dependency-findings"]
+    },
+    {
+      "name": "assessment/code-compatibility-scan",
+      "version": "0.1.0",
+      "category": "assessment",
+      "description": "Scans source for x86/x64-specific intrinsics, inline asm, and hard-coded architecture conditionals.",
+      "writeAccess": false,
+      "supportedInputs": ["source-tree"],
+      "supportedOutputs": ["code-findings"]
+    },
+    {
+      "name": "assessment/build-readiness-scan",
+      "version": "0.1.0",
+      "category": "assessment",
+      "description": "Inspects project files, solutions, and CI workflows to determine ARM64 build coverage.",
+      "writeAccess": false,
+      "supportedInputs": ["csproj", "vcxproj", "sln", "yaml"],
+      "supportedOutputs": ["build-findings"]
+    },
+    {
+      "name": "assessment/windows-experience-audit",
+      "version": "0.1.0",
+      "category": "assessment",
+      "description": "Audits installer, packaging manifest, and Windows integration surfaces (notifications, lifecycle).",
+      "writeAccess": false,
+      "supportedInputs": ["appxmanifest", "installer"],
+      "supportedOutputs": ["windows-findings"]
+    },
+    {
+      "name": "assessment/accessibility-audit",
+      "version": "0.1.0",
+      "category": "assessment",
+      "description": "Audits UI accessibility patterns and evidence (UI Automation, keyboard, high-contrast).",
+      "writeAccess": false,
+      "supportedInputs": ["ui-tree"],
+      "supportedOutputs": ["accessibility-findings"]
+    },
+    {
+      "name": "build/add-arm64-target",
+      "version": "0.1.0",
+      "category": "build",
+      "description": "Adds ARM64 configurations to MSBuild projects and solution platform mappings.",
+      "writeAccess": true,
+      "supportedInputs": ["csproj", "vcxproj", "sln"],
+      "supportedOutputs": ["patch"]
+    },
+    {
+      "name": "build/add-arm64ec-target",
+      "version": "0.1.0",
+      "category": "build",
+      "description": "Adds Arm64EC configurations to native/mixed MSBuild projects for staged migration.",
+      "writeAccess": true,
+      "supportedInputs": ["vcxproj", "sln"],
+      "supportedOutputs": ["patch"]
+    },
+    {
+      "name": "build/toolchain-upgrade",
+      "version": "0.1.0",
+      "category": "build",
+      "description": "Upgrades Directory.Build.props/targets and SDK/toolset versions to an ARM64-capable toolchain.",
+      "writeAccess": true,
+      "supportedInputs": ["props", "targets"],
+      "supportedOutputs": ["patch"]
+    },
+    {
+      "name": "packaging/add-arm64-msix",
+      "version": "0.1.0",
+      "category": "packaging",
+      "description": "Adds ARM64 processor architecture entries and bundle mappings to MSIX packaging.",
+      "writeAccess": true,
+      "supportedInputs": ["appxmanifest"],
+      "supportedOutputs": ["patch"]
+    },
+    {
+      "name": "packaging/wix-arm64",
+      "version": "0.1.0",
+      "category": "packaging",
+      "description": "Adds ARM64 packaging to WiX installers, including platform-specific components and bundle chains.",
+      "writeAccess": true,
+      "supportedInputs": ["wxs"],
+      "supportedOutputs": ["patch"]
+    },
+    {
+      "name": "pipeline/github-actions-arm64-job",
+      "version": "0.1.0",
+      "category": "pipeline",
+      "description": "Adds an ARM64 build/test job to GitHub Actions workflows with matching runner labels.",
+      "writeAccess": true,
+      "supportedInputs": ["yaml"],
+      "supportedOutputs": ["patch"]
+    },
+    {
+      "name": "pipeline/azure-pipelines-arm64-stage",
+      "version": "0.1.0",
+      "category": "pipeline",
+      "description": "Adds an ARM64 stage to Azure Pipelines definitions with the appropriate pool selector.",
+      "writeAccess": true,
+      "supportedInputs": ["yaml"],
+      "supportedOutputs": ["patch"]
+    },
+    {
+      "name": "pipeline/matrix-fanout",
+      "version": "0.1.0",
+      "category": "pipeline",
+      "description": "Fans an existing single-architecture build job into an x64+ARM64 matrix without duplicating steps.",
+      "writeAccess": true,
+      "supportedInputs": ["yaml"],
+      "supportedOutputs": ["patch"]
+    },
+    {
+      "name": "code/sse-to-neon-porting",
+      "version": "0.1.0",
+      "category": "code",
+      "description": "Ports SSE/AVX intrinsics to NEON equivalents behind an architecture-aware header shim.",
+      "writeAccess": true,
+      "supportedInputs": ["cpp", "h"],
+      "supportedOutputs": ["patch"]
+    },
+    {
+      "name": "code/arch-conditional-cleanup",
+      "version": "0.1.0",
+      "category": "code",
+      "description": "Refactors hard-coded x64-only conditionals into architecture-agnostic or ARM64-aware branches.",
+      "writeAccess": true,
+      "supportedInputs": ["cpp", "cs"],
+      "supportedOutputs": ["patch"]
+    },
+    {
+      "name": "code/pinvoke-arm64-shim",
+      "version": "0.1.0",
+      "category": "code",
+      "description": "Introduces a P/Invoke shim layer that routes calls to an ARM64-native or Arm64EC-compatible library.",
+      "writeAccess": true,
+      "supportedInputs": ["cs", "cpp"],
+      "supportedOutputs": ["patch"]
+    },
+    {
+      "name": "dependency/source-build",
+      "version": "0.1.0",
+      "category": "dependency",
+      "description": "Rebuilds a source-available dependency for ARM64 and publishes a locally consumable package.",
+      "writeAccess": true,
+      "supportedInputs": ["package-ref", "source-url"],
+      "supportedOutputs": ["patch", "artifact"]
+    },
+    {
+      "name": "dependency/replace-x64-only",
+      "version": "0.1.0",
+      "category": "dependency",
+      "description": "Swaps an x64-only dependency for an ARM64-capable replacement identified during the dependency scan.",
+      "writeAccess": true,
+      "supportedInputs": ["package-ref"],
+      "supportedOutputs": ["patch"]
+    },
+    {
+      "name": "validation/build-arm64",
+      "version": "0.1.0",
+      "category": "validation",
+      "description": "Builds the ARM64 (and Arm64EC where applicable) configuration and captures build logs.",
+      "writeAccess": true,
+      "supportedInputs": ["repository"],
+      "supportedOutputs": ["build-log"]
+    },
+    {
+      "name": "validation/smoke-test",
+      "version": "0.1.0",
+      "category": "validation",
+      "description": "Runs the ARM64 smoke test suite and captures a test report.",
+      "writeAccess": true,
+      "supportedInputs": ["repository", "test-list"],
+      "supportedOutputs": ["test-report"]
+    },
+    {
+      "name": "validation/emulation-perf-baseline",
+      "version": "0.1.0",
+      "category": "validation",
+      "description": "Runs an emulated x64 vs native ARM64 performance baseline for the primary binary.",
+      "writeAccess": true,
+      "supportedInputs": ["binary"],
+      "supportedOutputs": ["perf-report"]
+    }
+  ]
+}

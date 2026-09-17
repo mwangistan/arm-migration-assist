@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>MigrationPlanner.Tests.Unit</RootNamespace>
+    <AssemblyName>MigrationPlanner.Tests.Unit</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MigrationPlanner.Domain\MigrationPlanner.Domain.csproj" />
+    <ProjectReference Include="..\..\src\MigrationPlanner.Application\MigrationPlanner.Application.csproj" />
+    <ProjectReference Include="..\..\src\MigrationPlanner.Infrastructure\MigrationPlanner.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+</Project>

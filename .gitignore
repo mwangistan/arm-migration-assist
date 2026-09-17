@@ -42,3 +42,42 @@ Thumbs.db
 
 # Local assessment output
 *.v1.json
+# .NET
+bin/
+obj/
+*.user
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.env
+.env.local
+
+# Generated artifacts (reports, patches, analysis output)
+artifacts/
+output/
+
+# IDE
+.vs/
+.vscode/
+*.suo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Office documents
+*.docx
+*.pptx
+
+# Local test scratch & storage emulator artifacts
+tmp/
+AzuriteConfig
+__azurite_db_*.json
+__azurite_db_*__.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

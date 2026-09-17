@@ -1,0 +1,418 @@
+using System.Text.Json;
+using FluentAssertions;
+using MigrationPlanner.Application.Abstractions;
+using MigrationPlanner.Domain.Assessment;
+using MigrationPlanner.Domain.Errors;
+using MigrationPlanner.Domain.Guidance;
+using MigrationPlanner.Domain.Plan;
+using MigrationPlanner.Infrastructure.Scoring;
+using MigrationPlanner.Infrastructure.Validation;
+using MigrationPlanner.Tests.Unit.Scoring;
+using Xunit;
+
+namespace MigrationPlanner.Tests.Unit.Validation;
+
+public sealed class PlanSafetyValidatorTests
+{
+    private static readonly DeterministicReadinessScorer Scorer = new();
+
+    [Fact]
+    public void ValidPlan_WithMatchingDigestAndKnownEvidence_ReturnsOk()
+    {
+        var (assessment, score, plan) = BuildValidCase();
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeTrue(result.Violations.Any() ? result.Violations[0] : "");
+        result.ErrorCode.Should().BeNull();
+    }
+
+    [Fact]
+    public void MismatchedScoreDigest_ReturnsScoreDigestMismatchError()
+    {
+        var (assessment, score, plan) = BuildValidCase(digestOverride: new string('0', 64));
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanScoreDigestMismatch);
+    }
+
+    [Fact]
+    public void MissingScoreDigest_ReturnsShapeInvalidError()
+    {
+        var (assessment, score, plan) = BuildValidCase(omitKey: "scoreDigest");
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanShapeInvalid);
+    }
+
+    [Fact]
+    public void UnknownEvidenceIdCitation_ReturnsEvidenceMissingError()
+    {
+        var (assessment, score, plan) = BuildValidCase(extraEvidenceCitation: "does-not-exist");
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanEvidenceMissing);
+        result.Violations.Should().ContainMatch("*does-not-exist*");
+    }
+
+    [Fact]
+    public void UnknownGuidanceIdCitation_ReturnsGuidanceMissingError()
+    {
+        var (assessment, score, plan) = BuildValidCase(extraGuidanceCitation: "hallucinated-guidance-99");
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanGuidanceMissing);
+        result.Violations.Should().ContainMatch("*hallucinated-guidance-99*");
+    }
+
+    [Fact]
+    public void UnsafeInstruction_ReturnsSafetyViolationError()
+    {
+        var (assessment, score, plan) = BuildValidCase(unsafeText: "run git push origin main after commit");
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanSafetyViolation);
+    }
+
+    [Fact]
+    public void MismatchedAssessmentId_ReturnsSafetyViolationError()
+    {
+        var (assessment, score, plan) = BuildValidCase();
+        plan = plan with { AssessmentId = "wrong-assessment-id" };
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanSafetyViolation);
+    }
+
+    [Fact]
+    public void RecommendedPathDoesNotMatchDispatch_ReturnsRecommendationInconsistent()
+    {
+        var (assessment, score, plan) = BuildValidCase(recommendedPathOverride: "arm64ec");
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanRecommendationInconsistent);
+        result.Violations.Should().ContainMatch("*arm64ec*");
+        result.Violations.Should().ContainMatch("*native-arm64*");
+    }
+
+    [Fact]
+    public void HallucinatedSkill_NotInAvailableOrMissing_ReturnsMissingSkillError()
+    {
+        var (assessment, score, plan) = BuildValidCase(workItemSkill: "hallucinated-skill");
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanMissingSkill);
+        result.Violations.Should().ContainMatch("*hallucinated-skill*");
+    }
+
+    [Fact]
+    public void SkillDeclaredInMissingSkills_Passes()
+    {
+        var (assessment, score, plan) = BuildValidCase(
+            workItemSkill: "future-skill",
+            declaredMissingSkill: "future-skill");
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeTrue(result.Violations.Any() ? result.Violations[0] : "");
+    }
+
+    [Fact]
+    public void WorkItemInputNotInSkillSupportedInputs_ReturnsSkillIoMismatchError()
+    {
+        var (assessment, score, plan) = BuildValidCase(
+            workItemSkill: "build/add-arm64-target",
+            availableSkill: new Skill(
+                Name: "build/add-arm64-target",
+                Version: "0.1.0",
+                Description: "Adds ARM64 targets.",
+                WriteAccess: true,
+                SupportedInputs: new[] { "csproj" },
+                SupportedOutputs: new[] { "patch" }),
+            workItemInput: "input",
+            workItemOutput: "patch",
+            approveWorkItem: true);
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanSkillIoMismatch);
+        result.Violations.Should().ContainMatch("*input*");
+        result.Violations.Should().ContainMatch("*build/add-arm64-target*");
+    }
+
+    [Fact]
+    public void WorkItemOutputNotInSkillSupportedOutputs_ReturnsSkillIoMismatchError()
+    {
+        var (assessment, score, plan) = BuildValidCase(
+            workItemSkill: "build/add-arm64-target",
+            availableSkill: new Skill(
+                Name: "build/add-arm64-target",
+                Version: "0.1.0",
+                Description: "Adds ARM64 targets.",
+                WriteAccess: true,
+                SupportedInputs: new[] { "csproj" },
+                SupportedOutputs: new[] { "patch" }),
+            workItemInput: "csproj",
+            workItemOutput: "artifact",
+            approveWorkItem: true);
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanSkillIoMismatch);
+        result.Violations.Should().ContainMatch("*artifact*");
+    }
+
+    [Fact]
+    public void WorkItemIoMatchesSkill_Passes()
+    {
+        var (assessment, score, plan) = BuildValidCase(
+            workItemSkill: "build/add-arm64-target",
+            availableSkill: new Skill(
+                Name: "build/add-arm64-target",
+                Version: "0.1.0",
+                Description: "Adds ARM64 targets.",
+                WriteAccess: true,
+                SupportedInputs: new[] { "csproj" },
+                SupportedOutputs: new[] { "patch" }),
+            workItemInput: "csproj",
+            workItemOutput: "patch",
+            approveWorkItem: true);
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeTrue(result.Violations.Any() ? result.Violations[0] : "");
+    }
+
+    [Fact]
+    public void WriteCapableWorkItemWithoutApproval_ReturnsApprovalMissingError()
+    {
+        var (assessment, score, plan) = BuildValidCase(
+            workItemSkill: "build/add-arm64-target",
+            availableSkill: new Skill(
+                Name: "build/add-arm64-target",
+                Version: "0.1.0",
+                Description: "Adds ARM64 targets.",
+                WriteAccess: true,
+                SupportedInputs: new[] { "csproj" },
+                SupportedOutputs: new[] { "patch" }),
+            workItemInput: "csproj",
+            workItemOutput: "patch",
+            approveWorkItem: false);
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeFalse();
+        result.ErrorCode.Should().Be(PlannerErrorCode.PlanApprovalMissing);
+        result.Violations.Should().ContainMatch("*wi-test-item*");
+        result.Violations.Should().ContainMatch("*build/add-arm64-target*");
+    }
+
+    [Fact]
+    public void ReadOnlySkillDoesNotRequireApproval_Passes()
+    {
+        var (assessment, score, plan) = BuildValidCase(
+            workItemSkill: "assessment/dependency-scan",
+            availableSkill: new Skill(
+                Name: "assessment/dependency-scan",
+                Version: "0.1.0",
+                Description: "Scans dependencies.",
+                WriteAccess: false,
+                SupportedInputs: new[] { "repository" },
+                SupportedOutputs: new[] { "dependency-findings" }),
+            workItemInput: "repository",
+            workItemOutput: "dependency-findings",
+            approveWorkItem: false);
+        var validator = BuildValidator();
+
+        var result = validator.Validate(plan, assessment, score);
+
+        result.IsSafe.Should().BeTrue(result.Violations.Any() ? result.Violations[0] : "");
+    }
+
+    private static PlanSafetyValidator BuildValidator() =>
+        new(new EmptyGuidanceStore());
+
+    private static (RepositoryAssessmentV1 assessment, ReadinessScoreV1 score, MigrationPlanV1 plan) BuildValidCase(
+        string? digestOverride = null,
+        string? omitKey = null,
+        string? extraEvidenceCitation = null,
+        string? extraGuidanceCitation = null,
+        string? unsafeText = null,
+        string? recommendedPathOverride = null,
+        string? workItemSkill = null,
+        string? declaredMissingSkill = null,
+        Skill? availableSkill = null,
+        string workItemInput = "input",
+        string workItemOutput = "output",
+        bool approveWorkItem = false)
+    {
+        var deps = new[]
+        {
+            ScoringAssessmentBuilder.Dep("dep-known", "Sample.Utilities"),
+        };
+        var assessment = ScoringAssessmentBuilder.Ready(dependencies: deps);
+        if (availableSkill is not null)
+        {
+            assessment = assessment with { AvailableSkills = new[] { availableSkill } };
+        }
+        var score = Scorer.Score(assessment);
+        var digest = digestOverride
+            ?? MigrationPlanner.Domain.Plan.ScoreDigest.Compute(score);
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["schemaVersion"] = "1.0",
+            ["planId"] = "plan-test-001",
+            ["assessmentId"] = assessment.AssessmentId,
+            ["generatedAt"] = "2026-09-16T00:00:00Z",
+            ["modelProvenance"] = new { provider = "fake", name = "fake-planner", version = "0.1.0" },
+            ["scoreDigest"] = digest,
+            ["corpusVersion"] = "2026-09-15.1",
+            ["recommendedPath"] = recommendedPathOverride ?? "native-arm64",
+            ["confidence"] = "high",
+            ["executiveSummary"] = unsafeText ?? "Baseline plan.",
+            ["scoreInterpretation"] = "All dimensions clean.",
+            ["facts"] = new[]
+            {
+                new
+                {
+                    statement = "Deterministic scorer observed evidence.",
+                    evidenceIds = extraEvidenceCitation is not null
+                        ? new[] { "dep-known", extraEvidenceCitation }
+                        : new[] { "dep-known" },
+                    guidanceIds = extraGuidanceCitation is not null
+                        ? new[] { extraGuidanceCitation }
+                        : Array.Empty<string>(),
+                },
+            },
+            ["inferences"] = Array.Empty<object>(),
+            ["alternatives"] = new[]
+            {
+                new
+                {
+                    path = "native-arm64",
+                    disposition = "viable",
+                    rationale = "Recommended path.",
+                    evidenceIds = Array.Empty<string>(),
+                    guidanceIds = Array.Empty<string>(),
+                },
+            },
+            ["workItems"] = workItemSkill is null
+                ? (object)Array.Empty<object>()
+                : new[]
+                {
+                    new
+                    {
+                        id = "wi-test-item",
+                        sequence = 1,
+                        priority = "P1",
+                        title = "Test item",
+                        objective = "Exercise skill validation",
+                        agentOrSkill = workItemSkill,
+                        inputs = new[] { workItemInput },
+                        expectedOutputs = new[] { workItemOutput },
+                        dependencies = Array.Empty<string>(),
+                        evidenceIds = new[] { "dep-known" },
+                        guidanceIds = Array.Empty<string>(),
+                        acceptanceTests = new[]
+                        {
+                            new
+                            {
+                                id = "at-test",
+                                description = "The test item completes.",
+                                expectedOutcome = "The test item completes.",
+                            },
+                        },
+                        approvalRequired = true,
+                        estimatedEffort = "small",
+                        risk = "low",
+                    },
+                },
+            ["missingSkills"] = declaredMissingSkill is null
+                ? (object)Array.Empty<object>()
+                : new[]
+                {
+                    new
+                    {
+                        proposedName = declaredMissingSkill,
+                        purpose = "Test missing skill",
+                        requiredInputs = new[] { workItemInput },
+                        expectedOutputs = new[] { workItemOutput },
+                        justification = "Not offered by Feature 1 yet.",
+                        evidenceIds = Array.Empty<string>(),
+                    },
+                },
+            ["validationPlan"] = new { objectives = Array.Empty<object>(), checks = Array.Empty<object>() },
+            ["risks"] = Array.Empty<object>(),
+            ["unknowns"] = Array.Empty<object>(),
+            ["requiredApprovals"] = approveWorkItem
+                ? (object)new[]
+                {
+                    new
+                    {
+                        approvalId = "ap-test",
+                        summary = "Approve write-capable work items.",
+                        workItemIds = new[] { "wi-test-item" },
+                    },
+                }
+                : Array.Empty<object>(),
+            ["reusableOutputs"] = Array.Empty<object>(),
+        };
+
+        if (omitKey is not null)
+        {
+            payload.Remove(omitKey);
+        }
+
+        var json = JsonSerializer.Serialize(payload);
+        var plan = JsonSerializer.Deserialize<MigrationPlanV1>(json)!;
+        return (assessment, score, plan);
+    }
+
+    private sealed class EmptyGuidanceStore : IWindowsOnArmGuidanceStore
+    {
+        public string CorpusVersion => "2026-09-15.1";
+
+        public IReadOnlyCollection<GuidanceSnippet> All() => Array.Empty<GuidanceSnippet>();
+
+        public IReadOnlyCollection<GuidanceSnippet> FindByTopic(Topic topic) => Array.Empty<GuidanceSnippet>();
+
+        public bool TryGet(string guidanceId, out GuidanceSnippet? snippet)
+        {
+            snippet = null;
+            return false;
+        }
+    }
+}

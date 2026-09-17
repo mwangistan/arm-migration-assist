@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "1.0",
+  "assessmentId": "assessment-phi-smoke-001",
+  "generatedAt": "2026-09-15T00:00:00Z",
+  "producer": {
+    "name": "arm-migration-assist-feature1",
+    "version": "0.1.0",
+    "ruleset": null,
+    "scannerVersions": []
+  },
+  "repository": {
+    "name": "sample-repo",
+    "url": "https://example.com/org/sample-repo",
+    "commitSha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "defaultBranch": "main",
+    "license": null
+  },
+  "technology": {
+    "languages": ["csharp"],
+    "frameworks": [],
+    "projectTypes": ["desktop"],
+    "buildSystems": ["msbuild"],
+    "packageManagers": ["nuget"],
+    "installers": [],
+    "ciSystems": []
+  },
+  "dependencies": [
+    {
+      "evidenceId": "dep-001",
+      "name": "Sample.Package",
+      "ecosystem": "nuget",
+      "type": "managed",
+      "criticality": "optional",
+      "architectureStatus": "ready",
+      "availableArchitectures": ["any-cpu"],
+      "replacementCandidates": [],
+      "evidence": [
+        { "sourceType": "file", "observation": "Detected sample project file.", "path": "src/App.csproj" }
+      ],
+      "confidence": 0.9
+    }
+  ],
+  "codeFindings": [
+    {
+      "evidenceId": "code-001",
+      "ruleId": "ARM-CODE-SAMPLE-01",
+      "category": "sample",
+      "severity": "informational",
+      "file": "src/App.cs",
+      "description": "Sample finding for smoke test.",
+      "evidence": [
+        { "sourceType": "file", "observation": "Sample source line.", "path": "src/App.cs" }
+      ],
+      "confidence": 0.5
+    }
+  ],
+  "buildFindings": {
+    "evidenceId": "build-001",
+    "arm64TargetExists": false,
+    "arm64EcTargetExists": false,
+    "arm64CiJobExists": false,
+    "packagingSupportsArm64": false,
+    "testsExist": true,
+    "detectedTargets": ["x64/Debug"],
+    "evidence": [
+      { "sourceType": "manifest", "observation": "csproj declares only x64/Debug.", "path": "src/App.csproj" }
+    ]
+  },
+  "windowsExperience": {
+    "windowsVersionExists": true,
+    "uiTechnology": "wpf",
+    "installerExists": false,
+    "offlineCapable": false,
+    "accessibilityEvidence": "unknown",
+    "notificationsIntegrated": false,
+    "lifecycleIntegrated": false,
+    "evidence": [
+      { "sourceType": "manifest", "observation": "WPF entrypoint detected.", "path": "src/App.xaml" }
+    ]
+  },
+  "scanCoverage": {
+    "filesScanned": 10,
+    "filesTotal": 10,
+    "dependencyResolutionRate": 1.0,
+    "scannersCompleted": ["dep", "code", "build"],
+    "scannersFailed": []
+  },
+  "unknowns": [],
+  "availableSkills": [
+    {
+      "name": "assessment/repository-discovery",
+      "version": "0.1.0",
+      "description": "Discovers repository structure and scanner inputs.",
+      "writeAccess": false,
+      "supportedInputs": ["repository"],
+      "supportedOutputs": ["assessment"]
+    }
+  ]
+}

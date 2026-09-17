@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0",
+  "corpusVersion": "2026-09-15.1",
+  "generatedAt": "2026-09-17T12:23:28Z",
+  "producer": {
+    "name": "arm-migration-assist-corpus",
+    "version": "0.1.0",
+    "sourceKind": "hand-authored-prototype",
+    "toolCommit": null
+  },
+  "source": "microsoft-learn-windows-on-arm",
+  "snippets": [
+    {
+      "guidanceId": "woa-overview-01",
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows/arm/overview",
+      "title": "Windows on Arm overview",
+      "section": "Overview",
+      "retrievedAt": "2026-09-14T00:00:00Z",
+      "relativePath": "snippets/woa-overview-01.md",
+      "topics": [
+        "woa-overview"
+      ],
+      "summary": "Windows 11 supports ARM64 natively and emulates x64; native ARM64 unlocks best performance and battery.",
+      "sha256": "f8307444b3833a5064baf483f118d690cef195049aa48c67e24ca181f6024764",
+      "byteLength": 1452
+    },
+    {
+      "guidanceId": "arm64ec-overview-01",
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows/arm/arm64ec",
+      "title": "Arm64EC overview",
+      "section": "Overview",
+      "retrievedAt": "2026-09-14T00:00:00Z",
+      "relativePath": "snippets/arm64ec-overview-01.md",
+      "topics": [
+        "arm64ec-overview",
+        "arm64ec-abi"
+      ],
+      "summary": "Arm64EC lets one process mix native ARM64 code with x64 modules under emulation, enabling incremental migration.",
+      "sha256": "c0e620b1ed68de2ab594b95123043321893a7ea13a603f366d26bf4eac49d144",
+      "byteLength": 1559
+    },
+    {
+      "guidanceId": "add-arm-support-01",
+      "sourceUrl": "https://learn.microsoft.com/en-us/windows/arm/add-arm-support",
+      "title": "Add Arm support to your Windows app",
+      "section": "Assess, plan, build, validate",
+      "retrievedAt": "2026-09-14T00:00:00Z",
+      "relativePath": "snippets/add-arm-support-01.md",
+      "topics": [
+        "add-arm-support",
+        "native-arm64-build",
+        "compatibility-troubleshooting"
+      ],
+      "summary": "Four-stage workflow (assess, plan, build, validate) for adding ARM64 support to an existing Windows app.",
+      "sha256": "389c8ca769dd081845c0da5236009ea4d586594670c4f43646792cf46f6f93c5",
+      "byteLength": 1819
+    }
+  ],
+  "notes": "Bootstrap corpus with three hand-authored snippets. Replace with a sanctioned Microsoft Learn snapshot before shipping the demo."
+}
