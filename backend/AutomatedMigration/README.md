@@ -42,7 +42,7 @@ We run a work item only when its `agentOrSkill` matches one of these:
 |-------|-------|-----------|----------|
 | `build-config-generator` | 3.1 | `BuildConfiguration/` | ARM64 build/packaging diff (Dockerfile, `.csproj`, or `.vcxproj`) |
 | `ci-pipeline-generator` | 3.2 | `PipelineUpdates/` | ARM64 CI job diff (GitHub Actions / Azure Pipelines) |
-| `code-transformer` | 3.3 | `CodeMigration/` | One architecture-specific code diff, with rationale (stretch) |
+| `code-transformer` | 3.3 | `CodeMigration/` | An AI-drafted code diff (GitHub Models; needs `GITHUB_TOKEN`). Skipped if unset. |
 
 ### Build systems supported by `build-config-generator`
 
@@ -74,6 +74,54 @@ read MigrationPlanV1
 Every result is a `.patch` / `.diff` written to `output/`. No in-place edits, no
 execution, no publishing. This satisfies the plan's "reviewable, reversible,
 approval-gated" requirement and keeps the component simple.
+
+## Entry point
+
+The planner / orchestrator calls `MigrationActionsRunner`:
+
+```csharp
+var runner = new MigrationActionsRunner(chatModel);          // chatModel optional (AI transformer)
+MigrationRunResult result = runner.Run(plan, repoPath, outputDir);   // generate patches
+PublishResult pub = runner.Publish(plan, publishOptions);           // branch + PR (opt-in)
+```
+
+The CLI ([Program.cs](Program.cs)) is a thin wrapper:
+
+```text
+dotnet run [planPath] [repoPath] [outputDir] [--publish [--push] [--remote <r>] [--branch <b>]]
+```
+
+Publishing requires a real clone (from Feature 1); the default branch is
+`arm64-migration/<planId>`, and `--publish` is dry-run unless `--push` is given.
+
+## Outputs (Feature 3 -> Feature 4 contract)
+
+Alongside the `.patch` files, `Run` writes `output/migration-result.json` for
+Feature 4 (Validation) to consume. `Publish` stamps the `branch` once commits are
+made.
+
+```json
+{
+  "schemaVersion": "1.0",
+  "planId": "plan-openwebui-arm64-001",
+  "branch": "arm64-migration/plan-openwebui-arm64-001",
+  "baseBranch": "main",
+  "generated": [
+    {
+      "workItemId": "wi-dockerfile-arm64",
+      "agentOrSkill": "build-config-generator",
+      "title": "Add ARM64 build target to Dockerfile",
+      "patchPath": "output/wi-dockerfile-arm64.patch",
+      "evidenceIds": ["ev-dockerfile-001"],
+      "acceptanceTests": [ { "id": "...", "description": "...", "expectedOutcome": "..." } ]
+    }
+  ],
+  "skipped": [ { "workItemId": "wi-code-simd", "reason": "no change produced" } ]
+}
+```
+
+Feature 4 reads `branch` (build it), `generated[].acceptanceTests` (validate), and
+`evidenceIds` (link failures back to findings).
 
 ## Priorities
 

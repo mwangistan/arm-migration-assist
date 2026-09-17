@@ -1,13 +1,10 @@
 using System.Text.Json;
-using AutomatedMigration.BuildConfiguration;
+using AutomatedMigration;
 using AutomatedMigration.CodeMigration;
-using AutomatedMigration.Generators;
 using AutomatedMigration.Models;
-using AutomatedMigration.PipelineUpdates;
 using AutomatedMigration.Publishing;
 
-// Feature 3 engine: read a migration plan, run the generators for the work items
-// we own, and write reviewable patches. Nothing is applied to the target repo.
+// Thin CLI over MigrationActionsRunner (Feature 3's callable entry point).
 //
 // Usage: dotnet run [planPath] [repoPath] [outputDir] [--publish [--push] [--remote <r>] [--branch <b>]]
 var flagsWithValue = new HashSet<string>(StringComparer.Ordinal) { "--remote", "--branch" };
@@ -27,13 +24,9 @@ var planPath = positionals.Count > 0 ? positionals[0] : Path.Combine("samples", 
 var repoPath = positionals.Count > 1 ? positionals[1] : Path.Combine("samples", "repo");
 var outputDir = positionals.Count > 2 ? positionals[2] : "output";
 
-// Skill name -> generator. A work item is "ours" only if its agentOrSkill is a key here.
-var generators = new Dictionary<string, IMigrationGenerator>(StringComparer.Ordinal)
-{
-    ["build-config-generator"] = new BuildConfigGenerator(), // Story 3.1
-    ["ci-pipeline-generator"] = new PipelineGenerator(),     // Story 3.2
-    ["code-transformer"] = new CodePatcher(),                // Story 3.3
-};
+// The code transformer uses GitHub Models when GITHUB_TOKEN is set; otherwise it skips.
+var githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+IChatModel? chatModel = string.IsNullOrWhiteSpace(githubToken) ? null : new GitHubModelsChatModel(githubToken);
 
 var json = File.ReadAllText(planPath);
 var plan = JsonSerializer.Deserialize<MigrationPlan>(json, new JsonSerializerOptions
@@ -41,52 +34,31 @@ var plan = JsonSerializer.Deserialize<MigrationPlan>(json, new JsonSerializerOpt
     PropertyNameCaseInsensitive = true,
 }) ?? throw new InvalidOperationException($"Could not parse migration plan: {planPath}");
 
-var context = new MigrationContext(
-    repoPath,
-    plan.WorkItems.ToDictionary(w => w.Id, StringComparer.Ordinal));
+var runner = new MigrationActionsRunner(chatModel);
+var result = runner.Run(plan, repoPath, outputDir);
 
-var ours = plan.WorkItems
-    .Where(w => generators.ContainsKey(w.AgentOrSkill))
-    .OrderBy(w => w.Sequence)
-    .ToList();
-
-if (ours.Count == 0)
-{
-    Console.WriteLine("No migration-action work items in this plan.");
-    return;
-}
-
-Directory.CreateDirectory(outputDir);
 Console.WriteLine($"Plan {plan.PlanId} (recommended path: {plan.RecommendedPath})");
-Console.WriteLine($"Found {ours.Count} work item(s) for Feature 3.\n");
+Console.WriteLine($"Generated {result.Generated.Count} patch(es); {result.Skipped.Count} produced no change.\n");
+foreach (var g in result.Generated)
+    Console.WriteLine($"[{g.WorkItem.Sequence}] {g.WorkItem.Id} -> {g.WorkItem.AgentOrSkill}: wrote {g.PatchPath}");
 
-foreach (var item in ours)
-{
-    Console.WriteLine($"[{item.Sequence}] {item.Id} -> {item.AgentOrSkill}: {item.Title}");
-    var patch = generators[item.AgentOrSkill].Generate(item, context);
-    if (patch is null)
-    {
-        Console.WriteLine("    no change produced\n");
-        continue;
-    }
-
-    var patchPath = Path.Combine(outputDir, $"{item.Id}.patch");
-    File.WriteAllText(patchPath, patch.Diff);
-    Console.WriteLine($"    wrote {patchPath}\n");
-}
-
-Console.WriteLine("Done. Patches are for review only - nothing was applied.");
+Console.WriteLine("\nDone. Patches are for review only - nothing was applied.");
 
 // Story 3.2 "Generate pipeline PR": optionally apply the patches to a branch as
 // one commit per work item. Dry-run unless --push is given.
 if (args.Contains("--publish"))
 {
+    if (result.Generated.Count == 0)
+    {
+        Console.WriteLine("Nothing to publish.");
+        return;
+    }
+
     var dryRun = !args.Contains("--push");
     var remote = GetOpt(args, "--remote");
     var branch = GetOpt(args, "--branch") ?? $"arm64-migration/{plan.PlanId}";
 
-    // Feature 1 provides the clone (its own git root, with a remote). Publishing
-    // requires it; there is no fallback.
+    // Feature 1 provides the clone (its own git root, with a remote). Required.
     if (!IsOwnGitRoot(repoPath))
     {
         Console.Error.WriteLine($"--publish requires a git clone at '{repoPath}' (provided by Feature 1). Aborting.");
@@ -97,7 +69,7 @@ if (args.Contains("--publish"))
     var baseBranch = Git.Run(workRepo, "rev-parse", "--abbrev-ref", "HEAD").Trim();
     Console.WriteLine($"\nPublishing against clone: {workRepo} (base: {baseBranch})");
 
-    var result = new PrPublisher().Publish(ours, new PublishOptions(
+    var publishResult = runner.Publish(plan, new PublishOptions(
         RepoPath: workRepo,
         OutputDir: Path.GetFullPath(outputDir),
         BranchName: branch,
@@ -106,9 +78,9 @@ if (args.Contains("--publish"))
         Remote: remote,
         OpenPr: true));
 
-    Console.WriteLine($"\nBranch '{result.Branch}' created with {result.Commits} commit(s).");
-    Console.WriteLine(result.Pushed
-        ? $"Pushed to {remote}. PR: {result.PrUrl ?? "(gh not available)"}"
+    Console.WriteLine($"\nBranch '{publishResult.Branch}' created with {publishResult.Commits} commit(s).");
+    Console.WriteLine(publishResult.Pushed
+        ? $"Pushed to {remote}. PR: {publishResult.PrUrl ?? "(gh not available)"}"
         : "Dry run: commits made locally, nothing pushed.");
     Console.WriteLine("\nCommits:");
     Console.WriteLine(Git.Run(workRepo, "log", "--oneline", $"{baseBranch}..HEAD"));
