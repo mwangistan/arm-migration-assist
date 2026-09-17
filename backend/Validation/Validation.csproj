@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Validation</RootNamespace>
     <UseAppHost>false</UseAppHost>
-    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**;samples/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**;samples/**;Api/**;Api.Tests/**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
