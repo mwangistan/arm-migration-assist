@@ -43,6 +43,15 @@ public sealed class RepositorySnapshot
     public int FileCount { get; init; }
     public DateTimeOffset ClonedAt { get; init; }
     public bool FromCache { get; init; }
+
+    /// <summary>Detected SPDX license identifier (or free-form label) from a repository license file; null when none found.</summary>
+    public string? License { get; init; }
+
+    /// <summary>Authoring date of the tip commit the assessment was produced against.</summary>
+    public DateTimeOffset? LastCommitDate { get; init; }
+
+    /// <summary>Total size in bytes of the scanned working tree (excludes .git and skipped folders).</summary>
+    public long SizeBytes { get; init; }
 }
 
 /// <summary>Result of Story 1.2 - Technology Stack Discovery.</summary>

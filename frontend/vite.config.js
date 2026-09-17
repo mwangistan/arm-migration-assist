@@ -9,6 +9,10 @@ export default defineConfig({
       "/assess": {
         target: "http://localhost:5285",
         changeOrigin: true
+      },
+      "/api": {
+        target: "http://localhost:5285",
+        changeOrigin: true
       }
     }
   }

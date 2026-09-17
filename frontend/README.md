@@ -14,10 +14,15 @@ Current screens include:
 - architecture-specific code findings;
 - scanner coverage and unresolved evidence;
 - printable report and JSON export.
+- AI migration-plan generation from the completed assessment;
+- recommended strategy, work items, risks, validation checks, and plan JSON export.
 
-The client currently calls `POST /assess` through `src/api.js`. Future Feature
-2-4 endpoint clients should be added to that API layer rather than embedded in
-UI components.
+The client calls `POST /assess` and then passes the resulting
+`RepositoryAssessmentV1` document to `POST /api/migration-plans` through
+`src/api.js`. The backend proxies plan generation to the configured Feature 2
+service so the browser does not depend on cross-origin access to that service.
+The planner response is retained as `{ runId, plan, score, warnings }`, and the
+Migration Plan tab renders the nested `plan` document.
 
 ## Run
 
@@ -35,8 +40,8 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Vite proxies assessment requests to
-`http://localhost:5285`.
+Open `http://localhost:5173`. Vite proxies assessment and migration-plan
+requests to `http://localhost:5285`.
 
 For a separately hosted backend, copy `.env.example` to `.env.local` and set:
 

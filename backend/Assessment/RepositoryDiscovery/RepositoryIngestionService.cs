@@ -14,6 +14,7 @@ namespace ArmMigrationAssist.Api.Assessment.RepositoryDiscovery;
 public sealed class RepositoryIngestionService
 {
     private readonly string _workspaceRoot;
+    private readonly TimeSpan _cacheTtl;
     private readonly ILogger<RepositoryIngestionService> _logger;
 
     public RepositoryIngestionService(IWebHostEnvironment env, ILogger<RepositoryIngestionService> logger)
@@ -21,6 +22,13 @@ public sealed class RepositoryIngestionService
         _workspaceRoot = Environment.GetEnvironmentVariable("ARM_MIGRATION_WORKSPACE_ROOT")
             ?? Path.Combine(env.ContentRootPath, ".arm-ma");
         Directory.CreateDirectory(_workspaceRoot);
+
+        _cacheTtl = double.TryParse(
+                Environment.GetEnvironmentVariable("ARM_MIGRATION_CACHE_TTL_HOURS"),
+                out var hours) && hours > 0
+            ? TimeSpan.FromHours(hours)
+            : TimeSpan.FromDays(7);
+
         _logger = logger;
     }
 
@@ -39,13 +47,28 @@ public sealed class RepositoryIngestionService
         var localRepoPath = Path.Combine(workspacePath, "r");
         Directory.CreateDirectory(workspacePath);
 
+        TryEvictStaleWorkspaces(cacheKey);
+
         bool fromCache = Directory.Exists(Path.Combine(localRepoPath, ".git"));
         if (fromCache)
         {
             _logger.LogInformation("Reusing cached clone for {RepoUrl}", repoUrl);
-            await RunGitAsync(localRepoPath, "fetch --depth 1 origin", ct);
+            var (fetchCode, _, fetchErr) = await RunGitAsync(localRepoPath, "fetch --depth 1 origin", ct);
+            if (fetchCode != 0)
+            {
+                // Gap 4: a failed refresh must not silently serve a stale/broken cache - fall back to a fresh clone.
+                _logger.LogWarning("Cache refresh failed for {RepoUrl}; re-cloning. {Error}",
+                    repoUrl, fetchErr.Trim());
+                fromCache = false;
+            }
+            else
+            {
+                // Gap 3: move the working tree to the freshly fetched tip so CommitSha and files reflect upstream.
+                await RunGitAsync(localRepoPath, "reset --hard FETCH_HEAD", ct);
+            }
         }
-        else
+
+        if (!fromCache)
         {
             if (Directory.Exists(localRepoPath))
                 Directory.Delete(localRepoPath, recursive: true);
@@ -58,7 +81,16 @@ public sealed class RepositoryIngestionService
 
         var commitSha = (await RunGitAsync(localRepoPath, "rev-parse HEAD", ct)).StdOut.Trim();
         var branch = (await RunGitAsync(localRepoPath, "rev-parse --abbrev-ref HEAD", ct)).StdOut.Trim();
-        var fileCount = RepoFiles.Enumerate(localRepoPath).Count();
+        var commitDateRaw = (await RunGitAsync(localRepoPath, "log -1 --format=%cI", ct)).StdOut.Trim();
+        var lastCommitDate = DateTimeOffset.TryParse(commitDateRaw, out var parsed) ? parsed : (DateTimeOffset?)null;
+
+        var files = RepoFiles.Enumerate(localRepoPath).ToList();
+        long sizeBytes = 0;
+        foreach (var f in files)
+        {
+            try { sizeBytes += new FileInfo(f).Length; }
+            catch (IOException) { /* file vanished between enumeration and stat; ignore */ }
+        }
 
         return new RepositorySnapshot
         {
@@ -68,9 +100,12 @@ public sealed class RepositoryIngestionService
             LocalRepoPath = localRepoPath,
             CommitSha = string.IsNullOrEmpty(commitSha) ? null : commitSha,
             DefaultBranch = string.IsNullOrEmpty(branch) ? null : branch,
-            FileCount = fileCount,
+            FileCount = files.Count,
             ClonedAt = DateTimeOffset.UtcNow,
-            FromCache = fromCache
+            FromCache = fromCache,
+            License = DetectLicense(localRepoPath),
+            LastCommitDate = lastCommitDate,
+            SizeBytes = sizeBytes
         };
     }
 
@@ -97,7 +132,96 @@ public sealed class RepositoryIngestionService
         return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
     }
 
-    private static string FormatCloneError(string error)
+    /// <summary>
+    /// Gap 3: best-effort eviction so the workspace cache does not grow without bound.
+    /// Deletes cached clones older than the configured TTL, skipping the one about to be used.
+    /// Failures (e.g. a folder locked by a concurrent run) are ignored.
+    /// </summary>
+    private void TryEvictStaleWorkspaces(string currentCacheKey)
+    {
+        try
+        {
+            var cutoff = DateTime.UtcNow - _cacheTtl;
+            foreach (var dir in Directory.EnumerateDirectories(_workspaceRoot))
+            {
+                if (string.Equals(Path.GetFileName(dir), currentCacheKey, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (Directory.GetLastWriteTimeUtc(dir) >= cutoff)
+                    continue;
+
+                try
+                {
+                    Directory.Delete(dir, recursive: true);
+                    _logger.LogInformation("Evicted stale workspace {Workspace}", Path.GetFileName(dir));
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _logger.LogDebug(ex, "Could not evict workspace {Workspace}", Path.GetFileName(dir));
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogDebug(ex, "Workspace eviction sweep failed");
+        }
+    }
+
+    private static readonly string[] LicenseFileNames =
+    [
+        "LICENSE", "LICENSE.md", "LICENSE.txt", "LICENSE-MIT", "LICENCE",
+        "LICENCE.md", "LICENCE.txt", "COPYING", "COPYING.md", "UNLICENSE"
+    ];
+
+    /// <summary>
+    /// Gap 2: capture license metadata deterministically and offline by inspecting the checked-out
+    /// license file. Recognizes common licenses and maps them to an SPDX identifier; falls back to
+    /// the file name when the text is unrecognized, or null when no license file exists.
+    /// </summary>
+    internal static string? DetectLicense(string repoPath)
+    {
+        string? licenseFile = null;
+        foreach (var name in LicenseFileNames)
+        {
+            var candidate = Path.Combine(repoPath, name);
+            if (File.Exists(candidate)) { licenseFile = candidate; break; }
+        }
+
+        if (licenseFile is null)
+            return null;
+
+        string text;
+        try { text = File.ReadAllText(licenseFile); }
+        catch (IOException) { return Path.GetFileName(licenseFile); }
+
+        return IdentifyLicense(text) ?? Path.GetFileName(licenseFile);
+    }
+
+    internal static string? IdentifyLicense(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var t = text.ToLowerInvariant();
+
+        if (t.Contains("apache license") && t.Contains("version 2.0")) return "Apache-2.0";
+        if (t.Contains("gnu affero general public license") && t.Contains("version 3")) return "AGPL-3.0";
+        if (t.Contains("gnu lesser general public license") && t.Contains("version 3")) return "LGPL-3.0";
+        if (t.Contains("gnu general public license") && t.Contains("version 3")) return "GPL-3.0";
+        if (t.Contains("gnu general public license") && t.Contains("version 2")) return "GPL-2.0";
+        if (t.Contains("mozilla public license") && t.Contains("version 2.0")) return "MPL-2.0";
+        if (t.Contains("this is free and unencumbered software released into the public domain")) return "Unlicense";
+        if (t.Contains("permission is hereby granted, free of charge") && t.Contains("mit")) return "MIT";
+        if (t.Contains("permission is hereby granted, free of charge")) return "MIT";
+        if (t.Contains("redistribution and use") && t.Contains("neither the name")) return "BSD-3-Clause";
+        if (t.Contains("redistribution and use")) return "BSD-2-Clause";
+        if (t.Contains("boost software license")) return "BSL-1.0";
+        if (t.Contains("isc license") || (t.Contains("permission to use, copy, modify") && t.Contains("isc"))) return "ISC";
+
+        return null;
+    }
+
+    internal static string FormatCloneError(string error)
     {
         if (error.Contains("Filename too long", StringComparison.OrdinalIgnoreCase))
             return "git clone failed because Windows rejected long repository paths. " +

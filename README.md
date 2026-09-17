@@ -389,16 +389,21 @@ Wheel filenames provide platform evidence:
 
 ### npm
 
-The verifier checks:
+npm exposes no offline architecture signal, so the verifier queries the registry
+and evaluates the version manifest, scoped to Windows on Arm:
 
-- explicit `cpu` restrictions;
-- platform-specific optional dependencies;
-- ARM64 prebuilt packages;
-- the absence of native platform packages.
+- explicit `cpu` restrictions (no `arm64` implies emulation-only);
+- an `arm64` `cpu` whose `os` excludes `win32` is reported as `unknown`, not
+  ready, because it is not proven for Windows on Arm;
+- platform-specific optional dependencies (the prebuilt-binary pattern): a
+  `win32-arm64` prebuilt is ready, Windows prebuilts without one are
+  emulation-only, and only non-Windows prebuilts leave the result `unknown`;
+- native build signals (`gypfile`, `node-gyp`/`node-pre-gyp`/`prebuild-install`)
+  with no architecture metadata are reported as `unknown` rather than assumed to
+  be pure JavaScript.
 
-Packages with no CPU restriction or native platform package are treated as
-architecture-neutral JavaScript. Known native binding packages remain subject
-to package-specific verification.
+A package with no CPU restriction, no native platform package, and no native
+build tooling is treated as architecture-neutral JavaScript.
 
 ### Other ecosystems
 
@@ -408,6 +413,33 @@ to package-specific verification.
 - Cargo and Go source dependencies generally rebuild for ARM64 but can contain
   native crates, assembly, or cgo dependencies.
 - CocoaPods targets Apple platforms and is not a Windows dependency path.
+
+### COM components
+
+COM (Component Object Model) servers are native binaries activated in-process by
+CLSID. An x86/x64-only COM server cannot be loaded into an ARM64-native process,
+and there is no JIT or emulation rescue for an in-proc server, so any COM
+dependency is a potential ARM64 blocker.
+
+A registered COM server is machine-global and never lives in the repository, so
+the scanner detects the *signals that the application depends on one* rather than
+the server itself:
+
+- ProgID activation (`Type.GetTypeFromProgID`, VB/VBScript `CreateObject`,
+  `CLSIDFromProgID`);
+- ActiveX activation (`new ActiveXObject(...)`);
+- CLSID activation (`Type.GetTypeFromCLSID(new Guid(...))`);
+- C/C++ activation (`CoCreateInstance`, `CoGetClassObject`, `#import "*.tlb"`);
+- .NET interop declarations (`[ComImport]`, `EmbedInteropTypes`);
+- project COM references (`<COMReference>`);
+- registration tooling (`regsvr32`);
+- type-library and control artifacts (`.tlb`, `.olb`, `.ocx`).
+
+Each distinct component is reported once as a `com` dependency with
+`architectureStatus: unknown` and file/line evidence. The status is `unknown`
+rather than `blocked` because a modern server may ship an ARM64 registration
+(for example, current Microsoft Office); confirming that registration is a
+Feature 2 verification step.
 
 ## Code compatibility analysis
 
@@ -537,6 +569,17 @@ with only the filesystem and network permissions it needs.
 - Meta-packages may have no directly inspectable payload.
 - Component detection can report build-time and transitive dependencies that
   are not shipped with the application.
+- Dependency findings are resolved at package granularity from manifests and
+  lockfiles; the individual native binaries a package would install at build or
+  restore time are not present in a shallow assessment clone, so they are not
+  PE-inspected. Registry verification substitutes for that missing local binary.
+- COM components are detected from source-level activation signals only. A COM
+  dependency that is reached purely through late-bound reflection, configuration,
+  or a third-party library is not detected, and detected components are reported
+  as `unknown` because their ARM64 registration cannot be confirmed offline.
+- Plugins and extensions are not yet modeled as a first-class dependency kind;
+  those that surface as packages or native binaries are still classified, but
+  host-specific plugin manifests are not parsed.
 - Language statistics are file-extension and byte based; generated or vendored
   code can affect the profile.
 - A missing explicit ARM64 token does not establish incompatibility.
@@ -559,6 +602,58 @@ Feature 2 can add:
 - a comprehensive migration plan.
 
 Feature 2 should not reinterpret an unknown as ready without new evidence.
+
+### Ingestion prerequisites for write-capable stages (deferred)
+
+Feature 1 ingestion is intentionally **read-only**: it produces a shallow
+(`--depth 1`), single-branch clone under `.arm-ma/<hash>/r/`, and an assessment
+re-run refreshes that cache with `git fetch` + `git reset --hard FETCH_HEAD`.
+Any stage that **diffs against the base branch and creates a feature branch for
+its changes** (Automated Migration, Build Configuration, Pipeline Updates) must
+add the following before writing. These are Feature 2 concerns, but the natural
+home is a new opt-in mode on `RepositoryIngestionService`:
+
+1. **Isolated writable checkout (mandatory).** Migration must never mutate the
+   shared assessment cache (`.arm-ma/<hash>/r/`). A re-assessment's
+   `reset --hard FETCH_HEAD` would destroy in-progress edits. Use a separate
+   working copy — `git worktree add` off the cached repo (cheap, shares the
+   object store) or a distinct clone under a `work/` folder.
+2. **Base-branch availability (conditional).** `--depth 1` implies
+   `--single-branch`, so only the default branch is present. Diffing against and
+   branching off the *default* branch tip works as-is. Only when the base is a
+   **different** branch is `--no-single-branch` (or an explicit
+   `git fetch origin <base>`) required. Prefer making the base branch a
+   parameter rather than always fetching all refs.
+3. **History on demand (optional).** For history-aware work (`git blame`,
+   diffing older tags/releases, rebase) upgrade the shallow clone lazily with
+   `git fetch --unshallow`, or ingest with a partial clone
+   (`--filter=blob:none`) instead of a full deep clone.
+
+### Per-component technology attribution (deferred)
+
+Story 1.2 discovery is repo-wide: every language, framework, build system, and
+package manager in the tree is detected, but the result is a single merged
+inventory with no attribution to a subdirectory or component. A Python-backend +
+React-frontend monorepo is fully detected (both `service` and the frontend
+appear), yet the output cannot express *which component uses what*.
+
+This does not affect target selection when the whole repository is migrated to
+ARM. It does affect **per-component ARM readiness and blocker attribution**:
+
+- ARM risk differs sharply by component - native C/C++ or desktop code (SSE/AVX,
+  drivers, native DLLs) versus a Python service (native wheels) versus a
+  browser/Node frontend (largely architecture-agnostic). A merged inventory
+  cannot say "frontend needs no ARM work; the backend native dependency is the
+  blocker."
+- Story 1.3 (native DLL) and Story 1.4 (intrinsics/inline-asm) findings belong
+  to a specific component and build; without grouping, Feature 2 cannot route a
+  finding to the build that must change, or sequence the per-component work.
+- Each deployable unit has its own build system and needs its own ARM64 build/CI
+  job stood up and validated.
+
+Implementing this requires a new grouped structure in the `technology` block of
+`RepositoryAssessmentV1.schema.json` (currently `additionalProperties: false`),
+so it is a coordinated contract change to plan with Feature 2.
 
 ## Repository structure
 

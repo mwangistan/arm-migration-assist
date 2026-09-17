@@ -37,7 +37,7 @@ public sealed class DependencyScanSkill : IAssessmentSkill
         foreach (var path in RepoFiles.Enumerate(root))
         {
             var ext = Path.GetExtension(path).ToLowerInvariant();
-            if (ext is ".dll" or ".exe" or ".pyd" or ".node" or ".sys")
+            if (ext is ".dll" or ".exe" or ".pyd" or ".node" or ".sys" or ".ocx")
             {
                 try { findings.Add(InspectBinary(path, Path.GetRelativePath(root, path))); }
                 catch { /* not a valid PE image */ }
@@ -93,7 +93,14 @@ public sealed class DependencyScanSkill : IAssessmentSkill
 
         var deduped = Dedupe(findings);
 
-        // 3. Registry verification: replace heuristic package verdicts with registry-confirmed facts.
+        // 3. COM components: source-based detection (activation, interop, project references,
+        //    registration tooling, type libraries). A registered COM server is machine-global and
+        //    never in the repo, so these signals are the only offline evidence available.
+        deduped.AddRange(ComComponentScanner.Scan(root));
+        if (deduped.Any(f => f.Source == "com"))
+            manifest.ScannersCompleted.Add("com-detection");
+
+        // 4. Registry verification: replace heuristic package verdicts with registry-confirmed facts.
         await VerifyAgainstRegistriesAsync(deduped, manifest, ct);
 
         manifest.Dependencies = deduped;

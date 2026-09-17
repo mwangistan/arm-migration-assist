@@ -86,6 +86,47 @@ public sealed class RegistryVerifierTests
     }
 
     [Fact]
+    public void Npm_Linux_Arm64_Only_Is_Not_Windows_Ready()
+    {
+        // A linux-arm64 prebuilt must NOT be reported as Windows-on-Arm ready.
+        var v = DependencyRegistryVerifier.NpmVerdict(
+            cpu: null,
+            optionalDepNames: new[] { "@img/sharp-win32-x64", "@img/sharp-linux-arm64", "@img/sharp-darwin-arm64" });
+        Assert.Equal(DependencyClassification.EmulationOnly, v.Classification);
+    }
+
+    [Fact]
+    public void Npm_Only_NonWindows_Prebuilts_Is_Unknown()
+    {
+        var v = DependencyRegistryVerifier.NpmVerdict(
+            cpu: null,
+            optionalDepNames: new[] { "pkg-linux-arm64", "pkg-darwin-arm64" });
+        Assert.Equal(DependencyClassification.Unknown, v.Classification);
+    }
+
+    [Fact]
+    public void Npm_Cpu_Arm64_But_Os_Not_Windows_Is_Unknown()
+    {
+        var v = DependencyRegistryVerifier.NpmVerdict(
+            cpu: new[] { "arm64", "x64" },
+            optionalDepNames: Array.Empty<string>(),
+            os: new[] { "darwin", "linux" });
+        Assert.Equal(DependencyClassification.Unknown, v.Classification);
+    }
+
+    [Fact]
+    public void Npm_Native_Build_Tooling_Without_Metadata_Is_Unknown_Not_Ready()
+    {
+        // node-gyp/prebuild-install packages with no cpu/platform metadata must not be assumed pure JS.
+        var v = DependencyRegistryVerifier.NpmVerdict(
+            cpu: null,
+            optionalDepNames: Array.Empty<string>(),
+            os: null,
+            hasNativeBuildSignals: true);
+        Assert.Equal(DependencyClassification.Unknown, v.Classification);
+    }
+
+    [Fact]
     public void NuGet_AnyCpu_Managed_Assembly_Is_Ready()
     {
         using var package = CreatePackage(

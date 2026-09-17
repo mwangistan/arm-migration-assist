@@ -28,7 +28,28 @@ export function assessRepository(repoUrl, target) {
   });
 }
 
+export async function createMigrationPlan(assessment) {
+  const result = await apiRequest("/api/migration-plans", {
+    method: "POST",
+    body: JSON.stringify(assessment)
+  });
+
+  if (!result || typeof result !== "object" || !result.plan || typeof result.plan !== "object") {
+    throw new Error("The migration planner returned an invalid response.");
+  }
+
+  return result;
+}
+
 function normalizeError(payload, status) {
+  const errorText =
+    typeof payload === "string" ? payload : JSON.stringify(payload);
+  if (
+    status === 429 ||
+    /RateLimitReached|exceeded rate limit|Status:\s*429/i.test(errorText)
+  ) {
+    return "Phi-4 is temporarily rate-limited. Wait a few seconds, then retry plan generation.";
+  }
   if (typeof payload === "string") return payload;
   if (payload?.error) {
     const details = Array.isArray(payload.details)
@@ -37,5 +58,5 @@ function normalizeError(payload, status) {
     return `${payload.error}${details}`;
   }
   if (payload?.title) return payload.detail || payload.title;
-  return `The assessment service returned HTTP ${status}.`;
+  return `The service returned HTTP ${status}.`;
 }

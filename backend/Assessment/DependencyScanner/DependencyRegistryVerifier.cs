@@ -439,50 +439,133 @@ public sealed class DependencyRegistryVerifier
             if (manifest.TryGetProperty("cpu", out var cpuEl) && cpuEl.ValueKind == JsonValueKind.Array)
                 cpu = cpuEl.EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToList();
 
+            List<string>? os = null;
+            if (manifest.TryGetProperty("os", out var osEl) && osEl.ValueKind == JsonValueKind.Array)
+                os = osEl.EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToList();
+
             var optionalDeps = new List<string>();
             if (manifest.TryGetProperty("optionalDependencies", out var opt) && opt.ValueKind == JsonValueKind.Object)
                 optionalDeps.AddRange(opt.EnumerateObject().Select(p => p.Name));
 
-            return NpmVerdict(cpu, optionalDeps);
+            return NpmVerdict(cpu, optionalDeps, os, HasNativeBuildSignals(manifest));
         }
     }
 
+    private static readonly string[] NativeBuildTooling =
+    [
+        "node-gyp", "node-pre-gyp", "@mapbox/node-pre-gyp", "prebuild-install",
+        "node-gyp-build", "prebuildify", "node-addon-api", "nan", "bindings", "cmake-js"
+    ];
+
     /// <summary>
-    /// Decides an ARM64 verdict from an npm version manifest's <c>cpu</c> constraint and any
-    /// platform-specific optional dependencies (the common prebuilt-binary pattern). Pure and
-    /// static for unit testing.
+    /// True when an npm version manifest indicates a native addon is compiled or fetched at
+    /// install time (node-gyp / node-pre-gyp / prebuild-install / gypfile). Such packages carry
+    /// no reliable arm64 signal in the registry document, so they must not be assumed pure JS.
     /// </summary>
-    public static RegistryVerdict NpmVerdict(IReadOnlyList<string>? cpu, IReadOnlyCollection<string> optionalDepNames)
+    private static bool HasNativeBuildSignals(JsonElement manifest)
     {
-        // An explicit cpu allow-list is the strongest signal.
+        if (manifest.TryGetProperty("gypfile", out var gyp) && gyp.ValueKind == JsonValueKind.True)
+            return true;
+
+        foreach (var section in new[] { "dependencies", "optionalDependencies", "peerDependencies" })
+        {
+            if (manifest.TryGetProperty(section, out var obj) && obj.ValueKind == JsonValueKind.Object &&
+                obj.EnumerateObject().Any(p => NativeBuildTooling.Contains(p.Name, StringComparer.OrdinalIgnoreCase)))
+                return true;
+        }
+
+        if (manifest.TryGetProperty("scripts", out var scripts) && scripts.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var s in scripts.EnumerateObject())
+            {
+                var body = s.Value.GetString() ?? string.Empty;
+                if (body.Contains("node-gyp", StringComparison.OrdinalIgnoreCase) ||
+                    body.Contains("prebuild-install", StringComparison.OrdinalIgnoreCase) ||
+                    body.Contains("node-gyp-build", StringComparison.OrdinalIgnoreCase) ||
+                    body.Contains("node-pre-gyp", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsPlatformPackage(string dep) =>
+        (dep.Contains("win32", StringComparison.OrdinalIgnoreCase) ||
+         dep.Contains("windows", StringComparison.OrdinalIgnoreCase) ||
+         dep.Contains("linux", StringComparison.OrdinalIgnoreCase) ||
+         dep.Contains("darwin", StringComparison.OrdinalIgnoreCase) ||
+         dep.Contains("android", StringComparison.OrdinalIgnoreCase) ||
+         dep.Contains("freebsd", StringComparison.OrdinalIgnoreCase))
+        &&
+        (dep.Contains("arm64", StringComparison.OrdinalIgnoreCase) ||
+         dep.Contains("x64", StringComparison.OrdinalIgnoreCase) ||
+         dep.Contains("ia32", StringComparison.OrdinalIgnoreCase) ||
+         dep.Contains("x86", StringComparison.OrdinalIgnoreCase) ||
+         dep.Contains("arm", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsWindowsPackage(string dep) =>
+        dep.Contains("win32", StringComparison.OrdinalIgnoreCase) ||
+        dep.Contains("windows", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Decides an ARM64 verdict from an npm version manifest's <c>cpu</c>/<c>os</c> constraints,
+    /// platform-specific optional dependencies (the prebuilt-binary pattern), and native build
+    /// signals. Windows-on-Arm scoped: a non-Windows arm64 prebuilt does not by itself make a
+    /// package ready. Pure and static for unit testing.
+    /// </summary>
+    public static RegistryVerdict NpmVerdict(
+        IReadOnlyList<string>? cpu,
+        IReadOnlyCollection<string> optionalDepNames,
+        IReadOnlyList<string>? os = null,
+        bool hasNativeBuildSignals = false)
+    {
+        // 1. An explicit cpu allow-list is the strongest declared signal.
         if (cpu is { Count: > 0 })
         {
             bool arm64 = cpu.Any(c => c.Contains("arm64", StringComparison.OrdinalIgnoreCase));
-            return arm64
+            if (!arm64)
+                return new RegistryVerdict(DependencyClassification.EmulationOnly, ["x64"],
+                    $"npm manifest restricts cpu to [{string.Join(", ", cpu)}]; no arm64 - runs under emulation.");
+
+            bool windows = os is null || os.Count == 0 ||
+                           os.Any(o => o.Contains("win32", StringComparison.OrdinalIgnoreCase));
+            return windows
                 ? new RegistryVerdict(DependencyClassification.Arm64Ready, ["arm64"],
                     "npm manifest declares cpu support for arm64.")
-                : new RegistryVerdict(DependencyClassification.EmulationOnly, ["x64"],
-                    $"npm manifest restricts cpu to [{string.Join(", ", cpu)}]; no arm64 - runs under emulation.");
+                : new RegistryVerdict(DependencyClassification.Unknown, ["unknown"],
+                    $"npm manifest declares arm64 cpu but os is restricted to [{string.Join(", ", os!)}]; verify Windows on Arm support.");
         }
 
-        // Platform-specific prebuilt binaries shipped as optional dependencies (e.g. sharp, esbuild).
-        var platformDeps = optionalDepNames
-            .Where(d => d.Contains("arm64") || d.Contains("x64") || d.Contains("win32")
-                     || d.Contains("linux") || d.Contains("darwin") || d.Contains("android"))
-            .ToList();
-
+        // 2. Platform-specific prebuilt binaries shipped as optional dependencies. Scope the
+        //    decision to Windows - a linux/darwin arm64 prebuilt is not Windows-on-Arm readiness.
+        var platformDeps = optionalDepNames.Where(IsPlatformPackage).ToList();
         if (platformDeps.Count > 0)
         {
-            bool arm64 = platformDeps.Any(d => d.Contains("arm64", StringComparison.OrdinalIgnoreCase)
-                                            || d.Contains("arm", StringComparison.OrdinalIgnoreCase));
-            return arm64
-                ? new RegistryVerdict(DependencyClassification.Arm64Ready, ["arm64"],
-                    "npm package ships an arm64 prebuilt binary as a platform optional dependency.")
-                : new RegistryVerdict(DependencyClassification.EmulationOnly, ["x64"],
-                    "npm package ships platform-specific prebuilt binaries but none for arm64; runs under emulation.");
+            var windowsDeps = platformDeps.Where(IsWindowsPackage).ToList();
+            if (windowsDeps.Count > 0)
+            {
+                bool winArm64 = windowsDeps.Any(d => d.Contains("arm64", StringComparison.OrdinalIgnoreCase));
+                return winArm64
+                    ? new RegistryVerdict(DependencyClassification.Arm64Ready, ["arm64"],
+                        "npm package ships a win32-arm64 prebuilt binary as a platform optional dependency.")
+                    : new RegistryVerdict(DependencyClassification.EmulationOnly, ["x64"],
+                        "npm package ships Windows prebuilt binaries but none for win32-arm64; runs under emulation.");
+            }
+
+            // Only non-Windows prebuilts are visible - Windows on Arm availability is unproven.
+            return new RegistryVerdict(DependencyClassification.Unknown, ["unknown"],
+                "npm package ships platform-specific prebuilt binaries but none targeting Windows; verify a win32-arm64 build exists.");
         }
 
-        // No cpu restriction and no native platform packages: pure JavaScript.
+        // 3. No declared arch metadata, but the package builds a native addon at install time
+        //    (node-gyp / node-pre-gyp / prebuild-install). ARM64 availability cannot be proven
+        //    from the registry document, so do not assume pure JavaScript.
+        if (hasNativeBuildSignals)
+            return new RegistryVerdict(DependencyClassification.Unknown, ["unknown"],
+                "npm package builds a native addon at install time (node-gyp/prebuilds) with no arm64 metadata; verify a win32-arm64 prebuilt exists.");
+
+        // 4. No cpu restriction, no native platform packages, no native build tooling: pure JavaScript.
         return new RegistryVerdict(DependencyClassification.Arm64Ready, ["any-cpu"],
             "npm package declares no cpu restriction or native platform binaries; pure JavaScript is architecture-neutral.");
     }

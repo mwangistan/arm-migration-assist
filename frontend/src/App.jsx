@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { assessRepository } from "./api.js";
+import { assessRepository, createMigrationPlan } from "./api.js";
 
 const loadingMessages = [
   "Creating a versioned analysis workspace...",
@@ -13,6 +13,7 @@ const panels = [
   ["overview", "Overview"],
   ["dependencies", "Dependencies"],
   ["code", "Code findings"],
+  ["plan", "Migration plan"],
   ["report", "Report"]
 ];
 
@@ -61,6 +62,9 @@ function codeBlockers(assessment) {
 export default function App() {
   const [view, setView] = useState("connect");
   const [assessment, setAssessment] = useState(null);
+  const [migrationPlanResult, setMigrationPlanResult] = useState(null);
+  const [planError, setPlanError] = useState("");
+  const [planLoading, setPlanLoading] = useState(false);
   const [target, setTarget] = useState("Arm64Native");
   const [error, setError] = useState("");
   const [panel, setPanel] = useState("overview");
@@ -73,8 +77,11 @@ export default function App() {
     try {
       const result = await assessRepository(repoUrl, selectedTarget);
       setAssessment(result);
+      // Show assessment results immediately; generate the plan in the background so
+      // the user can explore and interact instead of waiting on the slow planner.
       setPanel("overview");
       setView("dashboard");
+      void handleCreatePlan(result, { navigate: false });
     } catch (errorValue) {
       setError(
         errorValue instanceof Error
@@ -85,8 +92,40 @@ export default function App() {
     }
   }
 
+  async function handleCreatePlan(assessmentValue = assessment, { navigate = true } = {}) {
+    if (!assessmentValue) {
+      setPlanError("A completed repository assessment is required.");
+      setPanel("plan");
+      setView("dashboard");
+      return;
+    }
+
+    // Runs in the background: track progress with planLoading rather than a
+    // blocking full-screen loader. Only a manual request navigates to the plan tab.
+    setPlanError("");
+    setMigrationPlanResult(null);
+    setPlanLoading(true);
+    if (navigate) setPanel("plan");
+
+    try {
+      const result = await createMigrationPlan(assessmentValue);
+      setMigrationPlanResult(result);
+    } catch (errorValue) {
+      setPlanError(
+        errorValue instanceof Error
+          ? errorValue.message
+          : "An unexpected planning error occurred."
+      );
+    } finally {
+      setPlanLoading(false);
+    }
+  }
+
   function reset() {
     setAssessment(null);
+    setMigrationPlanResult(null);
+    setPlanError("");
+    setPlanLoading(false);
     setError("");
     setPanel("overview");
     setView("connect");
@@ -101,15 +140,19 @@ export default function App() {
       <AppHeader />
       <main id="main">
         {view === "connect" && <ConnectView onAssess={handleAssess} />}
-        {view === "loading" && <LoadingView />}
+        {view === "loading" && <LoadingView phase="assessment" />}
         {view === "error" && <ErrorView error={error} onReset={reset} />}
         {view === "dashboard" && assessment && (
           <Dashboard
             assessment={assessment}
+            migrationPlanResult={migrationPlanResult}
+            planError={planError}
+            planLoading={planLoading}
             target={target}
             panel={panel}
             onPanelChange={setPanel}
             onReset={reset}
+            onCreatePlan={() => handleCreatePlan()}
           />
         )}
       </main>
@@ -129,10 +172,10 @@ function AppHeader() {
         </span>
         <span>
           <strong>ARM Migration Assist</strong>
-          <small>Repository Assessment Engine</small>
+          <small>Assessment and AI Migration Planner</small>
         </span>
       </a>
-      <span className="feature-badge">Feature 1</span>
+      <span className="feature-badge">Features 1 + 2</span>
     </header>
   );
 }
@@ -269,8 +312,9 @@ function GitHubIcon() {
   );
 }
 
-function LoadingView() {
+function LoadingView({ phase }) {
   const [messageIndex, setMessageIndex] = useState(0);
+  const isPlanning = phase === "planning";
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -286,20 +330,30 @@ function LoadingView() {
       <div className="scan-visual" aria-hidden="true">
         <span className="scan-orbit" /><span className="scan-core">ARM</span>
       </div>
-      <p className="eyebrow">Assessment in progress</p>
-      <h1>Inspecting the repository</h1>
-      <p>{loadingMessages[messageIndex]}</p>
-      <div className="scan-steps" aria-hidden="true">
-        {["Repository", "Technology", "Dependencies", "Code"].map(
-          (step, index) => (
-            <span className={index <= Math.min(messageIndex, 3) ? "active" : ""} key={step}>
-              {step}
-            </span>
-          )
-        )}
-      </div>
+      <p className="eyebrow">
+        {isPlanning ? "AI planning in progress" : "Assessment in progress"}
+      </p>
+      <h1>{isPlanning ? "Building the migration plan" : "Inspecting the repository"}</h1>
+      <p>
+        {isPlanning
+          ? "Feature 2 is scoring readiness, evaluating migration paths, and generating an evidence-linked plan."
+          : loadingMessages[messageIndex]}
+      </p>
+      {!isPlanning && (
+        <div className="scan-steps" aria-hidden="true">
+          {["Repository", "Technology", "Dependencies", "Code"].map(
+            (step, index) => (
+              <span className={index <= Math.min(messageIndex, 3) ? "active" : ""} key={step}>
+                {step}
+              </span>
+            )
+          )}
+        </div>
+      )}
       <p className="loading-detail">
-        Large repositories can take several minutes. Keep this page open.
+        {isPlanning
+          ? "Plan generation can take several minutes. Keep this page open."
+          : "Large repositories can take several minutes. Keep this page open."}
       </p>
     </section>
   );
@@ -321,10 +375,14 @@ function ErrorView({ error, onReset }) {
 
 function Dashboard({
   assessment,
+  migrationPlanResult,
+  planError,
+  planLoading,
   target,
   panel,
   onPanelChange,
-  onReset
+  onReset,
+  onCreatePlan
 }) {
   function downloadJson() {
     const blob = new Blob([JSON.stringify(assessment, null, 2)], {
@@ -378,6 +436,18 @@ function Dashboard({
           <button className="secondary-button" type="button" onClick={downloadJson}>
             Download JSON
           </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={onCreatePlan}
+            disabled={planLoading}
+          >
+            {planLoading
+              ? "Generating plan…"
+              : migrationPlanResult
+                ? "Regenerate plan"
+                : "Generate plan"}
+          </button>
           <button className="primary-button compact" type="button" onClick={printReport}>
             Print report
           </button>
@@ -394,6 +464,9 @@ function Dashboard({
             key={id}
           >
             {label}
+            {id === "plan" && planLoading && (
+              <span className="tab-spinner" aria-label="Generating" />
+            )}
             {tabCounts[id] !== undefined && <span>{tabCounts[id]}</span>}
           </button>
         ))}
@@ -404,9 +477,177 @@ function Dashboard({
       )}
       {panel === "dependencies" && <Dependencies assessment={assessment} />}
       {panel === "code" && <CodeFindings assessment={assessment} />}
+      {panel === "plan" && (
+        <MigrationPlan
+          result={migrationPlanResult}
+          error={planError}
+          loading={planLoading}
+          onCreatePlan={onCreatePlan}
+          repositoryName={assessment.repository.name}
+        />
+      )}
       {panel === "report" && <Report assessment={assessment} target={target} />}
     </section>
   );
+}
+
+function MigrationPlan({ result, error, loading, onCreatePlan, repositoryName }) {
+  if (loading && !result) {
+    return (
+      <div id="plan-panel" className="tab-panel">
+        <div className="plan-empty">
+          <span className="plan-spinner" aria-hidden="true" />
+          <p className="eyebrow">Feature 2</p>
+          <h2>Building the migration plan…</h2>
+          <p>
+            The AI planner is scoring readiness and generating an evidence-linked
+            plan in the background. You can keep exploring the assessment — this
+            tab updates automatically when the plan is ready.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!result) {
+    return (
+      <div id="plan-panel" className="tab-panel">
+        <div className="plan-empty" role={error ? "alert" : undefined}>
+          <span className="message-icon">{error ? "!" : "AI"}</span>
+          <p className="eyebrow">Feature 2</p>
+          <h2>{error ? "The migration plan could not be generated." : "No migration plan yet."}</h2>
+          <p>{error || "Generate an AI migration plan from this assessment."}</p>
+          <button className="primary-button compact" type="button" onClick={onCreatePlan}>
+            {error ? "Retry plan generation" : "Try plan generation"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const { plan, runId, warnings = [] } = result;
+  const validationGroups = Object.entries(plan.validationPlan || {})
+    .filter(([name, checks]) => name !== "targetDevices" && Array.isArray(checks));
+
+  function downloadPlan() {
+    const blob = new Blob([JSON.stringify(plan, null, 2)], {
+      type: "application/json"
+    });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${repositoryName}-arm-migration-plan.json`;
+    document.body.appendChild(link);
+    link.click();
+    URL.revokeObjectURL(link.href);
+    link.remove();
+  }
+
+  return (
+    <div id="plan-panel" className="tab-panel">
+      <header className="plan-hero">
+        <div>
+          <p className="eyebrow">Feature 2 recommendation</p>
+          <h2>{formatLabel(plan.recommendedPath)}</h2>
+          <p>{plan.executiveSummary}</p>
+        </div>
+        <div className="plan-hero-meta">
+          <span className={`badge ${plan.confidence === "high" ? "ready" : "unknown"}`}>
+            {plan.confidence} confidence
+          </span>
+          <small>Plan {plan.planId}</small>
+          <small>Run {runId}</small>
+          <button className="secondary-button" type="button" onClick={downloadPlan}>
+            Download plan JSON
+          </button>
+        </div>
+      </header>
+
+      <div className="plan-grid">
+        {warnings.length > 0 && (
+          <article className="panel span-2">
+            <PanelHeading eyebrow="Planner warnings" title="Review before execution" />
+            <ul>
+              {warnings.map((warning, index) => (
+                <li key={`${index}-${warning}`}>{warning}</li>
+              ))}
+            </ul>
+          </article>
+        )}
+        <article className="panel span-2">
+          <PanelHeading eyebrow="Readiness" title="Score interpretation" />
+          <p className="plan-copy">{plan.scoreInterpretation}</p>
+        </article>
+
+        <article className="panel span-2">
+          <PanelHeading eyebrow="Execution sequence" title="Migration work items">
+            <span className="status-pill">{plan.workItems?.length || 0} items</span>
+          </PanelHeading>
+          <div className="work-item-list">
+            {(plan.workItems || []).map((item) => (
+              <div className="work-item" key={item.id}>
+                <span className={`badge ${item.risk || "unknown"}`}>{item.priority}</span>
+                <div>
+                  <strong>{item.sequence}. {item.title}</strong>
+                  <p>{item.objective}</p>
+                  <small>{item.agentOrSkill} · {formatLabel(item.estimatedEffort)}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel">
+          <PanelHeading eyebrow="Tradeoffs" title="Alternative paths" />
+          <div className="plan-list">
+            {(plan.alternatives || []).map((alternative) => (
+              <div key={alternative.path}>
+                <strong>{formatLabel(alternative.path)}</strong>
+                <span className={`badge ${alternative.disposition === "viable" ? "ready" : "unknown"}`}>
+                  {alternative.disposition}
+                </span>
+                <p>{alternative.rationale}</p>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel">
+          <PanelHeading eyebrow="Mitigation" title="Key risks" />
+          <div className="plan-list">
+            {(plan.risks || []).map((risk) => (
+              <div key={risk.id}>
+                <strong>{risk.description}</strong>
+                <span className={`badge ${risk.severity}`}>{risk.severity}</span>
+                <p>{risk.mitigation}</p>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel span-2">
+          <PanelHeading eyebrow="Verification" title="Validation plan" />
+          <div className="validation-grid">
+            {validationGroups.map(([name, checks]) => (
+              <div key={name}>
+                <strong>{formatLabel(name)}</strong>
+                <ul>
+                  {checks.map((check) => <li key={check.id}>{check.description}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </article>
+      </div>
+    </div>
+  );
+}
+
+function formatLabel(value) {
+  if (!value) return "Unknown";
+  return value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function Overview({ assessment, onPanelChange }) {

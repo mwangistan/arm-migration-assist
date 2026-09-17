@@ -35,6 +35,40 @@ public static class EvidenceValidator
                     errors.Add($"Unknown references unresolved evidenceId '{refId}'.");
         }
 
+        // 4. Evidence array caps (schema maxItems) — the planner rejects oversize arrays and
+        //    an oversize payload also blows its token budget, so catch it before the round-trip.
+        CheckEvidenceCap(errors, "buildFindings.evidence", doc.BuildFindings.Evidence, 40);
+        CheckEvidenceCap(errors, "windowsExperience.evidence", doc.WindowsExperience.Evidence, 40);
+        foreach (var d in doc.Dependencies)
+            CheckEvidenceCap(errors, $"dependencies[{d.EvidenceId}].evidence", d.Evidence, 20);
+        foreach (var c in doc.CodeFindings)
+            CheckEvidenceCap(errors, $"codeFindings[{c.EvidenceId}].evidence", c.Evidence, 20);
+
+        // 5. Evidence oneOf: each item must reference EXACTLY ONE of path/artifact.
+        foreach (var (label, item) in AllEvidence(doc))
+        {
+            var hasPath = !string.IsNullOrWhiteSpace(item.Path);
+            var hasArtifact = !string.IsNullOrWhiteSpace(item.Artifact);
+            if (hasPath == hasArtifact)
+                errors.Add($"Evidence in {label} must have exactly one of path/artifact (has {(hasPath ? "both" : "neither")}).");
+        }
+
         return errors;
+    }
+
+    private static void CheckEvidenceCap(List<string> errors, string label, IReadOnlyCollection<EvidenceV1> evidence, int max)
+    {
+        if (evidence.Count > max)
+            errors.Add($"{label} has {evidence.Count} items, exceeds maxItems {max}.");
+    }
+
+    private static IEnumerable<(string Label, EvidenceV1 Item)> AllEvidence(RepositoryAssessmentV1 doc)
+    {
+        foreach (var e in doc.BuildFindings.Evidence) yield return ("buildFindings.evidence", e);
+        foreach (var e in doc.WindowsExperience.Evidence) yield return ("windowsExperience.evidence", e);
+        foreach (var d in doc.Dependencies)
+            foreach (var e in d.Evidence) yield return ($"dependencies[{d.EvidenceId}].evidence", e);
+        foreach (var c in doc.CodeFindings)
+            foreach (var e in c.Evidence) yield return ($"codeFindings[{c.EvidenceId}].evidence", e);
     }
 }
