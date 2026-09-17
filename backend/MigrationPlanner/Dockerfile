@@ -11,13 +11,13 @@ WORKDIR /src
 
 COPY backend/MigrationPlanner/Directory.Build.props     backend/MigrationPlanner/
 COPY backend/MigrationPlanner/Directory.Packages.props  backend/MigrationPlanner/
-COPY backend/MigrationPlanner/MigrationPlanner.sln      backend/MigrationPlanner/
 COPY backend/MigrationPlanner/src/                      backend/MigrationPlanner/src/
 COPY backend/MigrationPlanner/contracts/                backend/MigrationPlanner/contracts/
+COPY knowledge/                                          knowledge/
 
-RUN dotnet restore backend/MigrationPlanner/src/MigrationPlanner.Api/MigrationPlanner.Api.csproj
+RUN dotnet restore backend/MigrationPlanner/src/MigrationPlanner/MigrationPlanner.csproj
 
-RUN dotnet publish backend/MigrationPlanner/src/MigrationPlanner.Api/MigrationPlanner.Api.csproj \
+RUN dotnet publish backend/MigrationPlanner/src/MigrationPlanner/MigrationPlanner.csproj \
         -c Release \
         -o /app/publish \
         --no-restore \
@@ -27,15 +27,13 @@ FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
 WORKDIR /app
 
 COPY --from=build /app/publish ./
-COPY knowledge/windows-on-arm/ /app/knowledge/windows-on-arm/
 
 ENV ASPNETCORE_URLS=http://+:8080 \
     ASPNETCORE_ENVIRONMENT=Production \
-    DOTNET_RUNNING_IN_CONTAINER=true \
-    MIGRATIONPLANNER_CORPUS_ROOT=/app/knowledge/windows-on-arm
+    DOTNET_RUNNING_IN_CONTAINER=true
 
 EXPOSE 8080
 
 USER $APP_UID
 
-ENTRYPOINT ["dotnet", "MigrationPlanner.Api.dll"]
+ENTRYPOINT ["dotnet", "MigrationPlanner.dll"]
