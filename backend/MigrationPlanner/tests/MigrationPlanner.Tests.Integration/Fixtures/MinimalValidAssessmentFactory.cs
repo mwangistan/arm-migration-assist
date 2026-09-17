@@ -113,6 +113,27 @@ internal static class MinimalValidAssessmentFactory
                     WriteAccess: false,
                     SupportedInputs: new[] { "repository" },
                     SupportedOutputs: new[] { "assessment" }),
+                new Skill(
+                    Name: "build-config-generator",
+                    Version: "1.0.0",
+                    Description: "Generates reviewable ARM64 build configuration patches.",
+                    WriteAccess: true,
+                    SupportedInputs: new[] { "migration-plan-v1", "repository-workspace" },
+                    SupportedOutputs: new[] { "unified-diff" }),
+                new Skill(
+                    Name: "ci-pipeline-generator",
+                    Version: "1.0.0",
+                    Description: "Generates reviewable ARM64 CI pipeline patches.",
+                    WriteAccess: true,
+                    SupportedInputs: new[] { "migration-plan-v1", "repository-workspace" },
+                    SupportedOutputs: new[] { "unified-diff" }),
+                new Skill(
+                    Name: "code-transformer",
+                    Version: "1.0.0",
+                    Description: "Generates approval-gated architecture compatibility patches.",
+                    WriteAccess: true,
+                    SupportedInputs: new[] { "migration-plan-v1", "repository-workspace" },
+                    SupportedOutputs: new[] { "unified-diff" }),
             });
     }
 }

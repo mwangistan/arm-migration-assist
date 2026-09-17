@@ -97,6 +97,16 @@ public class Program
         // Force guidance-store construction so hash mismatches fail startup.
         _ = app.Services.GetRequiredService<IWindowsOnArmGuidanceStore>();
 
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api"))
+            {
+                context.Response.Headers.CacheControl = "no-store";
+            }
+
+            await next(context);
+        });
+
         if (options.AllowedOrigins.Length > 0)
         {
             app.UseCors(PlannerOptions.CorsPolicyName);

@@ -38,6 +38,7 @@ public sealed class FakePlannerModel : IPlannerModel
 
         var (recommendedPath, confidence) = MapRecommendation(score);
         var citedEvidence = score.EvidenceIds.Take(MaxCitedEvidenceIds).ToArray();
+        var workItems = BuildWorkItems(assessment, score, recommendedPath);
 
         var payload = new
         {
@@ -60,18 +61,34 @@ public sealed class FakePlannerModel : IPlannerModel
                 {
                     path = recommendedPath,
                     disposition = "viable",
-                    rationale = $"Deterministic score band '{EnumToWire(score.Band)}' (overall {score.OverallScore}) drives this fake-provider recommendation.",
+                    rationale = $"Deterministic score band '{EnumToWire(score.Band)}' (overall {score.OverallScore}) drives this recommendation.",
                     evidenceIds = citedEvidence,
                     guidanceIds = Array.Empty<string>(),
                 },
             },
-            workItems = BuildWorkItems(assessment, score, recommendedPath),
+            workItems,
             missingSkills = BuildMissingSkills(assessment, score, recommendedPath),
             validationPlan = new
             {
                 targetDevices = new[] { "arm64-vm" },
-                buildChecks = Array.Empty<object>(),
-                functionalChecks = Array.Empty<object>(),
+                buildChecks = workItems.Length == 0 ? Array.Empty<object>() : new object[]
+                {
+                    new
+                    {
+                        id = "vc-arm64-release-build",
+                        description = "Build the planned target in Release configuration for ARM64.",
+                        expectedOutcome = "The ARM64 build completes without errors.",
+                    },
+                },
+                functionalChecks = workItems.Length == 0 ? Array.Empty<object>() : new object[]
+                {
+                    new
+                    {
+                        id = "vc-arm64-functional-smoke",
+                        description = "Run the repository's primary functional smoke path on ARM64.",
+                        expectedOutcome = "The ARM64 result matches the established x64 baseline.",
+                    },
+                },
                 reliabilityChecks = Array.Empty<object>(),
                 performanceChecks = Array.Empty<object>(),
                 powerChecks = Array.Empty<object>(),
@@ -79,9 +96,9 @@ public sealed class FakePlannerModel : IPlannerModel
                 accessibilityChecks = Array.Empty<object>(),
                 windowsExperienceChecks = Array.Empty<object>(),
             },
-            risks = Array.Empty<object>(),
-            unknowns = Array.Empty<object>(),
-            requiredApprovals = Array.Empty<object>(),
+            risks = BuildRisks(score),
+            unknowns = BuildUnknowns(assessment),
+            requiredApprovals = BuildRequiredApprovals(assessment, score),
             reusableOutputs = Array.Empty<object>(),
         };
 
@@ -102,7 +119,7 @@ public sealed class FakePlannerModel : IPlannerModel
             ? $"Assessment flagged provisional ({string.Join(", ", score.ProvisionalReasons.Select(EnumToWire))})."
             : "Assessment coverage is sufficient for a full recommendation.";
         return $"Deterministic band '{band}' at overall {score.OverallScore}/100 (uncapped {score.UncappedScore}). "
-            + $"{capsPart} {provisionalPart} This is a fake-provider placeholder summary.";
+            + $"{capsPart} {provisionalPart}";
     }
 
     private static string BuildScoreInterpretation(ReadinessScoreV1 score)
@@ -146,9 +163,7 @@ public sealed class FakePlannerModel : IPlannerModel
         var seq = 1;
         foreach (var bucket in expectation.Buckets)
         {
-            var slug = SlugifyForId(bucket.Description);
-            var id = $"wi-{bucket.Category}-{slug}";
-            if (id.Length > 60) id = id[..60].TrimEnd('-');
+            var id = CreateWorkItemId(bucket);
             var skill = ResolveSkill(bucket);
             var dependencies = skill == "ci-pipeline-generator" && buildWorkItemId is not null
                 ? new[] { buildWorkItemId }
@@ -194,6 +209,61 @@ public sealed class FakePlannerModel : IPlannerModel
         return items.ToArray();
     }
 
+    private static object[] BuildRisks(ReadinessScoreV1 score) =>
+        score.MajorBlockers.Select((blocker, index) => new
+        {
+            id = $"rk-blocker-{index + 1}",
+            description = blocker.Description,
+            severity = blocker.Category == BlockerCategory.Dependency ? "critical" : "high",
+            mitigation = "Resolve the linked evidence through an approval-gated work item and rerun ARM64 validation.",
+            evidenceIds = blocker.EvidenceIds.Take(20).ToArray(),
+            guidanceIds = Array.Empty<string>(),
+        }).Cast<object>().ToArray();
+
+    private static object[] BuildRequiredApprovals(
+        RepositoryAssessmentV1 assessment,
+        ReadinessScoreV1 score) =>
+        BuildWorkItemIds(assessment, score)
+            .Chunk(100)
+            .Select((workItemIds, index) => new
+            {
+                approvalId = $"ap-migration-work-{index + 1}",
+                summary = "Approve review-only migration changes before patch generation.",
+                workItemIds,
+            })
+            .Cast<object>()
+            .ToArray();
+
+    private static object[] BuildUnknowns(RepositoryAssessmentV1 assessment) =>
+        assessment.Unknowns.Select((unknown, index) =>
+        {
+            var projected = new Dictionary<string, object?>
+            {
+                ["id"] = $"uk-assessment-{index + 1}",
+                ["description"] = unknown.Description,
+                ["evidenceIds"] = (unknown.EvidenceIds ?? []).Take(20).ToArray(),
+            };
+            if (!string.IsNullOrWhiteSpace(unknown.RequiredSkill))
+            {
+                projected["requiredSkill"] = unknown.RequiredSkill;
+            }
+
+            return (object)projected;
+        }).ToArray();
+
+    private static string[] BuildWorkItemIds(
+        RepositoryAssessmentV1 assessment,
+        ReadinessScoreV1 score) =>
+        GranularityCalculator.Compute(assessment, score).Buckets
+            .Select(CreateWorkItemId)
+            .ToArray();
+
+    private static string CreateWorkItemId(GranularityCalculator.ExpectedBucket bucket)
+    {
+        var id = $"wi-{bucket.Category}-{SlugifyForId(bucket.Description)}";
+        return id.Length > 60 ? id[..60].TrimEnd('-') : id;
+    }
+
     private static object[] BuildMissingSkills(
         RepositoryAssessmentV1 assessment, ReadinessScoreV1 score, string recommendedPath)
     {
@@ -229,15 +299,32 @@ public sealed class FakePlannerModel : IPlannerModel
 
     private static string ResolveSkill(GranularityCalculator.ExpectedBucket bucket)
     {
+        if (bucket.Category == "dep")
+        {
+            return "dependency-upgrader";
+        }
+
+        if (bucket.Category == "code")
+        {
+            return "code-transformer";
+        }
+
         if (bucket.Description.Contains("CI job", StringComparison.OrdinalIgnoreCase))
         {
             return "ci-pipeline-generator";
         }
 
-        return bucket.Category == "build"
-            && !bucket.Description.Contains("test suite", StringComparison.OrdinalIgnoreCase)
-                ? "build-config-generator"
-                : "code-transformer";
+        if (bucket.Description.Contains("packaging", StringComparison.OrdinalIgnoreCase))
+        {
+            return "packaging-generator";
+        }
+
+        if (bucket.Description.Contains("test suite", StringComparison.OrdinalIgnoreCase))
+        {
+            return "test-generator";
+        }
+
+        return "build-config-generator";
     }
 
     private static string[] ResolveInputs(
@@ -256,9 +343,18 @@ public sealed class FakePlannerModel : IPlannerModel
             _ => assessment.BuildFindings.Evidence.Select(evidence => evidence.Path),
         };
 
+        if (skill == "ci-pipeline-generator")
+        {
+            return [];
+        }
+
         if (skill == "build-config-generator")
         {
             paths = paths.Where(path => path is not null && IsSupportedBuildInput(path));
+        }
+        else if (skill == "packaging-generator")
+        {
+            paths = paths.Where(path => path is not null && IsPackagingInput(path));
         }
 
         return paths
@@ -275,6 +371,15 @@ public sealed class FakePlannerModel : IPlannerModel
         return name.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase)
             || name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
             || name.EndsWith(".vcxproj", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPackagingInput(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return extension.Equals(".appxmanifest", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".msixproj", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".wixproj", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".wxs", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string SlugifyForId(string text)

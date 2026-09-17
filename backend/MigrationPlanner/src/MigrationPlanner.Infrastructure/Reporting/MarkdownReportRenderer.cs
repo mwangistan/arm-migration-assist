@@ -69,6 +69,45 @@ internal sealed class MarkdownReportRenderer : IMigrationReportRenderer
             }
         }
 
+        content.AppendLine().AppendLine("## Alternatives considered").AppendLine();
+        foreach (var alternative in ReportRendering.ReadArray(root, "alternatives"))
+        {
+            content.AppendLine($"- **{ReportRendering.Markdown(ReportRendering.ReadString(alternative, "path"))}** ({ReportRendering.Markdown(ReportRendering.ReadString(alternative, "disposition"))}): {ReportRendering.Markdown(ReportRendering.ReadString(alternative, "rationale"))}");
+        }
+
+        content.AppendLine().AppendLine("## Risks and unknowns").AppendLine();
+        foreach (var risk in ReportRendering.ReadArray(root, "risks"))
+        {
+            content.AppendLine($"- **{ReportRendering.Markdown(ReportRendering.ReadString(risk, "severity"))}:** {ReportRendering.Markdown(ReportRendering.ReadString(risk, "description"))} Mitigation: {ReportRendering.Markdown(ReportRendering.ReadString(risk, "mitigation"))}");
+        }
+        foreach (var unknown in ReportRendering.ReadArray(root, "unknowns"))
+        {
+            content.AppendLine($"- **Unknown:** {ReportRendering.Markdown(ReportRendering.ReadString(unknown, "description"))}");
+        }
+
+        content.AppendLine().AppendLine("## Validation plan").AppendLine();
+        if (root.TryGetProperty("validationPlan", out var validationPlan))
+        {
+            content.AppendLine($"Target devices: {ReportRendering.JoinStrings(validationPlan, "targetDevices")}");
+            foreach (var property in validationPlan.EnumerateObject().Where(property => property.Name != "targetDevices"))
+            {
+                foreach (var check in property.Value.EnumerateArray())
+                {
+                    content.AppendLine($"- **{ReportRendering.Markdown(property.Name)}:** {ReportRendering.Markdown(ReportRendering.ReadString(check, "description"))} Expected: {ReportRendering.Markdown(ReportRendering.ReadString(check, "expectedOutcome"))}");
+                }
+            }
+        }
+
+        content.AppendLine().AppendLine("## Capability and approval gates").AppendLine();
+        foreach (var skill in ReportRendering.ReadArray(root, "missingSkills"))
+        {
+            content.AppendLine($"- **Missing skill `{ReportRendering.ReadString(skill, "proposedName")}`:** {ReportRendering.Markdown(ReportRendering.ReadString(skill, "purpose"))}");
+        }
+        foreach (var approval in ReportRendering.ReadArray(root, "requiredApprovals"))
+        {
+            content.AppendLine($"- **Approval required:** {ReportRendering.Markdown(ReportRendering.ReadString(approval, "summary"))} ({ReportRendering.JoinStrings(approval, "workItemIds")})");
+        }
+
         if (report.Warnings.Count > 0)
         {
             content.AppendLine().AppendLine("## Warnings").AppendLine();

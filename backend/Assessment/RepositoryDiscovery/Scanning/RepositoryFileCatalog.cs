@@ -172,7 +172,8 @@ internal sealed record RepositoryFileCatalog(
             return null;
         }
 
-        return Encoding.UTF8.GetString(bytes);
+        var content = Encoding.UTF8.GetString(bytes);
+        return content.Length > 0 && content[0] == '\uFEFF' ? content[1..] : content;
     }
 
     private sealed record GitEntry(string Mode, string Path);

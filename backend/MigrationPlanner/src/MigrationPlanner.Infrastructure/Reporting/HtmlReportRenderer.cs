@@ -54,7 +54,47 @@ internal sealed class HtmlReportRenderer : IMigrationReportRenderer
             content.Append("</article>");
         }
 
-        content.Append("</section><section><h2>Appendix</h2><h3>Plan JSON</h3><pre>")
+        content.Append("</section><section><h2>Alternatives considered</h2><ul>");
+        foreach (var alternative in ReportRendering.ReadArray(root, "alternatives"))
+        {
+            content.Append($"<li><strong>{ReportRendering.Html(ReportRendering.ReadString(alternative, "path"))}</strong> ({ReportRendering.Html(ReportRendering.ReadString(alternative, "disposition"))}): {ReportRendering.Html(ReportRendering.ReadString(alternative, "rationale"))}</li>");
+        }
+
+        content.Append("</ul></section><section><h2>Risks and unknowns</h2><ul>");
+        foreach (var risk in ReportRendering.ReadArray(root, "risks"))
+        {
+            content.Append($"<li><strong>{ReportRendering.Html(ReportRendering.ReadString(risk, "severity"))}:</strong> {ReportRendering.Html(ReportRendering.ReadString(risk, "description"))} Mitigation: {ReportRendering.Html(ReportRendering.ReadString(risk, "mitigation"))}</li>");
+        }
+        foreach (var unknown in ReportRendering.ReadArray(root, "unknowns"))
+        {
+            content.Append($"<li><strong>Unknown:</strong> {ReportRendering.Html(ReportRendering.ReadString(unknown, "description"))}</li>");
+        }
+
+        content.Append("</ul></section><section><h2>Validation plan</h2>");
+        if (root.TryGetProperty("validationPlan", out var validationPlan))
+        {
+            content.Append($"<p>Target devices: {ReportRendering.Html(ReportRendering.JoinStrings(validationPlan, "targetDevices"))}</p><ul>");
+            foreach (var property in validationPlan.EnumerateObject().Where(property => property.Name != "targetDevices"))
+            {
+                foreach (var check in property.Value.EnumerateArray())
+                {
+                    content.Append($"<li><strong>{ReportRendering.Html(property.Name)}:</strong> {ReportRendering.Html(ReportRendering.ReadString(check, "description"))} Expected: {ReportRendering.Html(ReportRendering.ReadString(check, "expectedOutcome"))}</li>");
+                }
+            }
+            content.Append("</ul>");
+        }
+
+        content.Append("</section><section><h2>Capability and approval gates</h2><ul>");
+        foreach (var skill in ReportRendering.ReadArray(root, "missingSkills"))
+        {
+            content.Append($"<li><strong>Missing skill {ReportRendering.Html(ReportRendering.ReadString(skill, "proposedName"))}:</strong> {ReportRendering.Html(ReportRendering.ReadString(skill, "purpose"))}</li>");
+        }
+        foreach (var approval in ReportRendering.ReadArray(root, "requiredApprovals"))
+        {
+            content.Append($"<li><strong>Approval required:</strong> {ReportRendering.Html(ReportRendering.ReadString(approval, "summary"))} ({ReportRendering.Html(ReportRendering.JoinStrings(approval, "workItemIds"))})</li>");
+        }
+
+        content.Append("</ul></section><section><h2>Appendix</h2><h3>Plan JSON</h3><pre>")
             .Append(ReportRendering.Html(ReportRendering.Serialize(report.Plan)))
             .Append("</pre><h3>Score JSON</h3><pre>")
             .Append(ReportRendering.Html(ReportRendering.Serialize(report.Score)))

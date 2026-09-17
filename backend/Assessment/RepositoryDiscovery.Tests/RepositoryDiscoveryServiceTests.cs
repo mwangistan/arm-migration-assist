@@ -59,7 +59,7 @@ public sealed class RepositoryDiscoveryServiceTests
     }
 
     [Fact]
-    public async Task DiscoverAsync_AssessesGitHubArchiveWithoutGitClone()
+    public async Task DiscoverAsync_AssessesGitHubArchiveWithoutGitCheckout()
     {
         var source = new StubGitHubRepositorySource();
 
@@ -289,6 +289,32 @@ public sealed class RepositoryDiscoveryServiceTests
                 && dependency.Version == "3.2.1"
                 && dependency.Ecosystem == "nuget");
         Assert.Equal(assessment.ScanCoverage.FilesTotal, assessment.ScanCoverage.FilesScanned);
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_ParsesUtf8BomDependencyManifest()
+    {
+        using var repository = TestRepository.Create();
+        var manifest = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <packages>
+              <package id="Microsoft.Windows.CppWinRT" version="2.0.230706.1" targetFramework="native" />
+            </packages>
+            """;
+        repository.WriteTrackedBytes(
+            "packages.config",
+            Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(manifest)).ToArray());
+        repository.CommitChanges("add BOM packages config");
+
+        var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
+
+        Assert.Contains(
+            assessment.Dependencies,
+            dependency => dependency.Name == "Microsoft.Windows.CppWinRT"
+                && dependency.Version == "2.0.230706.1");
+        Assert.DoesNotContain(
+            assessment.Unknowns,
+            unknown => unknown.Description.Contains("manifest(s) could not be parsed", StringComparison.Ordinal));
     }
 
     [Fact]

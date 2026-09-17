@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using MigrationPlanner.Domain.Assessment;
 using MigrationPlanner.Tests.Integration.Fixtures;
 using Xunit;
 
@@ -39,6 +40,33 @@ public sealed class MigrationPlansEndpointTests : IClassFixture<PlannerWebApplic
         runId.GetString().Should().NotBeNullOrWhiteSpace();
     }
 
+    [Fact]
+    public async Task Post_AssessmentUnknownWithoutSkill_ReturnsValidPlanUnknown()
+    {
+        var assessment = MinimalValidAssessmentFactory.Build("assessment-unknown-projection") with
+        {
+            Unknowns = new[]
+            {
+                new Unknown(
+                    "Packaging architecture still needs verification.",
+                    UnknownArea.Build,
+                    RequiredSkill: null,
+                    EvidenceIds: new[] { "build-001" }),
+            },
+        };
+        using var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/migration-plans", assessment);
+        using var body = await response.Content.ReadFromJsonAsync<JsonDocument>();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK,
+            because: await response.Content.ReadAsStringAsync());
+        var unknown = body!.RootElement.GetProperty("plan").GetProperty("unknowns")[0];
+        unknown.GetProperty("description").GetString()
+            .Should().Be("Packaging architecture still needs verification.");
+        unknown.TryGetProperty("requiredSkill", out _).Should().BeFalse();
+    }
+
     [Theory]
     [InlineData("md", "text/markdown", "# sample-repo migration report")]
     [InlineData("html", "text/html", "<!doctype html>")]
@@ -58,11 +86,15 @@ public sealed class MigrationPlansEndpointTests : IClassFixture<PlannerWebApplic
         var report = await response.Content.ReadAsStringAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.CacheControl!.NoStore.Should().BeTrue();
         response.Content.Headers.ContentType!.MediaType.Should().Be(mediaType);
         response.Content.Headers.ContentDisposition!.FileName
             .Should().Be($"migration-report-{runId}.{extension}");
         report.Should().Contain(expectedContent);
         report.Should().Contain("Score digest");
+        report.Should().Contain("Alternatives considered");
+        report.Should().Contain("Validation plan");
+        report.Should().Contain("Capability and approval gates");
         if (extension == "html")
         {
             report.ToLowerInvariant().Should().NotContain("<script");
