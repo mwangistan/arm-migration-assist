@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0",
+  "planId": "dummy-dotnet-arm64-validation",
+  "validationPlan": {
+    "targetDevices": [
+      "arm64-vm"
+    ],
+    "buildChecks": [
+      {
+        "id": "vc-dotnet-build",
+        "description": "Build the dummy .NET application for Windows ARM64.",
+        "expectedOutcome": "The win-arm64 Release build completes successfully.",
+        "evidenceIds": [
+          "ev-demo-project"
+        ],
+        "guidanceIds": []
+      }
+    ],
+    "functionalChecks": [
+      {
+        "id": "vc-native-runtime",
+        "description": "Run the application on a Windows ARM64 environment.",
+        "expectedOutcome": "The application starts and reports an ARM64 process architecture.",
+        "evidenceIds": [
+          "ev-demo-project"
+        ],
+        "guidanceIds": []
+      }
+    ],
+    "reliabilityChecks": [],
+    "performanceChecks": [],
+    "powerChecks": [],
+    "offlineChecks": [],
+    "accessibilityChecks": [],
+    "windowsExperienceChecks": []
+  },
+  "workItems": [
+    {
+      "id": "wi-dummy-dotnet-arm64",
+      "acceptanceTests": [
+        {
+          "id": "at-win-arm64-build",
+          "description": "The dummy project can be compiled for win-arm64.",
+          "expectedOutcome": "dotnet build exits successfully and produces Windows ARM64 output."
+        }
+      ]
+    }
+  ]
+}

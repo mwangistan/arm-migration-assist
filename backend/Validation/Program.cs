@@ -4,6 +4,11 @@ using Validation.Dashboard;
 // Planning only inspects Git metadata. Running validation requires a separately reviewed approval file.
 try
 {
+    if (args.Length >= 2 && args[0] == "--settings")
+    {
+        RunSettingsEnvironment.Load(args[1]);
+        args = args[2..];
+    }
     var processRunner = new LocalProcessRunner();
     var foundryOptions = FoundryValidationAiOptions.FromEnvironment();
     var foundry = foundryOptions is null ? null : FoundryValidationAiClient.Create(foundryOptions);
@@ -39,8 +44,8 @@ try
     }
     Console.Error.WriteLine(
         "Usage:\n" +
-        "  plan <migration.json> <repo> <options.json> <proposal.json> <approval.json> [full-commit-sha] [branch]\n" +
-        "  run <proposal.json> <approval.json> <report.json> <dashboard.json>\n" +
+        "  [--settings <validation.runsettings>] plan <migration.json> <repo> <options.json> <proposal.json> <approval.json> [full-commit-sha] [branch]\n" +
+        "  [--settings <validation.runsettings>] run <proposal.json> <approval.json> <report.json> <dashboard.json>\n" +
         $"Set {FoundryValidationAiOptions.EndpointEnvironmentVariable} and " +
         $"{FoundryValidationAiOptions.DeploymentEnvironmentVariable} to enable Foundry AI stages.\n" +
         "No commands execute during planning. Empty approval lists execute nothing.");

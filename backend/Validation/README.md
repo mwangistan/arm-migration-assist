@@ -53,17 +53,21 @@ CI-specific requirements without observed evidence stay not-run.
 
 ## Azure Foundry model integration
 
-The CLI enables all three AI stages when both environment variables are set:
+The CLI enables all three AI stages when both environment variables are set. For
+repeatable local execution, pass a `.runsettings` file:
 
 ```powershell
-$env:ARM_MIGRATION_FOUNDRY_ENDPOINT = "https://testsuiteai.services.ai.azure.com/mai/v1"
-$env:ARM_MIGRATION_FOUNDRY_MODEL = "MAI-Thinking-1"
+dotnet run --project .\backend\Validation\Validation.csproj -- `
+  --settings .\backend\Validation\samples\dotnet-demo\validation.runsettings `
+  plan <arguments...>
 ```
 
 Authentication uses `DefaultAzureCredential` and the `https://ai.azure.com/.default`
 scope. No API key or access token is stored in configuration or written to validation
 evidence. If neither variable is set, the deterministic/manual workflow remains
 available. Setting only one variable is treated as a configuration error.
+Only `ARM_MIGRATION_FOUNDRY_ENDPOINT` and `ARM_MIGRATION_FOUNDRY_MODEL` are accepted
+from the runsettings file.
 
 Each AI request contains exactly two chat roles:
 
@@ -79,9 +83,9 @@ the existing deterministic/manual fallback.
 
 Only read-only Git identity/discovery operations run during planning/verification;
 validation/build/smoke commands require approval. Before index/worktree inspection,
-effective Git configuration (including system, global and included configuration) is
-checked: configured clean/smudge/process filters, even unused ones, and partial clones
-are rejected. Git fsmonitor, replacement objects and submodule recursion are disabled.
+effective Git configuration is checked and partial clones are rejected. Git fsmonitor,
+replacement objects and submodule recursion are disabled. Configured Git filters are
+not invoked: verification uses raw committed blob IDs and direct worktree byte hashing.
 Submodules, nonregular tracked files, assume-unchanged/skip-worktree flags, and unmerged
 entries are unsupported. Verification does not run `git status` or apply filters: the
 index must match the pinned tree and **all tracked file bytes** must match its blobs.
@@ -173,6 +177,21 @@ Do not change its fingerprint to accept unreviewed changes.
 An optional `skippedCommands` object maps known, unapproved command IDs to explicit
 waiver reasons. Skipped is not passed and does not make a required criterion validated.
 Not approving a command, without an explicit waiver, means not-run.
+
+### Dummy end-to-end data
+
+When Feature 1–3 outputs are not available, create a disposable, clean Git target and
+matching dummy inputs:
+
+```powershell
+.\backend\Validation\samples\dotnet-demo\Setup-Demo.ps1
+```
+
+The script writes only beneath `artifacts\validation-demo` by default and refuses to
+overwrite an existing run. It creates a committed .NET 8 console repository, migration
+plan, validation options, Foundry runsettings, and prints the exact `plan` and `run`
+commands. The initial approval file still approves nothing: review `proposal.json` and
+copy only the reviewed command IDs into `approval.json`.
 
 For explicit mappings/smoke checks, add these optional fields to the options file,
 then generate a new proposal using new output filenames and review it again:

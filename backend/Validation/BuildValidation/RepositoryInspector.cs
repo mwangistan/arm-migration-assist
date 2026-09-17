@@ -68,12 +68,10 @@ public sealed class GitRepositoryInspector(IProcessRunner processRunner) : IRepo
             return outcome.StandardOutput.TrimEnd('\r', '\n');
         }
 
-        // Read effective configuration before any index/worktree inspection. Even status can
-        // execute clean/process filters; partial clones can lazily invoke external fetch helpers.
+        // Partial clones can lazily invoke external fetch helpers. Worktree verification below
+        // hashes bytes directly and never invokes configured clean/smudge/process filters.
         foreach (string key in (await Git("config", "--null", "--name-only", "--list", "--includes")).Split('\0', StringSplitOptions.RemoveEmptyEntries))
         {
-            if (Regex.IsMatch(key, @"\Afilter\..*\.(?:clean|smudge|process)\z", RegexOptions.IgnoreCase | RegexOptions.Singleline))
-                throw new InvalidDataException($"Executable Git filter configuration is not supported: {key}");
             if (key.Equals("extensions.partialclone", StringComparison.OrdinalIgnoreCase) ||
                 Regex.IsMatch(key, @"\Aremote\..*\.promisor\z", RegexOptions.IgnoreCase | RegexOptions.Singleline))
                 throw new InvalidDataException("Partial clones are not supported; inspection must not fetch objects.");

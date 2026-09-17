@@ -12,7 +12,7 @@ public sealed class RepositoryInspectorTests
     [InlineData("clean", "include", "review")]
     [InlineData("process", "global", "review")]
     [InlineData("clean", "local", "")]
-    public async Task ExecutableFiltersAreRejectedBeforeIndexOrWorktreeInspection(string filter, string scope, string driver)
+    public async Task ExecutableFiltersAreNeverInvokedDuringIndexOrWorktreeInspection(string filter, string scope, string driver)
     {
         using var workspace = new TestWorkspace();
         var runner = new IsolatedGitProcessRunner(workspace);
@@ -38,10 +38,9 @@ public sealed class RepositoryInspectorTests
         var error = await Assert.ThrowsAsync<InvalidDataException>(() =>
             new GitRepositoryInspector(runner).InspectAsync(new(workspace.Repo), default));
 
-        Assert.Contains("Executable Git filter", error.Message);
+        Assert.Contains("Tracked file bytes do not match", error.Message);
         Assert.False(File.Exists(Path.Combine(workspace.Root, "filter-ran")));
-        Assert.DoesNotContain(runner.Calls.Skip(start), call =>
-            call.Arguments.Contains("status") || call.Arguments.Contains("ls-files"));
+        Assert.DoesNotContain(runner.Calls.Skip(start), call => call.Arguments.Contains("status"));
     }
 
     [Theory]
