@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <RunConfiguration>
+    <EnvironmentVariables>
+      <ARM_MIGRATION_FOUNDRY_ENDPOINT>https://testsuiteai.services.ai.azure.com/mai/v1</ARM_MIGRATION_FOUNDRY_ENDPOINT>
+      <ARM_MIGRATION_FOUNDRY_MODEL>MAI-Thinking-1</ARM_MIGRATION_FOUNDRY_MODEL>
+    </EnvironmentVariables>
+  </RunConfiguration>
+</RunSettings>

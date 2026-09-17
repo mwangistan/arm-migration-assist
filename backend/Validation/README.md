@@ -193,6 +193,17 @@ plan, validation options, Foundry runsettings, and prints the exact `plan` and `
 commands. The initial approval file still approves nothing: review `proposal.json` and
 copy only the reviewed command IDs into `approval.json`.
 
+An intentionally failing example is also available:
+
+```powershell
+.\backend\Validation\samples\dotnet-failure-demo\Setup-Demo.ps1
+```
+
+Its dummy project models an x64-only native dependency with no `win-arm64` asset. The
+approved build exits nonzero with a stable diagnostic, allowing the workflow to
+demonstrate failure evidence, a `validation-failed` scorecard, and Foundry root-cause
+analysis. The failure is confined to the generated disposable repository.
+
 For explicit mappings/smoke checks, add these optional fields to the options file,
 then generate a new proposal using new output filenames and review it again:
 

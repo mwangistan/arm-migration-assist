@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0",
+  "planId": "dummy-dotnet-arm64-failure-validation",
+  "validationPlan": {
+    "targetDevices": [
+      "arm64-vm"
+    ],
+    "buildChecks": [
+      {
+        "id": "vc-dotnet-build",
+        "description": "Build the dummy .NET application for Windows ARM64.",
+        "expectedOutcome": "The win-arm64 Release build completes successfully.",
+        "evidenceIds": [
+          "ev-x64-native-dependency"
+        ],
+        "guidanceIds": []
+      }
+    ],
+    "functionalChecks": [
+      {
+        "id": "vc-native-dependency",
+        "description": "Confirm that every native dependency has a Windows ARM64 asset.",
+        "expectedOutcome": "No x64-only native dependency blocks the Windows ARM64 build.",
+        "evidenceIds": [
+          "ev-x64-native-dependency"
+        ],
+        "guidanceIds": []
+      }
+    ],
+    "reliabilityChecks": [],
+    "performanceChecks": [],
+    "powerChecks": [],
+    "offlineChecks": [],
+    "accessibilityChecks": [],
+    "windowsExperienceChecks": []
+  },
+  "workItems": [
+    {
+      "id": "wi-replace-x64-native-dependency",
+      "acceptanceTests": [
+        {
+          "id": "at-win-arm64-build",
+          "description": "The project builds after replacing its x64-only native dependency.",
+          "expectedOutcome": "dotnet build for win-arm64 exits successfully."
+        }
+      ]
+    }
+  ]
+}

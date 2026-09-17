@@ -1,0 +1,68 @@
+[CmdletBinding()]
+param(
+    [string]$OutputRoot
+)
+
+$ErrorActionPreference = 'Stop'
+$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..\..')).Path
+if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
+    $OutputRoot = Join-Path $repositoryRoot 'artifacts\validation-failure-demo'
+}
+$OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
+if (Test-Path $OutputRoot) {
+    throw "Demo output already exists: $OutputRoot. Choose a new -OutputRoot to preserve prior evidence."
+}
+
+$target = Join-Path $OutputRoot 'target-repo'
+$evidence = Join-Path $OutputRoot 'evidence'
+New-Item -ItemType Directory -Path $target | Out-Null
+New-Item -ItemType Directory -Path $evidence | Out-Null
+Copy-Item (Join-Path $PSScriptRoot 'source\BrokenApp.csproj') $target
+Copy-Item (Join-Path $PSScriptRoot 'source\Program.cs') $target
+Copy-Item (Join-Path $PSScriptRoot 'source\.gitignore') $target
+Copy-Item (Join-Path $PSScriptRoot 'migration-plan.json') (Join-Path $OutputRoot 'migration-plan.json')
+Copy-Item (Join-Path $PSScriptRoot 'validation.runsettings') (Join-Path $OutputRoot 'validation.runsettings')
+
+@{
+    evidenceDirectory = $evidence
+    mappings = @(
+        @{
+            commandId = 'dotnet-build-19f46c00b63e'
+            criterionKeys = @(
+                'validation:vc-dotnet-build'
+                'validation:vc-native-dependency'
+                'acceptance:wi-replace-x64-native-dependency:at-win-arm64-build'
+            )
+        }
+    )
+} | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8NoBOM (Join-Path $OutputRoot 'validation-options.json')
+
+git -C $target init --initial-branch migration/dummy-failure-validation | Out-Null
+git -C $target config core.autocrlf false
+git -C $target config user.name 'ARM Migration Assist Demo'
+git -C $target config user.email 'arm-migration-demo@example.invalid'
+git -C $target add BrokenApp.csproj Program.cs .gitignore
+git -C $target commit -m 'Create intentionally failing ARM64 validation target' | Out-Null
+
+$commit = (git -C $target rev-parse HEAD).Trim()
+$branch = (git -C $target branch --show-current).Trim()
+$project = Join-Path $repositoryRoot 'backend\Validation\Validation.csproj'
+$settings = Join-Path $OutputRoot 'validation.runsettings'
+$migration = Join-Path $OutputRoot 'migration-plan.json'
+$options = Join-Path $OutputRoot 'validation-options.json'
+$proposal = Join-Path $OutputRoot 'proposal.json'
+$approval = Join-Path $OutputRoot 'approval.json'
+$report = Join-Path $OutputRoot 'report.json'
+$dashboard = Join-Path $OutputRoot 'dashboard.json'
+
+Write-Host "Failing dummy validation workspace created: $OutputRoot"
+Write-Host "Target repository: $target"
+Write-Host "Commit: $commit"
+Write-Host ""
+Write-Host "1. Generate the AI-assisted proposal:"
+Write-Host "dotnet run --project `"$project`" -- --settings `"$settings`" plan `"$migration`" `"$target`" `"$options`" `"$proposal`" `"$approval`" $commit $branch"
+Write-Host ""
+Write-Host "2. Review proposal.json and approve dotnet-build-19f46c00b63e."
+Write-Host ""
+Write-Host "3. Execute validation; exit code 1 is expected because the build failure is intentional:"
+Write-Host "dotnet run --project `"$project`" -- --settings `"$settings`" run `"$proposal`" `"$approval`" `"$report`" `"$dashboard`""
