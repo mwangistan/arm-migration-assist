@@ -1,0 +1,1114 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>ComfyUI migration report</title>
+<style>body{font:14px/1.55 Segoe UI,Arial,sans-serif;color:#242424;max-width:1050px;margin:36px auto;padding:0 24px}h1,h2,h3{color:#1b1a19}header{border-bottom:3px solid #0067b8;padding-bottom:18px}.meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 20px;color:#605e5c}.verdict{display:grid;grid-template-columns:180px 1fr;border-block:1px solid #d6d9dd;margin:28px 0}.score{font-size:42px;font-weight:650;padding:22px 0}.summary{padding:22px 0 22px 28px}table{width:100%;border-collapse:collapse}th,td{text-align:left;border-bottom:1px solid #e8eaed;padding:8px}.item{break-inside:avoid;border-top:1px solid #d6d9dd;padding:16px 0}.tag{display:inline-block;background:#f0f6fa;border-left:3px solid #0067b8;padding:3px 7px;margin-right:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7f9;padding:14px;font-size:11px}@media print{body{margin:0;max-width:none}.item,tr{break-inside:avoid}}</style>
+</head><body><header><h1>ComfyUI migration report</h1><div class="meta">
+<span>Repository: https://github.com/comfyanonymous/ComfyUI</span><span>Commit: 387f98aa2822f684b8597959a52a467d88cc4806</span>
+<span>Branch: master</span><span>Run: baeca60e2e19484abe72925257ce3968</span>
+</div></header><main><section class="verdict"><div class="score">14/100</div><div class="summary">
+<h2>native-arm64</h2><p>Deterministic band &#39;blocked-or-major-redesign&#39; at overall 14/100 (uncapped 14). Cap(s) applied: no-arm64-or-arm64ec-target-le-60. Assessment flagged provisional (dependency-resolution-low, dimension-missing-evidence).</p>
+</div></section><section><h2>Readiness dimensions</h2><table><thead><tr><th>Dimension</th><th>Score</th><th>Weight</th><th>Contribution</th></tr></thead><tbody><tr><td>DependencyCompatibility</td><td>0</td><td>33%</td><td>0</td></tr><tr><td>CodeCompatibility</td><td>0</td><td>28%</td><td>0</td></tr><tr><td>BuildAndCiReadiness</td><td>15</td><td>22%</td><td>3.3</td></tr><tr><td>RuntimeAndValidationEvidence</td><td>60</td><td>17%</td><td>10.2</td></tr><tr><td>WindowsExperienceAndDeployment</td><td>22</td><td>0%</td><td>0</td></tr></tbody></table></section><section><h2>Migration work</h2><article class="item"><div><span class="tag">P0</span><span class="tag">build/add-arm64-target</span></div><h3>1. Add an ARM64 or Arm64EC build target.</h3><p>Add an ARM64 or Arm64EC build target. Produce the concrete change and validate on ARM64.</p><h4>Acceptance criteria</h4><ul><li>Change builds and integrates with existing pipelines. Expected: Green build on ARM64.</li><li>Functional smoke test passes on ARM64. Expected: No crash or regression against the x64 baseline.</li></ul></article><article class="item"><div><span class="tag">P0</span><span class="tag">pipeline/github-actions-arm64-job</span></div><h3>2. Add an ARM64 CI job.</h3><p>Add an ARM64 CI job. Produce the concrete change and validate on ARM64.</p><h4>Acceptance criteria</h4><ul><li>Change builds and integrates with existing pipelines. Expected: Green build on ARM64.</li><li>Functional smoke test passes on ARM64. Expected: No crash or regression against the x64 baseline.</li></ul></article></section><section><h2>Alternatives considered</h2><ul><li><strong>native-arm64</strong> (viable): Deterministic score band &#39;blocked-or-major-redesign&#39; (overall 14) drives this recommendation.</li></ul></section><section><h2>Risks and unknowns</h2><ul><li><strong>high:</strong> Build does not produce an ARM64 or Arm64EC target. Mitigation: Resolve the linked evidence through an approval-gated work item and rerun ARM64 validation.</li><li><strong>Unknown:</strong> ARM64 availability could not be established from repository evidence for 39 declared dependency or dependencies.</li><li><strong>Unknown:</strong> Meaningful offline capability could not be established from static repository signals.</li><li><strong>Unknown:</strong> Accessibility coverage could not be established from static repository signals.</li><li><strong>Unknown:</strong> 5 tracked file(s) were not scanned because they were unsafe, missing, or exceeded scan limits.</li></ul></section><section><h2>Validation plan</h2><p>Target devices: arm64-vm</p><ul><li><strong>buildChecks:</strong> Build the planned target in Release configuration for ARM64. Expected: The ARM64 build completes without errors.</li><li><strong>functionalChecks:</strong> Run the repository&#39;s primary functional smoke path on ARM64. Expected: The ARM64 result matches the established x64 baseline.</li></ul></section><section><h2>Capability and approval gates</h2><ul><li><strong>Missing skill build/add-arm64-target:</strong> Migration capability required for &#39;Add an ARM64 or Arm64EC build target.&#39;</li><li><strong>Approval required:</strong> Approve review-only migration changes before patch generation. (wi-build-add-an-arm64-or-arm64ec-build-target, wi-build-add-an-arm64-ci-job)</li></ul></section><section><h2>Appendix</h2><h3>Plan JSON</h3><pre>{
+  &quot;schemaVersion&quot;: &quot;1.0&quot;,
+  &quot;assessmentId&quot;: &quot;assessment-b5a29c9cc32e432cc9338f9b&quot;,
+  &quot;planId&quot;: &quot;plan-assessment-b5a29c9cc32e432cc9338f9b&quot;,
+  &quot;generatedAt&quot;: &quot;2026-09-17T15:32:04.6096043\u002B00:00&quot;,
+  &quot;modelProvenance&quot;: {
+    &quot;provider&quot;: &quot;fake&quot;,
+    &quot;name&quot;: &quot;fake-planner&quot;,
+    &quot;version&quot;: &quot;0.1.0&quot;
+  },
+  &quot;scoreDigest&quot;: &quot;138fa8ba73d726ff4e5c6f0f6dcc8d42e30a8fff6e82a1072e93062a8a34c3dd&quot;,
+  &quot;corpusVersion&quot;: &quot;2026-09-15.1&quot;,
+  &quot;recommendedPath&quot;: &quot;native-arm64&quot;,
+  &quot;confidence&quot;: &quot;low&quot;,
+  &quot;executiveSummary&quot;: &quot;Deterministic band \u0027blocked-or-major-redesign\u0027 at overall 14/100 (uncapped 14). Cap(s) applied: no-arm64-or-arm64ec-target-le-60. Assessment flagged provisional (dependency-resolution-low, dimension-missing-evidence).&quot;,
+  &quot;scoreInterpretation&quot;: &quot;Dimension breakdown (dependency-compatibility: raw 0 \u00D7 33% = 0; code-compatibility: raw 0 \u00D7 28% = 0; build-and-ci-readiness: raw 15 \u00D7 22% = 3.3; runtime-and-validation-evidence: raw 60 \u00D7 17% = 10.2; windows-experience-and-deployment: raw 22 \u00D7 0% = 0). Evidence completeness 0.60 (medium).&quot;,
+  &quot;facts&quot;: [
+    {
+      &quot;statement&quot;: &quot;Deterministic scorer observed 67 evidence record(s) across five dimensions.&quot;,
+      &quot;evidenceIds&quot;: [
+        &quot;build-a411db87a55ff51b5b35&quot;,
+        &quot;code-01f32f628a3a8c71316e&quot;,
+        &quot;code-07d36ddd828c6778134a&quot;,
+        &quot;code-0f09bccdb35f2acfa408&quot;,
+        &quot;code-173d76fa57352bb22a57&quot;
+      ],
+      &quot;guidanceIds&quot;: []
+    }
+  ],
+  &quot;inferences&quot;: [],
+  &quot;alternatives&quot;: [
+    {
+      &quot;path&quot;: &quot;native-arm64&quot;,
+      &quot;disposition&quot;: &quot;viable&quot;,
+      &quot;rationale&quot;: &quot;Deterministic score band \u0027blocked-or-major-redesign\u0027 (overall 14) drives this recommendation.&quot;,
+      &quot;evidenceIds&quot;: [
+        &quot;build-a411db87a55ff51b5b35&quot;,
+        &quot;code-01f32f628a3a8c71316e&quot;,
+        &quot;code-07d36ddd828c6778134a&quot;,
+        &quot;code-0f09bccdb35f2acfa408&quot;,
+        &quot;code-173d76fa57352bb22a57&quot;
+      ],
+      &quot;guidanceIds&quot;: []
+    }
+  ],
+  &quot;workItems&quot;: [
+    {
+      &quot;id&quot;: &quot;wi-build-add-an-arm64-or-arm64ec-build-target&quot;,
+      &quot;sequence&quot;: 1,
+      &quot;priority&quot;: &quot;P0&quot;,
+      &quot;title&quot;: &quot;Add an ARM64 or Arm64EC build target.&quot;,
+      &quot;objective&quot;: &quot;Add an ARM64 or Arm64EC build target. Produce the concrete change and validate on ARM64.&quot;,
+      &quot;agentOrSkill&quot;: &quot;build/add-arm64-target&quot;,
+      &quot;inputs&quot;: [],
+      &quot;expectedOutputs&quot;: [
+        &quot;patch&quot;
+      ],
+      &quot;dependencies&quot;: [],
+      &quot;evidenceIds&quot;: [
+        &quot;build-a411db87a55ff51b5b35&quot;
+      ],
+      &quot;guidanceIds&quot;: [],
+      &quot;acceptanceTests&quot;: [
+        {
+          &quot;id&quot;: &quot;at-build-2-builds&quot;,
+          &quot;description&quot;: &quot;Change builds and integrates with existing pipelines.&quot;,
+          &quot;expectedOutcome&quot;: &quot;Green build on ARM64.&quot;
+        },
+        {
+          &quot;id&quot;: &quot;at-build-2-functional&quot;,
+          &quot;description&quot;: &quot;Functional smoke test passes on ARM64.&quot;,
+          &quot;expectedOutcome&quot;: &quot;No crash or regression against the x64 baseline.&quot;
+        }
+      ],
+      &quot;approvalRequired&quot;: true,
+      &quot;estimatedEffort&quot;: &quot;medium&quot;,
+      &quot;risk&quot;: &quot;low&quot;
+    },
+    {
+      &quot;id&quot;: &quot;wi-build-add-an-arm64-ci-job&quot;,
+      &quot;sequence&quot;: 2,
+      &quot;priority&quot;: &quot;P0&quot;,
+      &quot;title&quot;: &quot;Add an ARM64 CI job.&quot;,
+      &quot;objective&quot;: &quot;Add an ARM64 CI job. Produce the concrete change and validate on ARM64.&quot;,
+      &quot;agentOrSkill&quot;: &quot;pipeline/github-actions-arm64-job&quot;,
+      &quot;inputs&quot;: [],
+      &quot;expectedOutputs&quot;: [
+        &quot;patch&quot;
+      ],
+      &quot;dependencies&quot;: [
+        &quot;wi-build-add-an-arm64-or-arm64ec-build-target&quot;
+      ],
+      &quot;evidenceIds&quot;: [
+        &quot;build-a411db87a55ff51b5b35&quot;
+      ],
+      &quot;guidanceIds&quot;: [],
+      &quot;acceptanceTests&quot;: [
+        {
+          &quot;id&quot;: &quot;at-build-3-builds&quot;,
+          &quot;description&quot;: &quot;Change builds and integrates with existing pipelines.&quot;,
+          &quot;expectedOutcome&quot;: &quot;Green build on ARM64.&quot;
+        },
+        {
+          &quot;id&quot;: &quot;at-build-3-functional&quot;,
+          &quot;description&quot;: &quot;Functional smoke test passes on ARM64.&quot;,
+          &quot;expectedOutcome&quot;: &quot;No crash or regression against the x64 baseline.&quot;
+        }
+      ],
+      &quot;approvalRequired&quot;: true,
+      &quot;estimatedEffort&quot;: &quot;medium&quot;,
+      &quot;risk&quot;: &quot;low&quot;
+    }
+  ],
+  &quot;missingSkills&quot;: [
+    {
+      &quot;proposedName&quot;: &quot;build/add-arm64-target&quot;,
+      &quot;purpose&quot;: &quot;Migration capability required for \u0027Add an ARM64 or Arm64EC build target.\u0027&quot;,
+      &quot;requiredInputs&quot;: [],
+      &quot;expectedOutputs&quot;: [
+        &quot;patch&quot;
+      ],
+      &quot;justification&quot;: &quot;The required migration generator is not present in the assessment skill catalog.&quot;,
+      &quot;evidenceIds&quot;: [
+        &quot;build-a411db87a55ff51b5b35&quot;
+      ],
+      &quot;writeAccess&quot;: true
+    }
+  ],
+  &quot;validationPlan&quot;: {
+    &quot;targetDevices&quot;: [
+      &quot;arm64-vm&quot;
+    ],
+    &quot;buildChecks&quot;: [
+      {
+        &quot;id&quot;: &quot;vc-arm64-release-build&quot;,
+        &quot;description&quot;: &quot;Build the planned target in Release configuration for ARM64.&quot;,
+        &quot;expectedOutcome&quot;: &quot;The ARM64 build completes without errors.&quot;
+      }
+    ],
+    &quot;functionalChecks&quot;: [
+      {
+        &quot;id&quot;: &quot;vc-arm64-functional-smoke&quot;,
+        &quot;description&quot;: &quot;Run the repository\u0027s primary functional smoke path on ARM64.&quot;,
+        &quot;expectedOutcome&quot;: &quot;The ARM64 result matches the established x64 baseline.&quot;
+      }
+    ],
+    &quot;reliabilityChecks&quot;: [],
+    &quot;performanceChecks&quot;: [],
+    &quot;powerChecks&quot;: [],
+    &quot;offlineChecks&quot;: [],
+    &quot;accessibilityChecks&quot;: [],
+    &quot;windowsExperienceChecks&quot;: []
+  },
+  &quot;risks&quot;: [
+    {
+      &quot;id&quot;: &quot;rk-blocker-1&quot;,
+      &quot;description&quot;: &quot;Build does not produce an ARM64 or Arm64EC target.&quot;,
+      &quot;severity&quot;: &quot;high&quot;,
+      &quot;mitigation&quot;: &quot;Resolve the linked evidence through an approval-gated work item and rerun ARM64 validation.&quot;,
+      &quot;evidenceIds&quot;: [
+        &quot;build-a411db87a55ff51b5b35&quot;
+      ],
+      &quot;guidanceIds&quot;: []
+    }
+  ],
+  &quot;unknowns&quot;: [
+    {
+      &quot;id&quot;: &quot;uk-assessment-1&quot;,
+      &quot;description&quot;: &quot;ARM64 availability could not be established from repository evidence for 39 declared dependency or dependencies.&quot;,
+      &quot;evidenceIds&quot;: [
+        &quot;dependency-843725321ce800b7823d&quot;,
+        &quot;dependency-fc3843ea62fb3fc3910f&quot;,
+        &quot;dependency-bf40c841f26a3c63e523&quot;,
+        &quot;dependency-7875e31caf01e0572bb3&quot;,
+        &quot;dependency-e22fb8cd8caa1567977b&quot;,
+        &quot;dependency-5efcd0aec421efcfafcd&quot;,
+        &quot;dependency-3ec1150f155b8fd5051a&quot;,
+        &quot;dependency-fc08762b6dd930acda43&quot;,
+        &quot;dependency-86bb1c22b8b9e6529c7a&quot;,
+        &quot;dependency-0209a8d233443e4ad955&quot;,
+        &quot;dependency-651f6c9fa1f5f9f6799c&quot;,
+        &quot;dependency-e6c283166f5ddec2238a&quot;,
+        &quot;dependency-c199703bd4a2c639ef88&quot;,
+        &quot;dependency-9f5278f94de0f2330fdb&quot;,
+        &quot;dependency-5cc12dab4268dcbe3700&quot;,
+        &quot;dependency-8b2625ff7ee1d1d30a53&quot;,
+        &quot;dependency-cd069dc8547bbbb1c498&quot;,
+        &quot;dependency-805f2565a46f25f6dd7a&quot;,
+        &quot;dependency-b1e184a7144f74db052a&quot;,
+        &quot;dependency-7f9bd7f2a7df7f5a7391&quot;
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;uk-assessment-2&quot;,
+      &quot;description&quot;: &quot;Meaningful offline capability could not be established from static repository signals.&quot;,
+      &quot;evidenceIds&quot;: []
+    },
+    {
+      &quot;id&quot;: &quot;uk-assessment-3&quot;,
+      &quot;description&quot;: &quot;Accessibility coverage could not be established from static repository signals.&quot;,
+      &quot;evidenceIds&quot;: []
+    },
+    {
+      &quot;id&quot;: &quot;uk-assessment-4&quot;,
+      &quot;description&quot;: &quot;5 tracked file(s) were not scanned because they were unsafe, missing, or exceeded scan limits.&quot;,
+      &quot;evidenceIds&quot;: []
+    }
+  ],
+  &quot;requiredApprovals&quot;: [
+    {
+      &quot;approvalId&quot;: &quot;ap-migration-work-1&quot;,
+      &quot;summary&quot;: &quot;Approve review-only migration changes before patch generation.&quot;,
+      &quot;workItemIds&quot;: [
+        &quot;wi-build-add-an-arm64-or-arm64ec-build-target&quot;,
+        &quot;wi-build-add-an-arm64-ci-job&quot;
+      ]
+    }
+  ],
+  &quot;reusableOutputs&quot;: []
+}</pre><h3>Score JSON</h3><pre>{
+  &quot;schemaVersion&quot;: &quot;1.0&quot;,
+  &quot;assessmentId&quot;: &quot;assessment-b5a29c9cc32e432cc9338f9b&quot;,
+  &quot;generatedAt&quot;: &quot;2026-09-17T15:23:48.1269469+00:00&quot;,
+  &quot;producer&quot;: {
+    &quot;name&quot;: &quot;arm-migration-assist-scorer&quot;,
+    &quot;version&quot;: &quot;0.2.0&quot;,
+    &quot;ruleset&quot;: &quot;scoring-v2&quot;
+  },
+  &quot;overallScore&quot;: 14,
+  &quot;uncappedScore&quot;: 14,
+  &quot;band&quot;: &quot;blocked-or-major-redesign&quot;,
+  &quot;evidenceCompleteness&quot;: &quot;medium&quot;,
+  &quot;evidenceCompletenessScore&quot;: 0.6,
+  &quot;provisional&quot;: true,
+  &quot;provisionalReasons&quot;: [
+    &quot;dependency-resolution-low&quot;,
+    &quot;dimension-missing-evidence&quot;
+  ],
+  &quot;dimensions&quot;: [
+    {
+      &quot;dimensionKey&quot;: &quot;dependency-compatibility&quot;,
+      &quot;weightPct&quot;: 33,
+      &quot;rawScore&quot;: 0,
+      &quot;weightedContribution&quot;: 0,
+      &quot;deductions&quot;: [
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027comfyui-workflow-templates\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-0209a8d233443e4ad955&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027spandrel\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-1fec3d082a9a15b05c0a&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027tokenizers\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-270709d5ed238556cc99&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027sentencepiece\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-2f3617105f3296a059d6&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027scipy\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-3442d4117305f1f58da4&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027comfy-kitchen\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-3ec1150f155b8fd5051a&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027pytest-aiohttp\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-44cd82dbc52e46a6a6ad&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027SQLAlchemy\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-4c9ef52d52fba68c1646&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027tqdm\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-595a70b1a22872d2ae5a&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027Pillow\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-5cc12dab4268dcbe3700&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027comfy-angle\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-5efcd0aec421efcfafcd&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027torchaudio\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-649e8fa0e536ce7f332f&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027einops\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-651f6c9fa1f5f9f6799c&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027transformers\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-6b5cc84d468bee0568ce&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027blake3\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-7875e31caf01e0572bb3&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027pytest\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-7f9bd7f2a7df7f5a7391&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027pydantic-settings\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-805f2565a46f25f6dd7a&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027aiohttp\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-843725321ce800b7823d&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027comfyui-frontend-package\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-86bb1c22b8b9e6529c7a&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027psutil\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-8b2625ff7ee1d1d30a53&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027numpy\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-9f5278f94de0f2330fdb&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027websocket-client\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-a33bde44e945be467683&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027PyOpenGL\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-b1e184a7144f74db052a&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027torchvision\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-b35ad527ad90f7240528&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027simpleeval\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-bb4afeb038eec462365c&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027av\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-bf40c841f26a3c63e523&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027kornia\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-c199703bd4a2c639ef88&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027requests\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-c2fbfd514f3ea1aed419&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027pydantic\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-cd069dc8547bbbb1c498&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027yarl\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-d01eafc3fc88063cc987&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027pyyaml\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-dafb551d9a27fb237c90&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027comfy-aimdo\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-e22fb8cd8caa1567977b&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027filelock\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-e6c283166f5ddec2238a&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027safetensors\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-fa140c3b2b779fd231dc&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027comfyui-embedded-docs\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-fc08762b6dd930acda43&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027alembic\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-fc3843ea62fb3fc3910f&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027torchsde\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-fdfee7f25ce88bef9a44&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027pytest-asyncio\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-fea91d90d248f42f4cf6&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;DEP-UNKNOWN-REQUIRED&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;Dependency \u0027torch\u0027 is unknown (required).&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;dependency-ff049b7c4a994e34bedb&quot;
+          ]
+        }
+      ],
+      &quot;confidence&quot;: 0.4,
+      &quot;rationaleCodes&quot;: [
+        &quot;DEP-UNKNOWN-REQUIRED&quot;
+      ],
+      &quot;evidenceIds&quot;: [
+        &quot;dependency-0209a8d233443e4ad955&quot;,
+        &quot;dependency-1fec3d082a9a15b05c0a&quot;,
+        &quot;dependency-270709d5ed238556cc99&quot;,
+        &quot;dependency-2f3617105f3296a059d6&quot;,
+        &quot;dependency-3442d4117305f1f58da4&quot;,
+        &quot;dependency-3ec1150f155b8fd5051a&quot;,
+        &quot;dependency-44cd82dbc52e46a6a6ad&quot;,
+        &quot;dependency-4c9ef52d52fba68c1646&quot;,
+        &quot;dependency-595a70b1a22872d2ae5a&quot;,
+        &quot;dependency-5cc12dab4268dcbe3700&quot;,
+        &quot;dependency-5efcd0aec421efcfafcd&quot;,
+        &quot;dependency-649e8fa0e536ce7f332f&quot;,
+        &quot;dependency-651f6c9fa1f5f9f6799c&quot;,
+        &quot;dependency-6b5cc84d468bee0568ce&quot;,
+        &quot;dependency-7875e31caf01e0572bb3&quot;,
+        &quot;dependency-7f9bd7f2a7df7f5a7391&quot;,
+        &quot;dependency-805f2565a46f25f6dd7a&quot;,
+        &quot;dependency-843725321ce800b7823d&quot;,
+        &quot;dependency-86bb1c22b8b9e6529c7a&quot;,
+        &quot;dependency-8b2625ff7ee1d1d30a53&quot;,
+        &quot;dependency-9f5278f94de0f2330fdb&quot;,
+        &quot;dependency-a33bde44e945be467683&quot;,
+        &quot;dependency-b1e184a7144f74db052a&quot;,
+        &quot;dependency-b35ad527ad90f7240528&quot;,
+        &quot;dependency-bb4afeb038eec462365c&quot;,
+        &quot;dependency-bf40c841f26a3c63e523&quot;,
+        &quot;dependency-c199703bd4a2c639ef88&quot;,
+        &quot;dependency-c2fbfd514f3ea1aed419&quot;,
+        &quot;dependency-cd069dc8547bbbb1c498&quot;,
+        &quot;dependency-d01eafc3fc88063cc987&quot;,
+        &quot;dependency-dafb551d9a27fb237c90&quot;,
+        &quot;dependency-e22fb8cd8caa1567977b&quot;,
+        &quot;dependency-e6c283166f5ddec2238a&quot;,
+        &quot;dependency-fa140c3b2b779fd231dc&quot;,
+        &quot;dependency-fc08762b6dd930acda43&quot;,
+        &quot;dependency-fc3843ea62fb3fc3910f&quot;,
+        &quot;dependency-fdfee7f25ce88bef9a44&quot;,
+        &quot;dependency-fea91d90d248f42f4cf6&quot;,
+        &quot;dependency-ff049b7c4a994e34bedb&quot;
+      ]
+    },
+    {
+      &quot;dimensionKey&quot;: &quot;code-compatibility&quot;,
+      &quot;weightPct&quot;: 28,
+      &quot;rawScore&quot;: 0,
+      &quot;weightedContribution&quot;: 0,
+      &quot;deductions&quot;: [
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-01f32f628a3a8c71316e&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-07d36ddd828c6778134a&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-0f09bccdb35f2acfa408&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-173d76fa57352bb22a57&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-1e783980f8cd8b8f2676&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-29668645e6d38fa98606&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-2abae4e6ad96adbdd5c9&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-3d17ceb0a9867b2fa66a&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-3d30fefc33da3df61bee&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-4b92e91364291d65b865&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-5611ea31124e5b950eac&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-MEDIUM-ARM-CODE-DYNAMIC-NATIVE-01&quot;,
+          &quot;magnitude&quot;: 5,
+          &quot;description&quot;: &quot;medium code finding \u0027ARM-CODE-DYNAMIC-NATIVE-01\u0027: A native library is loaded dynamically.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-5709132da865245c8964&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-5b442cb3164e6079ce5a&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-7af5ae88a55536bf7078&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-MEDIUM-ARM-CODE-DYNAMIC-NATIVE-01&quot;,
+          &quot;magnitude&quot;: 5,
+          &quot;description&quot;: &quot;medium code finding \u0027ARM-CODE-DYNAMIC-NATIVE-01\u0027: A native library is loaded dynamically.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-845886bcc044253617f0&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-951349146b164a1d31d2&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-aace821121d1a00e74dd&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-b617305c170832eded41&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-b6d360b3d8e80e77720a&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-b6f1d139ff466798f171&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-bdb2ad060dfd95a200b0&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-bee772150ea950a9a262&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-c59d0a62b5152fad1b99&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-d5ccc050fba167805167&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-d8fcae520831fdbc3e4c&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-efa2dab6e6e828ae1d99&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+          &quot;magnitude&quot;: 11,
+          &quot;description&quot;: &quot;high code finding \u0027ARM-CODE-SIMD-01\u0027: An x86 SIMD intrinsic or header is referenced.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;code-fa1862ef1cceaf8351c4&quot;
+          ]
+        }
+      ],
+      &quot;confidence&quot;: 0.95,
+      &quot;rationaleCodes&quot;: [
+        &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+        &quot;CODE-MEDIUM-ARM-CODE-DYNAMIC-NATIVE-01&quot;
+      ],
+      &quot;evidenceIds&quot;: [
+        &quot;code-01f32f628a3a8c71316e&quot;,
+        &quot;code-07d36ddd828c6778134a&quot;,
+        &quot;code-0f09bccdb35f2acfa408&quot;,
+        &quot;code-173d76fa57352bb22a57&quot;,
+        &quot;code-1e783980f8cd8b8f2676&quot;,
+        &quot;code-29668645e6d38fa98606&quot;,
+        &quot;code-2abae4e6ad96adbdd5c9&quot;,
+        &quot;code-3d17ceb0a9867b2fa66a&quot;,
+        &quot;code-3d30fefc33da3df61bee&quot;,
+        &quot;code-4b92e91364291d65b865&quot;,
+        &quot;code-5611ea31124e5b950eac&quot;,
+        &quot;code-5709132da865245c8964&quot;,
+        &quot;code-5b442cb3164e6079ce5a&quot;,
+        &quot;code-7af5ae88a55536bf7078&quot;,
+        &quot;code-845886bcc044253617f0&quot;,
+        &quot;code-951349146b164a1d31d2&quot;,
+        &quot;code-aace821121d1a00e74dd&quot;,
+        &quot;code-b617305c170832eded41&quot;,
+        &quot;code-b6d360b3d8e80e77720a&quot;,
+        &quot;code-b6f1d139ff466798f171&quot;,
+        &quot;code-bdb2ad060dfd95a200b0&quot;,
+        &quot;code-bee772150ea950a9a262&quot;,
+        &quot;code-c59d0a62b5152fad1b99&quot;,
+        &quot;code-d5ccc050fba167805167&quot;,
+        &quot;code-d8fcae520831fdbc3e4c&quot;,
+        &quot;code-efa2dab6e6e828ae1d99&quot;,
+        &quot;code-fa1862ef1cceaf8351c4&quot;
+      ]
+    },
+    {
+      &quot;dimensionKey&quot;: &quot;build-and-ci-readiness&quot;,
+      &quot;weightPct&quot;: 22,
+      &quot;rawScore&quot;: 15,
+      &quot;weightedContribution&quot;: 3.3,
+      &quot;deductions&quot;: [
+        {
+          &quot;code&quot;: &quot;BUILD-NO-ARM64&quot;,
+          &quot;magnitude&quot;: 50,
+          &quot;description&quot;: &quot;Neither an ARM64 nor an Arm64EC build target was detected.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;build-a411db87a55ff51b5b35&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;BUILD-NO-ARM64-CI&quot;,
+          &quot;magnitude&quot;: 20,
+          &quot;description&quot;: &quot;No ARM64 CI job was detected.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;build-a411db87a55ff51b5b35&quot;
+          ]
+        },
+        {
+          &quot;code&quot;: &quot;BUILD-PKG-NO-ARM64&quot;,
+          &quot;magnitude&quot;: 15,
+          &quot;description&quot;: &quot;Packaging does not declare ARM64 support.&quot;,
+          &quot;evidenceIds&quot;: [
+            &quot;build-a411db87a55ff51b5b35&quot;
+          ]
+        }
+      ],
+      &quot;confidence&quot;: 0.9,
+      &quot;rationaleCodes&quot;: [
+        &quot;BUILD-NO-ARM64&quot;,
+        &quot;BUILD-NO-ARM64-CI&quot;,
+        &quot;BUILD-PKG-NO-ARM64&quot;
+      ],
+      &quot;evidenceIds&quot;: [
+        &quot;build-a411db87a55ff51b5b35&quot;
+      ]
+    },
+    {
+      &quot;dimensionKey&quot;: &quot;runtime-and-validation-evidence&quot;,
+      &quot;weightPct&quot;: 17,
+      &quot;rawScore&quot;: 60,
+      &quot;weightedContribution&quot;: 10.2,
+      &quot;deductions&quot;: [
+        {
+          &quot;code&quot;: &quot;RUN-DEP-RESOLUTION-LOW&quot;,
+          &quot;magnitude&quot;: 40,
+          &quot;description&quot;: &quot;Dependency resolution rate 0 % below full.&quot;,
+          &quot;evidenceIds&quot;: []
+        }
+      ],
+      &quot;confidence&quot;: 0,
+      &quot;rationaleCodes&quot;: [
+        &quot;RUN-DEP-RESOLUTION-LOW&quot;
+      ],
+      &quot;evidenceIds&quot;: [
+        &quot;build-a411db87a55ff51b5b35&quot;
+      ]
+    },
+    {
+      &quot;dimensionKey&quot;: &quot;windows-experience-and-deployment&quot;,
+      &quot;weightPct&quot;: 0,
+      &quot;rawScore&quot;: 22,
+      &quot;weightedContribution&quot;: 0,
+      &quot;deductions&quot;: [
+        {
+          &quot;code&quot;: &quot;WIN-UI-UNKNOWN-OR-ABSENT&quot;,
+          &quot;magnitude&quot;: 35,
+          &quot;description&quot;: &quot;UI technology \u0027unknown\u0027 is unknown or absent.&quot;,
+          &quot;evidenceIds&quot;: []
+        },
+        {
+          &quot;code&quot;: &quot;WIN-NO-INSTALLER&quot;,
+          &quot;magnitude&quot;: 15,
+          &quot;description&quot;: &quot;No Windows installer detected.&quot;,
+          &quot;evidenceIds&quot;: []
+        },
+        {
+          &quot;code&quot;: &quot;WIN-NO-OFFLINE&quot;,
+          &quot;magnitude&quot;: 8,
+          &quot;description&quot;: &quot;App is not offline capable.&quot;,
+          &quot;evidenceIds&quot;: []
+        },
+        {
+          &quot;code&quot;: &quot;WIN-A11Y-UNKNOWN&quot;,
+          &quot;magnitude&quot;: 10,
+          &quot;description&quot;: &quot;Accessibility evidence not observed.&quot;,
+          &quot;evidenceIds&quot;: []
+        },
+        {
+          &quot;code&quot;: &quot;WIN-NO-NOTIFICATIONS&quot;,
+          &quot;magnitude&quot;: 5,
+          &quot;description&quot;: &quot;Windows notifications integration not detected.&quot;,
+          &quot;evidenceIds&quot;: []
+        },
+        {
+          &quot;code&quot;: &quot;WIN-NO-LIFECYCLE&quot;,
+          &quot;magnitude&quot;: 5,
+          &quot;description&quot;: &quot;Windows lifecycle integration not detected.&quot;,
+          &quot;evidenceIds&quot;: []
+        }
+      ],
+      &quot;confidence&quot;: 0.4,
+      &quot;rationaleCodes&quot;: [
+        &quot;WIN-A11Y-UNKNOWN&quot;,
+        &quot;WIN-DIM-SKIPPED-NOT-WINDOWS-APP&quot;,
+        &quot;WIN-NO-INSTALLER&quot;,
+        &quot;WIN-NO-LIFECYCLE&quot;,
+        &quot;WIN-NO-NOTIFICATIONS&quot;,
+        &quot;WIN-NO-OFFLINE&quot;,
+        &quot;WIN-UI-UNKNOWN-OR-ABSENT&quot;
+      ],
+      &quot;evidenceIds&quot;: []
+    }
+  ],
+  &quot;capsApplied&quot;: [
+    {
+      &quot;capId&quot;: &quot;no-arm64-or-arm64ec-target-le-60&quot;,
+      &quot;ceiling&quot;: 60,
+      &quot;description&quot;: &quot;No ARM64 or Arm64EC build target detected.&quot;,
+      &quot;triggeredBy&quot;: [
+        &quot;build-a411db87a55ff51b5b35&quot;
+      ]
+    }
+  ],
+  &quot;majorBlockers&quot;: [
+    {
+      &quot;blockerId&quot;: &quot;bl-no-arm64-target&quot;,
+      &quot;category&quot;: &quot;build&quot;,
+      &quot;description&quot;: &quot;Build does not produce an ARM64 or Arm64EC target.&quot;,
+      &quot;evidenceIds&quot;: [
+        &quot;build-a411db87a55ff51b5b35&quot;
+      ]
+    }
+  ],
+  &quot;rationaleCodes&quot;: [
+    &quot;BUILD-NO-ARM64&quot;,
+    &quot;BUILD-NO-ARM64-CI&quot;,
+    &quot;BUILD-PKG-NO-ARM64&quot;,
+    &quot;CAP-NO-ARM64-OR-ARM64EC-TARGET-LE-60&quot;,
+    &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;,
+    &quot;CODE-MEDIUM-ARM-CODE-DYNAMIC-NATIVE-01&quot;,
+    &quot;DEP-UNKNOWN-REQUIRED&quot;,
+    &quot;RUN-DEP-RESOLUTION-LOW&quot;,
+    &quot;WIN-A11Y-UNKNOWN&quot;,
+    &quot;WIN-DIM-SKIPPED-NOT-WINDOWS-APP&quot;,
+    &quot;WIN-NO-INSTALLER&quot;,
+    &quot;WIN-NO-LIFECYCLE&quot;,
+    &quot;WIN-NO-NOTIFICATIONS&quot;,
+    &quot;WIN-NO-OFFLINE&quot;,
+    &quot;WIN-UI-UNKNOWN-OR-ABSENT&quot;
+  ],
+  &quot;rationaleDescriptions&quot;: {
+    &quot;BUILD-NO-ARM64&quot;: &quot;Neither an ARM64 nor an Arm64EC build target was detected.&quot;,
+    &quot;BUILD-NO-ARM64-CI&quot;: &quot;No ARM64 CI job was detected.&quot;,
+    &quot;BUILD-PKG-NO-ARM64&quot;: &quot;Packaging does not declare ARM64 support.&quot;,
+    &quot;CAP-NO-ARM64-OR-ARM64EC-TARGET-LE-60&quot;: &quot;No ARM64 or Arm64EC build target detected; overall score capped at 60.&quot;,
+    &quot;CODE-HIGH-ARM-CODE-SIMD-01&quot;: &quot;A high-severity code finding was detected.&quot;,
+    &quot;CODE-MEDIUM-ARM-CODE-DYNAMIC-NATIVE-01&quot;: &quot;A medium-severity code finding was detected.&quot;,
+    &quot;DEP-UNKNOWN-REQUIRED&quot;: &quot;The ARM64 status of a required dependency could not be determined.&quot;,
+    &quot;RUN-DEP-RESOLUTION-LOW&quot;: &quot;Dependency resolution rate is below full.&quot;,
+    &quot;WIN-A11Y-UNKNOWN&quot;: &quot;Accessibility evidence could not be determined.&quot;,
+    &quot;WIN-DIM-SKIPPED-NOT-WINDOWS-APP&quot;: &quot;Windows-experience dimension was skipped because no Windows-native surface was detected.&quot;,
+    &quot;WIN-NO-INSTALLER&quot;: &quot;No Windows installer was detected.&quot;,
+    &quot;WIN-NO-LIFECYCLE&quot;: &quot;Windows lifecycle integration was not detected.&quot;,
+    &quot;WIN-NO-NOTIFICATIONS&quot;: &quot;Windows notifications integration was not detected.&quot;,
+    &quot;WIN-NO-OFFLINE&quot;: &quot;The application is not offline-capable.&quot;,
+    &quot;WIN-UI-UNKNOWN-OR-ABSENT&quot;: &quot;UI technology is unknown or absent.&quot;
+  },
+  &quot;scoreSummary&quot;: &quot;ComfyUI scored 14/100 (band blocked-or-major-redesign); evidence completeness medium (0.60). The \u0027no-arm64-or-arm64ec-target-le-60\u0027 cap fired at ceiling 60. The Windows-experience dimension was not scored because no Windows-native surface was detected. Largest deductions came from the dependency-compatibility dimension (raw 0/100) and the code-compatibility dimension (raw 0/100). Score is provisional (dependency-resolution-low, dimension-missing-evidence). Deterministic dispatch selects \u0027native-arm64\u0027 at confidence \u0027low\u0027.&quot;,
+  &quot;evidenceIds&quot;: [
+    &quot;build-a411db87a55ff51b5b35&quot;,
+    &quot;code-01f32f628a3a8c71316e&quot;,
+    &quot;code-07d36ddd828c6778134a&quot;,
+    &quot;code-0f09bccdb35f2acfa408&quot;,
+    &quot;code-173d76fa57352bb22a57&quot;,
+    &quot;code-1e783980f8cd8b8f2676&quot;,
+    &quot;code-29668645e6d38fa98606&quot;,
+    &quot;code-2abae4e6ad96adbdd5c9&quot;,
+    &quot;code-3d17ceb0a9867b2fa66a&quot;,
+    &quot;code-3d30fefc33da3df61bee&quot;,
+    &quot;code-4b92e91364291d65b865&quot;,
+    &quot;code-5611ea31124e5b950eac&quot;,
+    &quot;code-5709132da865245c8964&quot;,
+    &quot;code-5b442cb3164e6079ce5a&quot;,
+    &quot;code-7af5ae88a55536bf7078&quot;,
+    &quot;code-845886bcc044253617f0&quot;,
+    &quot;code-951349146b164a1d31d2&quot;,
+    &quot;code-aace821121d1a00e74dd&quot;,
+    &quot;code-b617305c170832eded41&quot;,
+    &quot;code-b6d360b3d8e80e77720a&quot;,
+    &quot;code-b6f1d139ff466798f171&quot;,
+    &quot;code-bdb2ad060dfd95a200b0&quot;,
+    &quot;code-bee772150ea950a9a262&quot;,
+    &quot;code-c59d0a62b5152fad1b99&quot;,
+    &quot;code-d5ccc050fba167805167&quot;,
+    &quot;code-d8fcae520831fdbc3e4c&quot;,
+    &quot;code-efa2dab6e6e828ae1d99&quot;,
+    &quot;code-fa1862ef1cceaf8351c4&quot;,
+    &quot;dependency-0209a8d233443e4ad955&quot;,
+    &quot;dependency-1fec3d082a9a15b05c0a&quot;,
+    &quot;dependency-270709d5ed238556cc99&quot;,
+    &quot;dependency-2f3617105f3296a059d6&quot;,
+    &quot;dependency-3442d4117305f1f58da4&quot;,
+    &quot;dependency-3ec1150f155b8fd5051a&quot;,
+    &quot;dependency-44cd82dbc52e46a6a6ad&quot;,
+    &quot;dependency-4c9ef52d52fba68c1646&quot;,
+    &quot;dependency-595a70b1a22872d2ae5a&quot;,
+    &quot;dependency-5cc12dab4268dcbe3700&quot;,
+    &quot;dependency-5efcd0aec421efcfafcd&quot;,
+    &quot;dependency-649e8fa0e536ce7f332f&quot;,
+    &quot;dependency-651f6c9fa1f5f9f6799c&quot;,
+    &quot;dependency-6b5cc84d468bee0568ce&quot;,
+    &quot;dependency-7875e31caf01e0572bb3&quot;,
+    &quot;dependency-7f9bd7f2a7df7f5a7391&quot;,
+    &quot;dependency-805f2565a46f25f6dd7a&quot;,
+    &quot;dependency-843725321ce800b7823d&quot;,
+    &quot;dependency-86bb1c22b8b9e6529c7a&quot;,
+    &quot;dependency-8b2625ff7ee1d1d30a53&quot;,
+    &quot;dependency-9f5278f94de0f2330fdb&quot;,
+    &quot;dependency-a33bde44e945be467683&quot;,
+    &quot;dependency-b1e184a7144f74db052a&quot;,
+    &quot;dependency-b35ad527ad90f7240528&quot;,
+    &quot;dependency-bb4afeb038eec462365c&quot;,
+    &quot;dependency-bf40c841f26a3c63e523&quot;,
+    &quot;dependency-c199703bd4a2c639ef88&quot;,
+    &quot;dependency-c2fbfd514f3ea1aed419&quot;,
+    &quot;dependency-cd069dc8547bbbb1c498&quot;,
+    &quot;dependency-d01eafc3fc88063cc987&quot;,
+    &quot;dependency-dafb551d9a27fb237c90&quot;,
+    &quot;dependency-e22fb8cd8caa1567977b&quot;,
+    &quot;dependency-e6c283166f5ddec2238a&quot;,
+    &quot;dependency-fa140c3b2b779fd231dc&quot;,
+    &quot;dependency-fc08762b6dd930acda43&quot;,
+    &quot;dependency-fc3843ea62fb3fc3910f&quot;,
+    &quot;dependency-fdfee7f25ce88bef9a44&quot;,
+    &quot;dependency-fea91d90d248f42f4cf6&quot;,
+    &quot;dependency-ff049b7c4a994e34bedb&quot;
+  ]
+}</pre></section></main><footer>Score digest: <code>138fa8ba73d726ff4e5c6f0f6dcc8d42e30a8fff6e82a1072e93062a8a34c3dd</code></footer></body></html>

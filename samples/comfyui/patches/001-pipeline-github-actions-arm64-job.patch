@@ -1,0 +1,14 @@
+--- /dev/null
++++ b/.github/workflows/arm64-build.yml
+@@ -0,0 +1,11 @@
++name: arm64-build
++on: [push, pull_request]
++jobs:
++  build-arm64:
++    runs-on: ubuntu-24.04-arm
++    steps:
++      - uses: actions/checkout@v4
++      - name: Build for linux/arm64
++        run: docker buildx build --platform linux/arm64 -t app:arm64 .
++      - name: Validate arm64 image
++        run: docker run --rm --platform linux/arm64 app:arm64 --version

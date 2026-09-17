@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0",
+  "planId": "plan-assessment-b5a29c9cc32e432cc9338f9b",
+  "branch": null,
+  "baseBranch": null,
+  "generated": [
+    {
+      "workItemId": "wi-build-add-an-arm64-ci-job",
+      "agentOrSkill": "pipeline/github-actions-arm64-job",
+      "title": "Add an ARM64 CI job.",
+      "patchPath": "samples/comfyui/patches/001-pipeline-github-actions-arm64-job.patch",
+      "evidenceIds": [
+        "build-a411db87a55ff51b5b35"
+      ],
+      "acceptanceTests": [
+        {
+          "id": "at-build-3-builds",
+          "description": "Change builds and integrates with existing pipelines.",
+          "expectedOutcome": "Green build on ARM64."
+        },
+        {
+          "id": "at-build-3-functional",
+          "description": "Functional smoke test passes on ARM64.",
+          "expectedOutcome": "No crash or regression against the x64 baseline."
+        }
+      ]
+    }
+  ],
+  "skipped": [
+    {
+      "workItemId": "wi-build-add-an-arm64-or-arm64ec-build-target",
+      "reason": "no change produced"
+    }
+  ]
+}
