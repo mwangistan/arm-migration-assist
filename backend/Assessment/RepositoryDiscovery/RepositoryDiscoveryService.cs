@@ -162,6 +162,8 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
                 []));
         }
 
+        var availableSkills = BuildAvailableSkills(catalog, codeFindings);
+
         var assessment = new RepositoryAssessment(
             SchemaVersion: "1.0",
             AssessmentId: CreateAssessmentId(
@@ -197,8 +199,18 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
                 ["repository-intake", "technology-discovery", "dependency-scanner", "code-compatibility-scanner"],
                 []),
             Unknowns: unknowns,
-            AvailableSkills:
-            [
+            AvailableSkills: availableSkills);
+
+        RepositoryAssessmentValidator.EnsureValid(assessment);
+        return assessment;
+    }
+
+    private static IReadOnlyList<AvailableSkill> BuildAvailableSkills(
+        RepositoryFileCatalog catalog,
+        IReadOnlyList<CodeFinding> codeFindings)
+    {
+        var skills = new List<AvailableSkill>
+        {
                 new AvailableSkill(
                     "assessment/repository-discovery",
                     ProducerVersion,
@@ -220,31 +232,59 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
                     false,
                     ["repository-file-catalog"],
                     ["code-findings"]),
+        };
+        var buildInputs = catalog.Files
+            .Where(file => IsSupportedBuildInput(file.RelativePath))
+            .Select(file => file.RelativePath)
+            .Distinct(StringComparer.Ordinal)
+            .Take(50)
+            .ToArray();
+        if (buildInputs.Length > 0)
+        {
+            skills.Add(
                 new AvailableSkill(
                     "build-config-generator",
                     ProducerVersion,
                     "Generates reviewable ARM64 changes for supported Docker, .NET, and Visual C++ build files.",
                     true,
-                    ["migration-plan-v1", "repository-workspace"],
-                    ["unified-diff"]),
+                    buildInputs,
+                    ["patch"]));
+        }
+
+        skills.Add(
                 new AvailableSkill(
                     "ci-pipeline-generator",
                     ProducerVersion,
                     "Generates reviewable ARM64 GitHub Actions or Azure Pipelines changes.",
                     true,
-                    ["migration-plan-v1", "repository-workspace"],
-                    ["unified-diff"]),
+                    ["repository"],
+                    ["patch"]));
+        var codeInputs = codeFindings
+            .Select(finding => finding.File)
+            .Distinct(StringComparer.Ordinal)
+            .Take(50)
+            .ToArray();
+        if (codeInputs.Length > 0)
+        {
+            skills.Add(
                 new AvailableSkill(
                     "code-transformer",
                     ProducerVersion,
                     "Generates approval-gated architecture compatibility patches for identified source files.",
                     true,
-                    ["migration-plan-v1", "repository-workspace"],
-                    ["unified-diff"]),
-            ]);
+                    codeInputs,
+                    ["patch"]));
+        }
 
-        RepositoryAssessmentValidator.EnsureValid(assessment);
-        return assessment;
+        return skills;
+    }
+
+    private static bool IsSupportedBuildInput(string path)
+    {
+        var name = Path.GetFileName(path);
+        return name.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".vcxproj", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string CreateAssessmentId(

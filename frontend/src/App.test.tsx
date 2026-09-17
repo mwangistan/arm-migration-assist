@@ -318,7 +318,7 @@ describe('App', () => {
 
     expect(screen.queryByRole('heading', { name: 'sample-app' })).not.toBeInTheDocument();
     expect(await screen.findByText('The repository could not be assessed.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Repository evidence becomes an executable migration decision.' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'From evidence to execution.' })).toBeInTheDocument();
   });
 
   it('rejects a successful response that is not an assessment object', async () => {
@@ -333,7 +333,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
 
     expect(await screen.findByText('The assessment service returned an invalid response.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Repository evidence becomes an executable migration decision.' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'From evidence to execution.' })).toBeInTheDocument();
   });
 
   it('handles a null problem response without crashing', async () => {
@@ -349,7 +349,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
 
     expect(await screen.findByText('Assessment failed.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Repository evidence becomes an executable migration decision.' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'From evidence to execution.' })).toBeInTheDocument();
   });
 
   it('authenticates and resumes a protected repository assessment', async () => {
@@ -415,7 +415,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    expect(await screen.findByRole('heading', { name: 'Repository evidence becomes an executable migration decision.' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'From evidence to execution.' })).toBeInTheDocument();
     expect(screen.queryByText('Waiting for GitHub sign-in')).not.toBeInTheDocument();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     expect(fetchMock.mock.calls[3][0]).toBe(`/api/auth/github/sessions/${'b'.repeat(32)}`);

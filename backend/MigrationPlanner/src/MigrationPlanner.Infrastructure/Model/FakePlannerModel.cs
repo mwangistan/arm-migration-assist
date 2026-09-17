@@ -276,21 +276,36 @@ public sealed class FakePlannerModel : IPlannerModel
         var available = new HashSet<string>(
             assessment.AvailableSkills.Select(s => s.Name),
             StringComparer.Ordinal);
-        var declared = new HashSet<string>(StringComparer.Ordinal);
         var missing = new List<object>();
 
-        foreach (var bucket in expectation.Buckets)
+        foreach (var group in expectation.Buckets
+                     .Select(bucket => new
+                     {
+                         Bucket = bucket,
+                         Skill = ResolveSkill(bucket),
+                     })
+                     .Where(item => !available.Contains(item.Skill))
+                     .GroupBy(item => item.Skill, StringComparer.Ordinal))
         {
-            var skill = ResolveSkill(bucket);
-            if (available.Contains(skill) || !declared.Add(skill)) continue;
+            var buckets = group.Select(item => item.Bucket).ToArray();
             missing.Add(new
             {
-                proposedName = skill,
-                purpose = $"Migration capability required for '{bucket.Description}'",
-                requiredInputs = new[] { "migration-plan-v1", "repository-workspace" },
+                proposedName = group.Key,
+                purpose = buckets.Length == 1
+                    ? $"Migration capability required for '{buckets[0].Description}'"
+                    : $"Migration capability required for {buckets.Length} related work items.",
+                requiredInputs = buckets
+                    .SelectMany(bucket => ResolveInputs(assessment, bucket, group.Key))
+                    .Distinct(StringComparer.Ordinal)
+                    .Take(20)
+                    .ToArray(),
                 expectedOutputs = new[] { "patch" },
                 justification = "The required migration generator is not present in the assessment skill catalog.",
-                evidenceIds = bucket.EvidenceIds,
+                evidenceIds = buckets
+                    .SelectMany(bucket => bucket.EvidenceIds)
+                    .Distinct(StringComparer.Ordinal)
+                    .Take(20)
+                    .ToArray(),
                 writeAccess = true,
             });
         }

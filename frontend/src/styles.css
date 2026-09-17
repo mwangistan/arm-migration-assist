@@ -154,8 +154,8 @@ main {
 
 .intake-grid {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(500px, 1.1fr);
-  gap: 64px;
+  grid-template-columns: minmax(320px, 0.72fr) minmax(560px, 1.28fr);
+  gap: 48px;
   align-items: center;
   width: min(1280px, 100%);
   margin: 0 auto;
@@ -258,9 +258,8 @@ h1 {
 }
 
 .assessment-form {
-  display: flex;
+  display: grid;
   gap: 12px;
-  align-items: end;
   width: 100%;
 }
 
@@ -270,10 +269,21 @@ h1 {
 }
 
 .form-actions {
-  display: flex;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
   align-items: center;
-  min-height: 40px;
+  width: 100%;
+  min-height: 48px;
+}
+
+.repository-field .fui-Input,
+.form-actions > button {
+  min-height: 48px;
+}
+
+.form-actions > button:first-child {
+  width: 100%;
 }
 
 .request-message {

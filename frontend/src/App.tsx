@@ -1034,10 +1034,9 @@ export default function App() {
           <div className="intake-grid">
             <div className="page-intro">
               <p className="eyebrow">ARM Migration Assist</p>
-              <h1 id="page-title">Windows on Arm migration workspace</h1>
+              <h1 id="page-title">Plan your Windows on Arm migration</h1>
               <p className="page-context">
-                Turn a GitHub repository into an evidence-linked readiness assessment,
-                migration strategy, and approval-gated work package.
+                Assess readiness, choose a strategy, and prepare approved ARM64 work.
               </p>
               <div className="trust-row" aria-label="Analysis guarantees">
                 <span><Checkmark16Regular aria-hidden="true" /> Commit-pinned</span>
@@ -1050,7 +1049,7 @@ export default function App() {
               <div className="intake-heading">
                 <span>01 / Connect</span>
                 <strong>Analyze a repository</strong>
-                <p>Public repositories run directly. Protected repositories use local GitHub sign-in.</p>
+                <p>Enter a GitHub URL. Protected repositories use local sign-in.</p>
               </div>
               <form className="assessment-form" onSubmit={handleSubmit} noValidate>
                 <Field
@@ -1138,13 +1137,13 @@ export default function App() {
             <section className="empty-workspace" aria-labelledby="empty-title">
               <div className="empty-intro">
                 <p className="eyebrow">One controlled workflow</p>
-                <h2 id="empty-title">Repository evidence becomes an executable migration decision.</h2>
-                <p>Analysis never runs repository code. Planning preserves evidence IDs, and every generated change remains review-only until approved.</p>
+                <h2 id="empty-title">From evidence to execution.</h2>
+                <p>Analysis is read-only. Every proposed change remains reviewable and approval-gated.</p>
               </div>
               <div className="outcome-grid">
-                <div><span>Assess</span><strong>Compatibility evidence</strong><p>Technology, dependencies, native binaries, code findings, build and Windows signals.</p></div>
-                <div><span>Plan</span><strong>Auditable strategy</strong><p>Deterministic readiness scoring, model-grounded recommendations, risks and acceptance criteria.</p></div>
-                <div><span>Transform + validate</span><strong>Reviewable execution</strong><p>Generator-ready work items, patch outputs, approval gates and ARM64 validation checks.</p></div>
+                <div><span>Assess</span><strong>Compatibility evidence</strong><p>Dependencies, native code, build, CI, and Windows signals.</p></div>
+                <div><span>Plan</span><strong>Auditable strategy</strong><p>Readiness score, recommendation, risks, and acceptance criteria.</p></div>
+                <div><span>Transform + validate</span><strong>Reviewable execution</strong><p>Approval-gated work, patches, and ARM64 validation.</p></div>
               </div>
             </section>
           ) : null}

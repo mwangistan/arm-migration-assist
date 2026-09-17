@@ -153,11 +153,18 @@ patches. Publishing is a separate, explicit opt-in path.
 Path: `backend/Validation/`
 
 The validation boundary consumes Feature 3's generated-change artifact and each
-work item's acceptance tests. It is responsible for building and testing the
-approved change on ARM64, comparing functional and performance behavior with the
-baseline, and linking failures back to plan and assessment evidence IDs. The
-current repository defines this contract and demo surface; additional execution
-adapters can be added without changing assessment or planning contracts.
+work item's acceptance tests. Its deterministic planner inspects a clean,
+commit-pinned worktree and prepares bounded build, test, native, and container
+commands. A human approval binds selected command IDs to the complete proposal
+fingerprint before the executor can run anything.
+
+The executor captures proof, applies dependency and runner eligibility rules,
+rechecks repository identity, and produces a deterministic scorecard and dashboard
+read model. Optional Foundry stages can propose mappings or diagnose measured
+failures, but cannot change deterministic outcomes. The asynchronous Validation
+API is loopback-only by default and persists approval/run metadata outside target
+repositories; production exposure requires authentication, isolation, and an
+execution-worker boundary.
 
 ## Contract chain
 
