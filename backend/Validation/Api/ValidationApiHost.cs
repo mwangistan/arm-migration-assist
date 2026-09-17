@@ -126,9 +126,9 @@ public static class ValidationApiHost
         {
             prepared = await workflow.PrepareAsync(request.MigrationPlan, request.Target, request.Options, cancellationToken);
         }
-        catch (InvalidDataException)
+        catch (InvalidDataException ex)
         {
-            return Problems.BadRequest("Repository or planning input failed validation. Check the supplied paths, commit, and plan.");
+            return Problems.BadRequest($"Repository or planning input failed validation: {ex.Message}");
         }
         PlanSafety.Validate(prepared);
         var created = await store.CreatePlanAsync(prepared, cancellationToken);

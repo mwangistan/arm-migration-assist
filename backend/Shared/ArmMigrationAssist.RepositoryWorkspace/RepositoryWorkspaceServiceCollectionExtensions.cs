@@ -14,6 +14,8 @@ public static class RepositoryWorkspaceServiceCollectionExtensions
             .Bind(configuration.GetSection(RepositoryClonePoolOptions.SectionName));
         services.TryAddSingleton<IGitProcess, GitProcess>();
         services.TryAddSingleton<IRepositoryClonePool, RepositoryClonePool>();
+        services.TryAddSingleton<IWorktreeManager, WorktreeManager>();
+        services.TryAddSingleton<ILocalBranchApplier, LocalBranchApplier>();
         return services;
     }
 }

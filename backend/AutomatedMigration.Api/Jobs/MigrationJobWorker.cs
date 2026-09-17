@@ -1,30 +1,36 @@
 using ArmMigrationAssist.RepositoryWorkspace;
 using AutomatedMigration.Api.Configuration;
 using AutomatedMigration.Api.Contracts;
+using AutomatedMigration.Api.Validation;
 using AutomatedMigration.CodeMigration;
 using Microsoft.Extensions.Options;
 
 namespace AutomatedMigration.Api.Jobs;
 
-// Reads queued jobs, acquires a shared clone from RepositoryClonePool at the pinned commit,
-// runs the MigrationActionsRunner over that working tree, populates the job Result, and
-// releases scratch. The clone itself is process-lifetime cached so F1/F3 within the same
-// composed host reuse the tree rather than each fetching the archive.
 public sealed class MigrationJobWorker : BackgroundService
 {
     private readonly MigrationJobStore _store;
     private readonly IRepositoryClonePool _clonePool;
+    private readonly IWorktreeManager _worktreeManager;
+    private readonly ILocalBranchApplier _branchApplier;
+    private readonly IValidationDispatcher _validationDispatcher;
     private readonly AutomationOptions _options;
     private readonly ILogger<MigrationJobWorker> _logger;
 
     public MigrationJobWorker(
         MigrationJobStore store,
         IRepositoryClonePool clonePool,
+        IWorktreeManager worktreeManager,
+        ILocalBranchApplier branchApplier,
+        IValidationDispatcher validationDispatcher,
         IOptions<AutomationOptions> options,
         ILogger<MigrationJobWorker> logger)
     {
         _store = store;
         _clonePool = clonePool;
+        _worktreeManager = worktreeManager;
+        _branchApplier = branchApplier;
+        _validationDispatcher = validationDispatcher;
         _options = options.Value;
         _logger = logger;
     }
@@ -33,46 +39,40 @@ public sealed class MigrationJobWorker : BackgroundService
     {
         await foreach (var jobId in _store.Queue.ReadAllAsync(stoppingToken))
         {
-            if (!_store.TryGet(jobId, out var job))
-            {
-                continue;
-            }
+            if (!_store.TryGet(jobId, out var job)) { continue; }
             try
             {
                 job.Status = MigrationJobStatus.Running;
                 job.StartedAt = DateTimeOffset.UtcNow;
-
-                // Anonymous mode always: F3 does not receive user-loopback GitHub sessions;
-                // if a private repo needs authentication, the flow must be rethought at the
-                // job-queue boundary before we start passing credentials here.
                 var cloneKey = new RepositoryCloneKey(job.Target.Url, job.Target.CommitSha, Anonymous: true);
                 var clone = await _clonePool.AcquireAsync(cloneKey, stoppingToken);
-
+                var worktreeId = SanitizeWorktreeId(job.JobId);
+                var branchName = $"arm-migration/{worktreeId}";
+                var worktree = await _worktreeManager.CreateAsync(clone, worktreeId, branchName, stoppingToken);
                 var chatModel = ResolveChatModel();
                 var runner = new AutomatedMigration.MigrationActionsRunner(chatModel);
                 var scratchOut = Path.Combine(Path.GetTempPath(), "amma-out-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(scratchOut);
                 try
                 {
-                    var runResult = runner.Run(job.Plan, clone.RootPath, scratchOut);
-                    var generated = runResult.Generated
-                        .Select(g => Project(g.WorkItem, g.Diff, _options.MaxDiffBytes))
-                        .ToList();
-                    var skipped = runResult.Skipped
-                        .Select(w => new SkippedWorkItemDto(w.Id, w.AgentOrSkill, "no change produced"))
-                        .ToList();
-
-                    job.Result = new MigrationActionsResult(
-                        job.PlanId,
-                        clone.ResolvedCommitSha,
-                        generated,
-                        skipped);
+                    var runResult = runner.Run(job.Plan, worktree.Path, scratchOut);
+                    var generatedDtos = runResult.Generated.Select(g => Project(g.WorkItem, g.Diff, _options.MaxDiffBytes)).ToList();
+                    var skippedDtos = runResult.Skipped.Select(w => new SkippedWorkItemDto(w.Id, w.AgentOrSkill, "no change produced")).ToList();
+                    var patches = runResult.Generated.Select(g => new PatchInput(g.WorkItem.Id, g.Diff)).ToList();
+                    var application = await _branchApplier.ApplyAsync(worktree, patches, $"arm-migration: {job.Plan.PlanId}", stoppingToken);
+                    var branchDto = new BranchApplicationDto(
+                        worktree.Path, application.BranchName, application.BranchHeadSha, application.CommitCreated,
+                        application.AppliedIds,
+                        application.RejectedIds.Select(r => new PatchRejectionDto(r.Id, r.Reason)).ToList());
+                    ValidationDispatchDto? validationDto = null;
+                    if (application.CommitCreated)
+                    {
+                        validationDto = await _validationDispatcher.DispatchAsync(job.Plan, worktree.Path, application.BranchName, application.BranchHeadSha, stoppingToken);
+                    }
+                    job.Result = new MigrationActionsResult(job.PlanId, clone.ResolvedCommitSha, generatedDtos, skippedDtos, branchDto, validationDto);
                     job.Status = MigrationJobStatus.Completed;
                 }
-                finally
-                {
-                    TryDeleteDirectory(scratchOut);
-                }
+                finally { TryDeleteDirectory(scratchOut); }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -86,11 +86,14 @@ public sealed class MigrationJobWorker : BackgroundService
                 job.Status = MigrationJobStatus.Failed;
                 job.Error = ex.Message;
             }
-            finally
-            {
-                job.FinishedAt = DateTimeOffset.UtcNow;
-            }
+            finally { job.FinishedAt = DateTimeOffset.UtcNow; }
         }
+    }
+
+    private static string SanitizeWorktreeId(string jobId)
+    {
+        var chars = jobId.Select(c => char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '_').ToArray();
+        return new string(chars);
     }
 
     private static IChatModel? ResolveChatModel()
@@ -102,23 +105,16 @@ public sealed class MigrationJobWorker : BackgroundService
     private static void TryDeleteDirectory(string path)
     {
         try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
-        catch (IOException) { /* best effort */ }
-        catch (UnauthorizedAccessException) { /* best effort */ }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
-    private static GeneratedPatchDto Project(
-        AutomatedMigration.Models.WorkItem workItem, string diff, int maxBytes)
+    private static GeneratedPatchDto Project(AutomatedMigration.Models.WorkItem workItem, string diff, int maxBytes)
     {
         var bytes = System.Text.Encoding.UTF8.GetByteCount(diff);
         var truncated = bytes > maxBytes;
         var payload = truncated ? Truncate(diff, maxBytes) : diff;
-        return new GeneratedPatchDto(
-            workItem.Id,
-            workItem.AgentOrSkill,
-            workItem.Title,
-            payload,
-            bytes,
-            truncated,
+        return new GeneratedPatchDto(workItem.Id, workItem.AgentOrSkill, workItem.Title, payload, bytes, truncated,
             workItem.EvidenceIds ?? Array.Empty<string>(),
             workItem.AcceptanceTests ?? Array.Empty<AutomatedMigration.Models.AcceptanceTest>());
     }
@@ -126,11 +122,7 @@ public sealed class MigrationJobWorker : BackgroundService
     private static string Truncate(string diff, int maxBytes)
     {
         var utf8 = System.Text.Encoding.UTF8.GetBytes(diff);
-        if (utf8.Length <= maxBytes)
-        {
-            return diff;
-        }
-        // Trim to the last complete newline within the cap so consumers get a valid partial diff.
+        if (utf8.Length <= maxBytes) return diff;
         var slice = utf8.AsSpan(0, maxBytes);
         var lastNewline = slice.LastIndexOf((byte)'\n');
         var end = lastNewline > 0 ? lastNewline + 1 : maxBytes;

@@ -2,6 +2,7 @@ using ArmMigrationAssist.RepositoryWorkspace;
 using AutomatedMigration.Api.Configuration;
 using AutomatedMigration.Api.Endpoints;
 using AutomatedMigration.Api.Jobs;
+using AutomatedMigration.Api.Validation;
 
 namespace AutomatedMigration.Api;
 
@@ -30,6 +31,27 @@ public static class AutomationApiHost
         }
 
         services.AddRepositoryClonePool(configuration);
+
+        var validationOpts = new ValidationDispatcherOptions();
+        configuration.GetSection(ValidationDispatcherOptions.SectionName).Bind(validationOpts);
+        var validationUrlEnv = Environment.GetEnvironmentVariable("AUTOMATION_VALIDATION_API_URL");
+        if (!string.IsNullOrWhiteSpace(validationUrlEnv)) validationOpts.BaseUrl = validationUrlEnv;
+        services.AddSingleton(validationOpts);
+
+        if (!string.IsNullOrWhiteSpace(validationOpts.BaseUrl))
+        {
+            services.AddHttpClient<IValidationDispatcher, HttpValidationDispatcher>(client =>
+            {
+                client.BaseAddress = new Uri(validationOpts.BaseUrl!, UriKind.Absolute);
+                client.Timeout = TimeSpan.FromSeconds(Math.Max(5, validationOpts.TimeoutSeconds));
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("arm-migration-assist-automation-api/1.0");
+            });
+        }
+        else
+        {
+            services.AddSingleton<IValidationDispatcher, NoopValidationDispatcher>();
+        }
+
         services.AddSingleton<MigrationJobStore>();
         services.AddHostedService<MigrationJobWorker>();
 
