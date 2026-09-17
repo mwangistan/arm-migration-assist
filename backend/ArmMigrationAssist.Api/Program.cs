@@ -5,6 +5,19 @@ using Validation.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Wire F3 → F4 dispatch to the loopback address inside this same process. Callers can
+// override via AUTOMATION_VALIDATION_API_URL for out-of-process F4 deployments.
+if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AUTOMATION_VALIDATION_API_URL")))
+{
+    var listenUrl = builder.Configuration["urls"]
+        ?? Environment.GetEnvironmentVariable("ASPNETCORE_URLS")
+        ?? "http://127.0.0.1:8080";
+    var firstUrl = listenUrl.Split(';', StringSplitOptions.RemoveEmptyEntries).First().Trim();
+    Environment.SetEnvironmentVariable(
+        "AUTOMATION_VALIDATION_API_URL",
+        firstUrl.Replace("+", "127.0.0.1").Replace("*", "127.0.0.1"));
+}
+
 builder.Services.AddAssessmentApi(builder.Configuration);
 builder.Services.AddMigrationPlannerApi(builder.Configuration, builder.Environment.ContentRootPath);
 builder.Services.AddAutomationApi(builder.Configuration);

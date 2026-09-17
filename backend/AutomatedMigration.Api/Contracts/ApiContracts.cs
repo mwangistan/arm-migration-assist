@@ -35,7 +35,28 @@ public sealed record MigrationActionsResult(
     [property: JsonPropertyName("planId")] string PlanId,
     [property: JsonPropertyName("sourceCommitSha")] string SourceCommitSha,
     [property: JsonPropertyName("generated")] IReadOnlyList<GeneratedPatchDto> Generated,
-    [property: JsonPropertyName("skipped")] IReadOnlyList<SkippedWorkItemDto> Skipped);
+    [property: JsonPropertyName("skipped")] IReadOnlyList<SkippedWorkItemDto> Skipped,
+    [property: JsonPropertyName("branch")] BranchApplicationDto? Branch = null,
+    [property: JsonPropertyName("validation")] ValidationDispatchDto? Validation = null);
+
+public sealed record BranchApplicationDto(
+    [property: JsonPropertyName("worktreePath")] string WorktreePath,
+    [property: JsonPropertyName("branchName")] string BranchName,
+    [property: JsonPropertyName("branchHeadSha")] string BranchHeadSha,
+    [property: JsonPropertyName("commitCreated")] bool CommitCreated,
+    [property: JsonPropertyName("appliedIds")] IReadOnlyList<string> AppliedIds,
+    [property: JsonPropertyName("rejected")] IReadOnlyList<PatchRejectionDto> Rejected);
+
+public sealed record PatchRejectionDto(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("reason")] string Reason);
+
+public sealed record ValidationDispatchDto(
+    [property: JsonPropertyName("planId")] string? PlanId,
+    [property: JsonPropertyName("runId")] string? RunId,
+    [property: JsonPropertyName("statusUrl")] string? StatusUrl,
+    [property: JsonPropertyName("dispatched")] bool Dispatched,
+    [property: JsonPropertyName("error")] string? Error);
 
 public sealed record GeneratedPatchDto(
     [property: JsonPropertyName("workItemId")] string WorkItemId,

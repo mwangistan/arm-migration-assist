@@ -3,12 +3,32 @@ using System.Text.Json.Serialization;
 namespace AutomatedMigration.Models;
 
 // The subset of MigrationPlanV1 (the Planner's output) that Feature 3 reads.
-// The full schema has many more fields; we only bind what the generators need.
+// The full schema has many more fields; we only bind what the generators need
+// plus the validationPlan block so F4 dispatch can forward it verbatim.
 public sealed record MigrationPlan(
     [property: JsonPropertyName("schemaVersion")] string SchemaVersion,
     [property: JsonPropertyName("planId")] string PlanId,
     [property: JsonPropertyName("recommendedPath")] string RecommendedPath,
-    [property: JsonPropertyName("workItems")] IReadOnlyList<WorkItem> WorkItems);
+    [property: JsonPropertyName("workItems")] IReadOnlyList<WorkItem> WorkItems,
+    [property: JsonPropertyName("validationPlan")] ValidationPlan? ValidationPlan = null);
+
+public sealed record ValidationPlan(
+    [property: JsonPropertyName("targetDevices")] IReadOnlyList<string>? TargetDevices,
+    [property: JsonPropertyName("buildChecks")] IReadOnlyList<ValidationCheck>? BuildChecks,
+    [property: JsonPropertyName("functionalChecks")] IReadOnlyList<ValidationCheck>? FunctionalChecks,
+    [property: JsonPropertyName("reliabilityChecks")] IReadOnlyList<ValidationCheck>? ReliabilityChecks,
+    [property: JsonPropertyName("performanceChecks")] IReadOnlyList<ValidationCheck>? PerformanceChecks,
+    [property: JsonPropertyName("powerChecks")] IReadOnlyList<ValidationCheck>? PowerChecks,
+    [property: JsonPropertyName("offlineChecks")] IReadOnlyList<ValidationCheck>? OfflineChecks,
+    [property: JsonPropertyName("accessibilityChecks")] IReadOnlyList<ValidationCheck>? AccessibilityChecks,
+    [property: JsonPropertyName("windowsExperienceChecks")] IReadOnlyList<ValidationCheck>? WindowsExperienceChecks);
+
+public sealed record ValidationCheck(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("description")] string Description,
+    [property: JsonPropertyName("expectedOutcome")] string ExpectedOutcome,
+    [property: JsonPropertyName("evidenceIds")] IReadOnlyList<string>? EvidenceIds = null,
+    [property: JsonPropertyName("guidanceIds")] IReadOnlyList<string>? GuidanceIds = null);
 
 public sealed record WorkItem(
     [property: JsonPropertyName("id")] string Id,

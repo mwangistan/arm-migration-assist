@@ -111,12 +111,18 @@ public sealed class RepositoryClonePool : IRepositoryClonePool, IDisposable
         {
             _logger.LogInformation("Cloning {Url} at {Sha} into {Path}", key.RepositoryUrl, key.CommitSha, destination);
 
+            // `--filter=blob:none` sets extensions.partialclone, which F4's RepositoryInspector
+            // explicitly rejects. Use a plain shallow clone instead: still one round trip,
+            // still one revision, still F4-compatible.
+            // `core.autocrlf=false` + `core.eol=lf` keep tracked bytes byte-identical to what git
+            // stored in the tree, so F4's raw-blob hash check matches on Windows checkouts.
             var clone = await _git.RunAsync(_rootDirectory, new[]
             {
                 "clone",
-                "--filter=blob:none",
                 "--no-tags",
                 "--depth=1",
+                "-c", "core.autocrlf=false",
+                "-c", "core.eol=lf",
                 key.RepositoryUrl,
                 destination,
             }, cancellationToken).ConfigureAwait(false);
