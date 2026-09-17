@@ -26,9 +26,13 @@ var acrName         = 'acr${nameSuffix}'
 var lawName         = 'law-${nameSuffix}'
 var caeName         = 'cae-${nameSuffix}'
 var appName         = 'ca-${nameSuffix}-planner-api'
+var automationAppName = 'ca-${nameSuffix}-automation-api'
 var foundryName     = 'foundry-${nameSuffix}'
 var uamiName        = 'id-${nameSuffix}-planner-api'
 var phiDeploymentNm = 'phi-4'
+
+@description('Container image reference for the automation-api. Defaults to the quickstart image so infra can be provisioned before the first real build is pushed.')
+param automationContainerImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 
 // User-assigned MI is created first so RBAC can be granted before the Container App exists,
 // avoiding a chicken-and-egg cycle with AcrPull.
@@ -182,6 +186,61 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
   ]
 }
 
+// F3 AutomatedMigration API. Shares the ACR, managed environment, and user-assigned identity
+// with the planner-api; it does not talk to Foundry — it uses GitHub Models via GITHUB_TOKEN,
+// which is left unset in infra (patch generation degrades gracefully to skips).
+resource automationApp 'Microsoft.App/containerApps@2024-03-01' = {
+  name: automationAppName
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${uami.id}': {}
+    }
+  }
+  properties: {
+    managedEnvironmentId: cae.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: true
+        targetPort: 8080
+        transport: 'auto'
+        allowInsecure: false
+      }
+      registries: [
+        {
+          server: acr.properties.loginServer
+          identity: uami.id
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'api'
+          image: automationContainerImage
+          resources: {
+            cpu: json('0.5')
+            memory: '1Gi'
+          }
+          env: [
+            { name: 'AUTOMATION_ALLOWED_ORIGINS', value: allowedOrigins }
+            { name: 'AZURE_CLIENT_ID',            value: uami.properties.clientId }
+          ]
+        }
+      ]
+      scale: {
+        minReplicas: 0
+        maxReplicas: 2
+      }
+    }
+  }
+  dependsOn: [
+    acrPull
+  ]
+}
+
 output acrLoginServer   string = acr.properties.loginServer
 output acrName          string = acr.name
 output containerAppName string = app.name
@@ -189,3 +248,5 @@ output containerAppFqdn string = app.properties.configuration.ingress.fqdn
 output foundryEndpoint  string = deployFoundry ? foundry!.properties.endpoint : ''
 output uamiClientId     string = uami.properties.clientId
 output resourceGroup    string = resourceGroup().name
+output automationAppName string = automationApp.name
+output automationAppFqdn string = automationApp.properties.configuration.ingress.fqdn
