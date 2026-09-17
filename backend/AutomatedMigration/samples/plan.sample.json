@@ -148,6 +148,29 @@
       "approvalRequired": true,
       "estimatedEffort": "small",
       "risk": "low"
+    },
+    {
+      "id": "wi-code-simd",
+      "sequence": 6,
+      "priority": "P1",
+      "title": "Port x86 SSE intrinsics to ARM64-portable code",
+      "objective": "Replace x86 SSE intrinsics in simd.c with a portable ARM64 implementation (e.g. NEON or sse2neon).",
+      "agentOrSkill": "code-transformer",
+      "inputs": ["native/simd.c"],
+      "expectedOutputs": ["Unified diff replacing SSE intrinsics with an ARM64-portable equivalent"],
+      "dependencies": [],
+      "evidenceIds": ["ev-sse-001"],
+      "guidanceIds": ["woa-simd-neon-05"],
+      "acceptanceTests": [
+        {
+          "id": "at-arm64-simd",
+          "description": "File compiles for ARM64",
+          "expectedOutcome": "No x86-only intrinsics remain"
+        }
+      ],
+      "approvalRequired": true,
+      "estimatedEffort": "medium",
+      "risk": "medium"
     }
   ],
   "missingSkills": [],
@@ -168,7 +191,7 @@
     {
       "approvalId": "ap-arm64-build",
       "summary": "Approve ARM64 build and CI changes",
-      "workItemIds": ["wi-dockerfile-arm64", "wi-ci-arm64", "wi-csproj-arm64", "wi-vcxproj-arm64", "wi-ci-dotnet"]
+      "workItemIds": ["wi-dockerfile-arm64", "wi-ci-arm64", "wi-csproj-arm64", "wi-vcxproj-arm64", "wi-ci-dotnet", "wi-code-simd"]
     }
   ],
   "reusableOutputs": []

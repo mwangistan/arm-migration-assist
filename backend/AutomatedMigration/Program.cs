@@ -28,11 +28,15 @@ var repoPath = positionals.Count > 1 ? positionals[1] : Path.Combine("samples", 
 var outputDir = positionals.Count > 2 ? positionals[2] : "output";
 
 // Skill name -> generator. A work item is "ours" only if its agentOrSkill is a key here.
+// The code transformer uses GitHub Models when GITHUB_TOKEN is set; otherwise it skips.
+var githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+IChatModel? chatModel = string.IsNullOrWhiteSpace(githubToken) ? null : new GitHubModelsChatModel(githubToken);
+
 var generators = new Dictionary<string, IMigrationGenerator>(StringComparer.Ordinal)
 {
     ["build-config-generator"] = new BuildConfigGenerator(), // Story 3.1
     ["ci-pipeline-generator"] = new PipelineGenerator(),     // Story 3.2
-    ["code-transformer"] = new CodePatcher(),                // Story 3.3
+    ["code-transformer"] = new CodePatcher(chatModel),       // Story 3.3
 };
 
 var json = File.ReadAllText(planPath);
