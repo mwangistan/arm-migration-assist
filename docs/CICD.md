@@ -103,6 +103,12 @@ Set `AZURE_STATIC_WEB_APPS_API_TOKEN` as an Actions secret using the existing
 Static Web App deployment token. Set the Static Web App origin in both backend
 CORS configurations before deploying the frontend.
 
+Cloud jobs are configuration-gated. CI, frontend verification, Dockerfile lint,
+and Bicep compilation always run; Container App and Static Web Apps deployment
+jobs are skipped until their required repository variables above are populated.
+Once enabled by configuration, missing OIDC or deployment-token secrets fail the
+job rather than silently reporting a deployment.
+
 ## Adopting the Bicep template against the live environment
 
 The current Container App uses a **system-assigned** managed identity. [`infra/main.bicep`](../infra/main.bicep) switches to a **user-assigned** MI so RBAC can be granted before the app exists (breaking the AcrPull chicken-and-egg cycle at first deploy). Two options:

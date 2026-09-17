@@ -50,7 +50,11 @@ jobs:
 
   deploy:
     name: Deploy frontend
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Build verification always runs; deployment starts only after both backend origins are configured.
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && vars.ASSESSMENT_API_URL != ''
+      && vars.MIGRATION_PLANNER_API_URL != ''
     needs: verify
     runs-on: ubuntu-latest
     environment: production

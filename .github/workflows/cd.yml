@@ -32,6 +32,11 @@ env:
 
 jobs:
   build-and-deploy:
+    # Keep forks and unconfigured repositories green; a configured deployment still fails fast.
+    if: >-
+      vars.AZURE_RESOURCE_GROUP != ''
+      && vars.ACR_NAME != ''
+      && vars.CONTAINER_APP_NAME != ''
     name: Build image & deploy Container App
     runs-on: ubuntu-latest
     environment: production
