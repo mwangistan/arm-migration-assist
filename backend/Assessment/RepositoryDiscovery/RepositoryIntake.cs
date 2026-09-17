@@ -1,12 +1,15 @@
 using System.Text.RegularExpressions;
 using ArmMigrationAssist.RepositoryDiscovery.GitHub;
+using ArmMigrationAssist.RepositoryWorkspace;
 
 namespace ArmMigrationAssist.RepositoryDiscovery;
 
 internal sealed partial class RepositoryIntake(
     GitClient git,
     IGitHubRepositorySource gitHubRepositorySource,
-    bool useStoredGitHubCredentials)
+    bool useStoredGitHubCredentials,
+    IRepositoryClonePool? clonePool = null,
+    IGitHubMetadataResolver? metadataResolver = null)
 {
     public async Task<RepositoryWorkspace> OpenAsync(
         string source,
@@ -16,6 +19,30 @@ internal sealed partial class RepositoryIntake(
         if (LooksLikeUrl(trimmedSource))
         {
             var repositoryUrl = NormalizeGitHubUrl(trimmedSource);
+
+            // Anonymous URL intake with an available shared clone pool: resolve metadata,
+            // then reuse the process-lifetime clone. This is what lets a subsequent F3 job
+            // for the same commit skip the fetch entirely. Authenticated (loopback) intake
+            // stays on the archive path so the token-carrying flow is untouched.
+            if (clonePool is not null && metadataResolver is not null && !useStoredGitHubCredentials)
+            {
+                var metadata = await metadataResolver.ResolveMetadataAsync(
+                    repositoryUrl, useStoredCredentials: false, cancellationToken);
+                var clone = await clonePool.AcquireAsync(
+                    new RepositoryCloneKey(repositoryUrl, metadata.CommitSha, Anonymous: true),
+                    cancellationToken);
+                return new RepositoryWorkspace(
+                    clone.RootPath,
+                    repositoryUrl,
+                    metadata.Name,
+                    clone.ResolvedCommitSha,
+                    metadata.DefaultBranch,
+                    TemporaryRoot: null,
+                    KnownRelativePaths: null,
+                    KnownTotalFiles: null,
+                    KnownSkippedFiles: 0);
+            }
+
             var temporaryRoot = Path.Combine(
                 Path.GetTempPath(),
                 "arm-migration-assist",

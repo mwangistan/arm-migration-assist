@@ -1,7 +1,7 @@
+using ArmMigrationAssist.RepositoryWorkspace;
 using AutomatedMigration.Api.Configuration;
 using AutomatedMigration.Api.Endpoints;
 using AutomatedMigration.Api.Jobs;
-using AutomatedMigration.Api.Repository;
 
 namespace AutomatedMigration.Api;
 
@@ -29,7 +29,7 @@ public static class AutomationApiHost
                 .WithHeaders("Content-Type")));
         }
 
-        services.AddHttpClient<RepositoryFetcher>();
+        services.AddRepositoryClonePool(configuration);
         services.AddSingleton<MigrationJobStore>();
         services.AddHostedService<MigrationJobWorker>();
 

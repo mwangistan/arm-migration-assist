@@ -12,6 +12,11 @@ internal sealed record GitHubRepositorySnapshot(
     string DefaultBranch,
     ExtractedRepositoryArchive Archive);
 
+internal sealed record GitHubRepositoryMetadata(
+    string Name,
+    string CommitSha,
+    string DefaultBranch);
+
 internal interface IGitHubRepositorySource
 {
     Task<GitHubRepositorySnapshot> DownloadAsync(
@@ -21,12 +26,20 @@ internal interface IGitHubRepositorySource
         CancellationToken cancellationToken);
 }
 
+internal interface IGitHubMetadataResolver
+{
+    Task<GitHubRepositoryMetadata> ResolveMetadataAsync(
+        string repositoryUrl,
+        bool useStoredCredentials,
+        CancellationToken cancellationToken);
+}
+
 internal interface IGitHubCredentialProvider
 {
     Task<string?> GetTokenAsync(CancellationToken cancellationToken);
 }
 
-internal sealed class GitHubRepositorySource : IGitHubRepositorySource
+internal sealed class GitHubRepositorySource : IGitHubRepositorySource, IGitHubMetadataResolver
 {
     private const long MaximumArchiveBytes = 268_435_456;
     private static readonly HttpClient SharedHttpClient = CreateHttpClient();
@@ -52,10 +65,41 @@ internal sealed class GitHubRepositorySource : IGitHubRepositorySource
         bool useStoredCredentials,
         CancellationToken cancellationToken)
     {
-        var repositoryUri = new Uri(repositoryUrl);
-        var segments = repositoryUri.AbsolutePath.Trim('/').Split('/');
-        var owner = segments[0];
-        var repository = segments[1];
+        var (metadata, token) = await ResolveMetadataInternalAsync(repositoryUrl, useStoredCredentials, cancellationToken);
+        var (owner, repository) = ParseOwnerRepo(repositoryUrl);
+
+        var archivePath = Path.Combine(temporaryRoot, "repository.zip");
+        var repositoryPath = Path.Combine(temporaryRoot, "repository");
+        await DownloadArchiveAsync(
+            $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}/zipball/{metadata.CommitSha}",
+            archivePath,
+            token,
+            useStoredCredentials,
+            cancellationToken);
+        var archive = await RepositoryArchiveExtractor.ExtractAsync(
+            archivePath,
+            repositoryPath,
+            cancellationToken);
+        File.Delete(archivePath);
+
+        return new GitHubRepositorySnapshot(metadata.Name, metadata.CommitSha, metadata.DefaultBranch, archive);
+    }
+
+    public async Task<GitHubRepositoryMetadata> ResolveMetadataAsync(
+        string repositoryUrl,
+        bool useStoredCredentials,
+        CancellationToken cancellationToken)
+    {
+        var (metadata, _) = await ResolveMetadataInternalAsync(repositoryUrl, useStoredCredentials, cancellationToken);
+        return metadata;
+    }
+
+    private async Task<(GitHubRepositoryMetadata Metadata, string? Token)> ResolveMetadataInternalAsync(
+        string repositoryUrl,
+        bool useStoredCredentials,
+        CancellationToken cancellationToken)
+    {
+        var (owner, repository) = ParseOwnerRepo(repositoryUrl);
         var token = useStoredCredentials
             ? await credentialProvider.GetTokenAsync(cancellationToken)
             : null;
@@ -84,21 +128,14 @@ internal sealed class GitHubRepositorySource : IGitHubRepositorySource
             throw new RepositoryDiscoveryException("GitHub returned an invalid commit identifier.");
         }
 
-        var archivePath = Path.Combine(temporaryRoot, "repository.zip");
-        var repositoryPath = Path.Combine(temporaryRoot, "repository");
-        await DownloadArchiveAsync(
-            $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}/zipball/{commitSha}",
-            archivePath,
-            token,
-            useStoredCredentials,
-            cancellationToken);
-        var archive = await RepositoryArchiveExtractor.ExtractAsync(
-            archivePath,
-            repositoryPath,
-            cancellationToken);
-        File.Delete(archivePath);
+        return (new GitHubRepositoryMetadata(name, commitSha, defaultBranch), token);
+    }
 
-        return new GitHubRepositorySnapshot(name, commitSha, defaultBranch, archive);
+    private static (string Owner, string Repository) ParseOwnerRepo(string repositoryUrl)
+    {
+        var repositoryUri = new Uri(repositoryUrl);
+        var segments = repositoryUri.AbsolutePath.Trim('/').Split('/');
+        return (segments[0], segments[1]);
     }
 
     private async Task<JsonDocument> GetJsonAsync(
