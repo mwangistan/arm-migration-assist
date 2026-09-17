@@ -33,7 +33,11 @@ env:
 jobs:
   build-and-deploy:
     name: Build and deploy assessment API
-    if: vars.ASSESSMENT_CONTAINER_APP_NAME != ''
+    # Keep forks and unconfigured repositories green; a configured deployment still fails fast.
+    if: >-
+      vars.AZURE_RESOURCE_GROUP != ''
+      && vars.ACR_NAME != ''
+      && vars.ASSESSMENT_CONTAINER_APP_NAME != ''
     runs-on: ubuntu-latest
     environment: production
     steps:
