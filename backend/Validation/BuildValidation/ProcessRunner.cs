@@ -53,6 +53,8 @@ public static class RunnerEnvironment
 public sealed class LocalProcessRunner : IProcessRunner
 {
     private const int MaxOutputCharacters = 1_048_576;
+    private const int NoSuchProcess = 3;
+    private const int SigKill = 9;
 
     public async Task<ProcessOutcome> RunAsync(ProcessInvocation invocation, CancellationToken cancellationToken)
     {
@@ -159,8 +161,8 @@ public sealed class LocalProcessRunner : IProcessRunner
     {
         if (job is not null)
             return job.Terminate();
-        int result = kill(-process.Id, 9);
-        return result == 0 || Marshal.GetLastWin32Error() == 3;
+        int result = kill(-process.Id, SigKill);
+        return result == 0 || Marshal.GetLastWin32Error() == NoSuchProcess;
     }
 
     private static async Task<(string Text, bool Truncated, bool Incomplete)> ReadBoundedAsync(
