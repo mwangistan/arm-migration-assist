@@ -1,0 +1,239 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "07758b85c20247e9aec64a2f4ea6e14a",
+  "migrationPlanId": "plan-c892e36ea9fb",
+  "commitSha": "8878f4ee3d0c79d742fe71955dac96e55f6a7d59",
+  "branch": null,
+  "status": "not-validated",
+  "summary": {
+    "passed": 0,
+    "failed": 0,
+    "notRun": 9,
+    "inconclusive": 0,
+    "skipped": 0,
+    "total": 9
+  },
+  "checks": [
+    {
+      "key": "validation:vc-build-arm64",
+      "source": "validation-check",
+      "sourceId": "vc-build-arm64",
+      "workItemId": null,
+      "category": "build",
+      "description": "Repository builds an ARM64 or Arm64EC binary.",
+      "status": "not-run",
+      "reason": "No executable mapping or measured evidence; manual/untested criteria remain not-run.",
+      "evidenceIds": [],
+      "sourceEvidenceIds": [],
+      "guidanceIds": []
+    },
+    {
+      "key": "validation:vc-func-smoke",
+      "source": "validation-check",
+      "sourceId": "vc-func-smoke",
+      "workItemId": null,
+      "category": "functional",
+      "description": "Application launches and completes a smoke workflow on ARM hardware.",
+      "status": "not-run",
+      "reason": "No executable mapping or measured evidence; manual/untested criteria remain not-run.",
+      "evidenceIds": [],
+      "sourceEvidenceIds": [],
+      "guidanceIds": []
+    },
+    {
+      "key": "acceptance:wi-build-add-an-arm64-or-arm64ec-build-target:at-build-add-an-arm64-or-arm64ec-build-target-build",
+      "source": "acceptance-test",
+      "sourceId": "at-build-add-an-arm64-or-arm64ec-build-target-build",
+      "workItemId": "wi-build-add-an-arm64-or-arm64ec-build-target",
+      "category": "acceptance",
+      "description": "Repository builds cleanly for the target architecture.",
+      "status": "not-run",
+      "reason": "No executable mapping or measured evidence; manual/untested criteria remain not-run.",
+      "evidenceIds": [],
+      "sourceEvidenceIds": [],
+      "guidanceIds": []
+    },
+    {
+      "key": "acceptance:wi-build-add-an-arm64-or-arm64ec-build-target:at-build-add-an-arm64-or-arm64ec-build-target-func",
+      "source": "acceptance-test",
+      "sourceId": "at-build-add-an-arm64-or-arm64ec-build-target-func",
+      "workItemId": "wi-build-add-an-arm64-or-arm64ec-build-target",
+      "category": "acceptance",
+      "description": "Functional smoke check passes on the target architecture.",
+      "status": "not-run",
+      "reason": "No executable mapping or measured evidence; manual/untested criteria remain not-run.",
+      "evidenceIds": [],
+      "sourceEvidenceIds": [],
+      "guidanceIds": []
+    },
+    {
+      "key": "acceptance:wi-build-add-an-arm64-ci-job:at-build-add-an-arm64-ci-job-build",
+      "source": "acceptance-test",
+      "sourceId": "at-build-add-an-arm64-ci-job-build",
+      "workItemId": "wi-build-add-an-arm64-ci-job",
+      "category": "acceptance",
+      "description": "Repository builds cleanly for the target architecture.",
+      "status": "not-run",
+      "reason": "No executable mapping or measured evidence; manual/untested criteria remain not-run.",
+      "evidenceIds": [],
+      "sourceEvidenceIds": [],
+      "guidanceIds": []
+    },
+    {
+      "key": "acceptance:wi-build-add-an-arm64-ci-job:at-build-add-an-arm64-ci-job-func",
+      "source": "acceptance-test",
+      "sourceId": "at-build-add-an-arm64-ci-job-func",
+      "workItemId": "wi-build-add-an-arm64-ci-job",
+      "category": "acceptance",
+      "description": "Functional smoke check passes on the target architecture.",
+      "status": "not-run",
+      "reason": "No executable mapping or measured evidence; manual/untested criteria remain not-run.",
+      "evidenceIds": [],
+      "sourceEvidenceIds": [],
+      "guidanceIds": []
+    },
+    {
+      "key": "discovered:supported-build",
+      "source": "discovered",
+      "sourceId": "supported-build",
+      "workItemId": null,
+      "category": "build",
+      "description": "No executable build was conservatively detected.",
+      "status": "not-run",
+      "reason": "No executable mapping or measured evidence; manual/untested criteria remain not-run.",
+      "evidenceIds": [],
+      "sourceEvidenceIds": [],
+      "guidanceIds": []
+    },
+    {
+      "key": "discovered:target-arm64-vm",
+      "source": "discovered",
+      "sourceId": "target-arm64-vm",
+      "workItemId": null,
+      "category": "device",
+      "description": "Validate target device: arm64-vm",
+      "status": "not-run",
+      "reason": "No executable mapping or measured evidence; manual/untested criteria remain not-run.",
+      "evidenceIds": [],
+      "sourceEvidenceIds": [],
+      "guidanceIds": []
+    },
+    {
+      "key": "discovered:target-snapdragon-x-series",
+      "source": "discovered",
+      "sourceId": "target-snapdragon-x-series",
+      "workItemId": null,
+      "category": "device",
+      "description": "Validate target device: snapdragon-x-series",
+      "status": "not-run",
+      "reason": "No executable mapping or measured evidence; manual/untested criteria remain not-run.",
+      "evidenceIds": [],
+      "sourceEvidenceIds": [],
+      "guidanceIds": []
+    }
+  ],
+  "deterministicEvidence": [
+    {
+      "id": "aad7cc8722094f038c00642e28262ef9",
+      "commandId": null,
+      "kind": "repository-verification",
+      "invocation": null,
+      "process": null,
+      "summary": "Verified clean repository C:\\temp\\comfyui-387f98a at 8878f4ee3d0c79d742fe71955dac96e55f6a7d59 (detached HEAD).",
+      "artifacts": []
+    }
+  ],
+  "coverageGaps": [
+    {
+      "id": "validation:vc-build-arm64",
+      "description": "NotRun: Repository builds an ARM64 or Arm64EC binary.",
+      "criterionKeys": [
+        "validation:vc-build-arm64"
+      ]
+    },
+    {
+      "id": "validation:vc-func-smoke",
+      "description": "NotRun: Application launches and completes a smoke workflow on ARM hardware.",
+      "criterionKeys": [
+        "validation:vc-func-smoke"
+      ]
+    },
+    {
+      "id": "acceptance:wi-build-add-an-arm64-or-arm64ec-build-target:at-build-add-an-arm64-or-arm64ec-build-target-build",
+      "description": "NotRun: Repository builds cleanly for the target architecture.",
+      "criterionKeys": [
+        "acceptance:wi-build-add-an-arm64-or-arm64ec-build-target:at-build-add-an-arm64-or-arm64ec-build-target-build"
+      ]
+    },
+    {
+      "id": "acceptance:wi-build-add-an-arm64-or-arm64ec-build-target:at-build-add-an-arm64-or-arm64ec-build-target-func",
+      "description": "NotRun: Functional smoke check passes on the target architecture.",
+      "criterionKeys": [
+        "acceptance:wi-build-add-an-arm64-or-arm64ec-build-target:at-build-add-an-arm64-or-arm64ec-build-target-func"
+      ]
+    },
+    {
+      "id": "acceptance:wi-build-add-an-arm64-ci-job:at-build-add-an-arm64-ci-job-build",
+      "description": "NotRun: Repository builds cleanly for the target architecture.",
+      "criterionKeys": [
+        "acceptance:wi-build-add-an-arm64-ci-job:at-build-add-an-arm64-ci-job-build"
+      ]
+    },
+    {
+      "id": "acceptance:wi-build-add-an-arm64-ci-job:at-build-add-an-arm64-ci-job-func",
+      "description": "NotRun: Functional smoke check passes on the target architecture.",
+      "criterionKeys": [
+        "acceptance:wi-build-add-an-arm64-ci-job:at-build-add-an-arm64-ci-job-func"
+      ]
+    },
+    {
+      "id": "discovered:supported-build",
+      "description": "NotRun: No executable build was conservatively detected.",
+      "criterionKeys": [
+        "discovered:supported-build"
+      ]
+    },
+    {
+      "id": "discovered:target-arm64-vm",
+      "description": "NotRun: Validate target device: arm64-vm",
+      "criterionKeys": [
+        "discovered:target-arm64-vm"
+      ]
+    },
+    {
+      "id": "discovered:target-snapdragon-x-series",
+      "description": "NotRun: Validate target device: snapdragon-x-series",
+      "criterionKeys": [
+        "discovered:target-snapdragon-x-series"
+      ]
+    },
+    {
+      "id": "missing-windows-arm64-runtime",
+      "description": "No successful Windows ARM64 runtime evidence. Builds and Linux containers do not establish Windows on Arm readiness.",
+      "criterionKeys": []
+    },
+    {
+      "id": "missing-x64-comparison",
+      "description": "No x64 baseline was requested or compared; no performance/regression parity claim can be made.",
+      "criterionKeys": []
+    }
+  ],
+  "aiAnalysis": {
+    "evidenceAnalysis": null,
+    "coverageReview": null,
+    "notices": [
+      {
+        "stage": "ai-planner",
+        "message": "No provider configured; deterministic/manual fallback used."
+      },
+      {
+        "stage": "ai-evidence-analyzer",
+        "message": "No analysis performed; provider absent or run cancelled."
+      },
+      {
+        "stage": "ai-coverage-reviewer",
+        "message": "No review performed; provider absent or run cancelled."
+      }
+    ]
+  }
+}
