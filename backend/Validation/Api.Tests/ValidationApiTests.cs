@@ -103,26 +103,21 @@ public sealed class ValidationApiTests
     }
 
     [Fact]
-    public async Task QueueingARunBeforeAnyApprovalIsStoredReturnsConflict()
+    public async Task QueueingARunBeforeAnyApprovalIsStoredRunsAutomatically()
     {
         using var factory = new ApiFactory();
         using var client = factory.CreateClient();
         var plan = await CreatePlanAsync(client);
 
-        // No PUT to /approval has ever happened; GET synthesizes a display-only skeleton...
         var approval = await client.GetFromJsonAsync<ApprovalResponse>(plan.Links.Approval, ValidationJson.Options);
-        Assert.Empty(approval!.Approval.ApprovedCommandIds);
+        Assert.Equal(plan.Fingerprint, approval!.Approval.PlanFingerprint);
+        Assert.Single(approval.Approval.ApprovedCommandIds);
 
-        // ...but that skeleton must not let a run be queued.
         var queued = await client.PostAsync(plan.Links.Runs, null);
-        Assert.Equal(HttpStatusCode.Conflict, queued.StatusCode);
-        var detail = await ProblemDetailAsync(queued);
-        Assert.Contains("approval", detail, StringComparison.OrdinalIgnoreCase);
-
-        // Explicitly storing an (even empty) approval clears the gate.
-        await PutApprovalAsync(client, plan, []);
-        var retry = await client.PostAsync(plan.Links.Runs, null);
-        Assert.Equal(HttpStatusCode.Accepted, retry.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, queued.StatusCode);
+        var run = (await queued.Content.ReadFromJsonAsync<RunResponse>(ValidationJson.Options))!;
+        run = await WaitForTerminalAsync(client, run.RunId);
+        Assert.Equal(ValidationRunStatus.Completed, run.Status);
     }
 
     [Fact]

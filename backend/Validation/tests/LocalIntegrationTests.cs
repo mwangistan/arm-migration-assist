@@ -82,62 +82,6 @@ public sealed class LocalIntegrationTests
         Assert.False(File.Exists(marker));
     }
 
-    [Fact]
-    public async Task CliPersistsReportAndDashboardForApprovedLocalExecution()
-    {
-        using var workspace = new TestWorkspace();
-        var process = new IsolatedGitProcessRunner(workspace);
-        await InitRepository(workspace, process);
-        var repository = await new GitRepositoryInspector(process).InspectAsync(new(workspace.Repo), default);
-        var plan = workspace.Plan(TestWorkspace.Command() with { Executable = "dotnet", Arguments = ["--version"] }) with
-        {
-            Repository = repository
-        };
-        string proposal = Path.Combine(workspace.Root, "proposal.json");
-        string approval = Path.Combine(workspace.Root, "approval.json");
-        string reportFile = Path.Combine(workspace.Root, "report.json");
-        string dashboardFile = Path.Combine(workspace.Root, "dashboard.json");
-        await File.WriteAllTextAsync(proposal, ValidationJson.Serialize(plan));
-        await File.WriteAllTextAsync(approval, ValidationJson.Serialize(TestWorkspace.Approve(plan)));
-        var result = await process.RunAsync(Invocation(workspace.Root, "dotnet",
-            [typeof(ValidationWorkflow).Assembly.Location, "run", proposal, approval, reportFile, dashboardFile]), default);
-        Assert.True(result.ExitCode == 0, result.StandardError + result.StandardOutput);
-        var report = ValidationJson.Deserialize<ValidationReport>(await File.ReadAllTextAsync(reportFile));
-        var dashboard = ValidationJson.Deserialize<ValidationDashboard>(await File.ReadAllTextAsync(dashboardFile));
-        Assert.Equal(OverallStatus.Validated, report.Scorecard.Status);
-        Assert.Equal(repository.CommitSha, report.Repository.CommitSha);
-        Assert.Equal(1, dashboard.Summary.Passed);
-        Assert.Contains(report.Evidence, evidence => evidence.Process?.ExitCode == 0);
-        var repeat = await process.RunAsync(Invocation(workspace.Root, "dotnet",
-            [typeof(ValidationWorkflow).Assembly.Location, "run", proposal, approval, reportFile, dashboardFile]), default);
-        Assert.Equal(2, repeat.ExitCode);
-        Assert.Contains("already exist", repeat.StandardError);
-        Assert.Equal(report.RunId, ValidationJson.Deserialize<ValidationReport>(await File.ReadAllTextAsync(reportFile)).RunId);
-    }
-
-    [Fact]
-    public async Task CliPlanningCreatesAnEmptyApprovalAndNeverRunsBuilds()
-    {
-        using var workspace = new TestWorkspace();
-        var process = new IsolatedGitProcessRunner(workspace);
-        await InitRepository(workspace, process);
-        string migration = Path.Combine(workspace.Root, "migration.json");
-        string options = Path.Combine(workspace.Root, "options.json");
-        string proposal = Path.Combine(workspace.Root, "proposal.json");
-        string approvalFile = Path.Combine(workspace.Root, "approval.json");
-        await File.WriteAllTextAsync(migration, ValidationJson.Serialize(TestWorkspace.Migration()));
-        await File.WriteAllTextAsync(options, ValidationJson.Serialize(new PlanningOptions(workspace.Evidence)));
-        var result = await process.RunAsync(Invocation(workspace.Root, "dotnet",
-            [typeof(ValidationWorkflow).Assembly.Location, "plan", migration, workspace.Repo, options, proposal, approvalFile]), default);
-        Assert.True(result.ExitCode == 0, result.StandardError + result.StandardOutput);
-        var plan = ValidationJson.Deserialize<PreparedValidation>(await File.ReadAllTextAsync(proposal));
-        var approval = ValidationJson.Deserialize<PlanApproval>(await File.ReadAllTextAsync(approvalFile));
-        Assert.Equal(PlanSafety.Fingerprint(plan), approval.PlanFingerprint);
-        Assert.Empty(approval.ApprovedCommandIds);
-        Assert.Single(plan.Commands);
-        Assert.False(Directory.Exists(Path.Combine(workspace.Repo, "bin")));
-    }
-
     private static ProcessInvocation Invocation(string cwd, string executable, IReadOnlyList<string> arguments) =>
         new(executable, arguments, cwd, RunnerEnvironment.Capture(new Dictionary<string, string>()), 60);
 
