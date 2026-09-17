@@ -69,6 +69,29 @@ const technologyGroups = [
   ['CI systems', 'ciSystems'],
 ] as const;
 
+const githubRepositorySegment = /^[A-Za-z0-9_.-]+$/;
+
+function isGitHubRepositoryUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const segments = url.pathname.split('/').filter(Boolean);
+    const repository = segments[1]?.replace(/\.git$/i, '') ?? '';
+
+    return url.protocol === 'https:'
+      && url.hostname.toLowerCase() === 'github.com'
+      && url.port === ''
+      && url.username === ''
+      && url.password === ''
+      && url.search === ''
+      && url.hash === ''
+      && segments.length === 2
+      && githubRepositorySegment.test(segments[0])
+      && githubRepositorySegment.test(repository);
+  } catch {
+    return false;
+  }
+}
+
 function pluralize(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -942,6 +965,11 @@ export default function App() {
 
     if (!normalizedSource) {
       setInputError('Enter a GitHub repository URL.');
+      return;
+    }
+
+    if (!isGitHubRepositoryUrl(normalizedSource)) {
+      setInputError('Use an HTTPS GitHub URL in the form https://github.com/owner/repository.');
       return;
     }
 
