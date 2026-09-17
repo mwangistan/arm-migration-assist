@@ -1,11 +1,15 @@
 name: cd
 
+# Composed-host deploy. One image, one Container App, all four services (F1..F4).
+# Supersedes the old cd.yml (planner-only) and assessment-cd.yml (F1 only) which are gone.
+
 on:
   push:
     branches: [main]
     paths:
-      - 'backend/MigrationPlanner/**'
-      - 'knowledge/windows-on-arm/**'
+      - 'backend/**'
+      - 'knowledge/**'
+      - 'Dockerfile'
       - '.github/workflows/cd.yml'
   workflow_dispatch:
     inputs:
@@ -23,11 +27,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-  ACR_NAME:             ${{ vars.ACR_NAME }}
-  CONTAINER_APP_NAME:   ${{ vars.CONTAINER_APP_NAME }}
-  IMAGE_REPO:           migration-planner-api
-  DOCKERFILE:           backend/MigrationPlanner/Dockerfile
+  AZURE_RESOURCE_GROUP:  ${{ vars.AZURE_RESOURCE_GROUP }}
+  ACR_NAME:              ${{ vars.ACR_NAME }}
+  CONTAINER_APP_NAME:    ${{ vars.CONTAINER_APP_NAME }}
+  IMAGE_REPO:            arm-migration-assist
+  DOCKERFILE:            Dockerfile
   STATIC_WEB_APP_ORIGIN: ${{ vars.STATIC_WEB_APP_ORIGIN }}
 
 jobs:
@@ -47,9 +51,25 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Test migration planner
+      - name: Test all four services
+        run: |
+          set -euo pipefail
+          dotnet test backend/MigrationPlanner/MigrationPlanner.sln \
+            --configuration Release \
+            -p:TreatWarningsAsErrors=true
+          dotnet test backend/Assessment/RepositoryDiscovery.Tests/RepositoryDiscovery.Tests.csproj \
+            --configuration Release \
+            -p:TreatWarningsAsErrors=true
+          dotnet test backend/AutomatedMigration.Api.Tests/AutomatedMigration.Api.Tests.csproj \
+            --configuration Release \
+            -p:TreatWarningsAsErrors=true
+          dotnet test backend/Validation/Api.Tests/Validation.Api.Tests.csproj \
+            --configuration Release \
+            -p:TreatWarningsAsErrors=true
+
+      - name: Verify composed host builds
         run: >
-          dotnet test backend/MigrationPlanner/MigrationPlanner.sln
+          dotnet build backend/ArmMigrationAssist.Api/ArmMigrationAssist.Api.csproj
           --configuration Release
           -p:TreatWarningsAsErrors=true
 
@@ -84,7 +104,12 @@ jobs:
           IMAGE="$ACR_NAME.azurecr.io/$IMAGE_REPO:${{ steps.meta.outputs.tag }}"
           extra_args=()
           if [ -n "$STATIC_WEB_APP_ORIGIN" ]; then
-            extra_args+=(--set-env-vars "MIGRATIONPLANNER_ALLOWED_ORIGINS=$STATIC_WEB_APP_ORIGIN")
+            # Same origin list applies to F1 (DashboardOrigins), F2 (MIGRATIONPLANNER_ALLOWED_ORIGINS),
+            # and F3 (AUTOMATION_ALLOWED_ORIGINS) inside the composed host.
+            extra_args+=(--set-env-vars \
+              "MIGRATIONPLANNER_ALLOWED_ORIGINS=$STATIC_WEB_APP_ORIGIN" \
+              "AUTOMATION_ALLOWED_ORIGINS=$STATIC_WEB_APP_ORIGIN" \
+              "DashboardOrigins=$STATIC_WEB_APP_ORIGIN")
           fi
           az containerapp update \
             --name "$CONTAINER_APP_NAME" \
@@ -108,6 +133,17 @@ jobs:
           done
           echo "Health check failed"; exit 1
 
+      - name: Smoke test per-service surfaces
+        run: |
+          FQDN=$(az containerapp show \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          # F1 exposes its own /api/health with a service-specific payload.
+          curl -fsS "https://$FQDN/api/health" >/dev/null
+          # F1 also serves the assessment schema; a 200 confirms the embedded resource shipped.
+          curl -fsS "https://$FQDN/api/contracts/repository-assessment/v1" >/dev/null
+
       - name: Summary
         if: always()
         run: |
@@ -117,4 +153,5 @@ jobs:
             echo "- Image: \`$ACR_NAME.azurecr.io/$IMAGE_REPO:${{ steps.meta.outputs.tag }}\`"
             echo "- Container App: \`$CONTAINER_APP_NAME\`"
             echo "- Resource group: \`$AZURE_RESOURCE_GROUP\`"
+            echo "- Services co-hosted: assessment, planner, automation, validation"
           } >> "$GITHUB_STEP_SUMMARY"

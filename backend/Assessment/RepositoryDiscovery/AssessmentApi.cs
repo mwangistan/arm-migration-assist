@@ -11,57 +11,79 @@ public static class AssessmentApi
     private const string LocalClientHeader = "X-Arm-Migration-Client";
     private static readonly byte[] RepositoryAssessmentSchema = ReadRepositoryAssessmentSchema();
 
+    public const string DashboardCorsPolicyName = "dashboard";
+
     public static WebApplication Build(
         string[] args,
         IRepositoryAssessmentService? assessmentService = null,
         IGitHubAuthenticationBroker? authenticationBroker = null)
     {
         var builder = WebApplication.CreateBuilder(args);
-        builder.Services.Configure<JsonOptions>(options =>
+        builder.Services.AddAssessmentApi(builder.Configuration, assessmentService, authenticationBroker);
+        var app = builder.Build();
+        app.UseAssessmentApiPipeline();
+        app.MapAssessmentApi();
+        return app;
+    }
+
+    public static IServiceCollection AddAssessmentApi(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IRepositoryAssessmentService? assessmentService = null,
+        IGitHubAuthenticationBroker? authenticationBroker = null)
+    {
+        services.Configure<JsonOptions>(options =>
         {
             options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         });
+
         if (assessmentService is null)
         {
-            builder.Services.AddSingleton<IRepositoryAssessmentService, RepositoryDiscoveryService>();
+            services.AddSingleton<IRepositoryAssessmentService, RepositoryDiscoveryService>();
         }
         else
         {
-            builder.Services.AddSingleton<IRepositoryAssessmentService>(assessmentService);
+            services.AddSingleton<IRepositoryAssessmentService>(assessmentService);
         }
 
         if (authenticationBroker is null)
         {
-            builder.Services.AddSingleton<IGitHubAuthenticationBroker, GitHubAuthenticationBroker>();
+            services.AddSingleton<IGitHubAuthenticationBroker, GitHubAuthenticationBroker>();
         }
         else
         {
-            builder.Services.AddSingleton(authenticationBroker);
+            services.AddSingleton(authenticationBroker);
         }
-        builder.Services.AddSingleton<AssessmentExecutionGate>();
-        builder.Services.AddSingleton<AssessmentJobQueue>();
-        builder.Services.AddHostedService<AssessmentJobWorker>();
 
-        builder.Services.AddCors(options => options.AddPolicy("dashboard", policy =>
-        {
-            policy
-                .WithOrigins(ReadAllowedOrigins(builder.Configuration))
-                .AllowAnyHeader()
-                .AllowAnyMethod();
-        }));
+        services.AddSingleton<AssessmentExecutionGate>();
+        services.AddSingleton<AssessmentJobQueue>();
+        services.AddHostedService<AssessmentJobWorker>();
 
-        var app = builder.Build();
+        services.AddCors(options => options.AddPolicy(DashboardCorsPolicyName, policy => policy
+            .WithOrigins(ReadAllowedOrigins(configuration))
+            .AllowAnyHeader()
+            .AllowAnyMethod()));
+
+        return services;
+    }
+
+    public static WebApplication UseAssessmentApiPipeline(this WebApplication app)
+    {
         app.Use(async (context, next) =>
         {
             if (context.Request.Path.StartsWithSegments("/api"))
             {
                 context.Response.Headers.CacheControl = "no-store";
             }
-
             await next(context);
         });
-        app.UseCors("dashboard");
-        app.MapGet("/api/health", () => Results.Ok(new
+        app.UseCors(DashboardCorsPolicyName);
+        return app;
+    }
+
+    public static IEndpointRouteBuilder MapAssessmentApi(this IEndpointRouteBuilder endpoints)
+    {
+        endpoints.MapGet("/api/health", () => Results.Ok(new
         {
             status = "ready",
             service = "repository-assessment",
@@ -75,18 +97,18 @@ public static class AssessmentApi
                 "readonly-github-archive",
             },
         }));
-        app.MapGet("/api/contracts/repository-assessment/v1", () =>
+        endpoints.MapGet("/api/contracts/repository-assessment/v1", () =>
             Results.Bytes(RepositoryAssessmentSchema, "application/schema+json"));
-        app.MapPost("/api/auth/github/sessions", StartAuthentication);
-        app.MapGet("/api/auth/github/sessions/{sessionId}", GetAuthentication);
-        app.MapDelete("/api/auth/github/sessions/{sessionId}", CancelAuthentication);
-        app.MapPost("/api/assessments", AssessAsync);
-        app.MapPost("/api/assessment-jobs", CreateAssessmentJob);
-        app.MapGet("/api/assessment-jobs/{jobId}", GetAssessmentJob);
-        app.MapGet("/api/assessment-jobs/{jobId}/result", GetAssessmentJobResult);
-        app.MapGet("/api/assessment-jobs/{jobId}/events", StreamAssessmentJobEvents);
-        app.MapDelete("/api/assessment-jobs/{jobId}", CancelAssessmentJob);
-        return app;
+        endpoints.MapPost("/api/auth/github/sessions", StartAuthentication);
+        endpoints.MapGet("/api/auth/github/sessions/{sessionId}", GetAuthentication);
+        endpoints.MapDelete("/api/auth/github/sessions/{sessionId}", CancelAuthentication);
+        endpoints.MapPost("/api/assessments", AssessAsync);
+        endpoints.MapPost("/api/assessment-jobs", CreateAssessmentJob);
+        endpoints.MapGet("/api/assessment-jobs/{jobId}", GetAssessmentJob);
+        endpoints.MapGet("/api/assessment-jobs/{jobId}/result", GetAssessmentJobResult);
+        endpoints.MapGet("/api/assessment-jobs/{jobId}/events", StreamAssessmentJobEvents);
+        endpoints.MapDelete("/api/assessment-jobs/{jobId}", CancelAssessmentJob);
+        return endpoints;
     }
 
     private static async Task<IResult> AssessAsync(
