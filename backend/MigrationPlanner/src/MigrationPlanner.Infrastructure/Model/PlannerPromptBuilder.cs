@@ -216,6 +216,37 @@ internal static class PlannerPromptBuilder
                 builder.AppendLine("     other value must match the Previous plan character-for-character.");
                 builder.AppendLine("  5. Output the corrected JSON only. No prose.");
             }
+            else if (retryHint.Reason == PlannerRetryReason.UnderGranular)
+            {
+                var missing = retryHint.MissingBuckets ?? Array.Empty<string>();
+                builder.AppendLine("The plan did not satisfy the granularity contract. The server");
+                builder.AppendLine("reports the following bucket coverage violations:");
+                foreach (var m in missing)
+                {
+                    builder.AppendLine($"  - {m}");
+                }
+                builder.AppendLine();
+                builder.AppendLine("Rules for the retry (STRICT):");
+                builder.AppendLine("  1. Copy the entire 'Previous plan' JSON below into your output.");
+                builder.AppendLine("  2. For EACH violation above, add a NEW workItems[] entry with");
+                builder.AppendLine("     agentOrSkill set to the exact skill name the violation");
+                builder.AppendLine("     names (the quoted string after `agentOrSkill=`). Do NOT");
+                builder.AppendLine("     re-assign the skill on an existing workItem — add new ones.");
+                builder.AppendLine("  3. When a violation names a `python/*` skill, use it. Do NOT");
+                builder.AppendLine("     substitute `build/add-arm64-target`. It does not apply to");
+                builder.AppendLine("     Python projects (rule 16.5).");
+                builder.AppendLine("  4. If the previous plan added `build/add-arm64-target` to");
+                builder.AppendLine("     `missingSkills[]` as a workaround, REMOVE that entry — it");
+                builder.AppendLine("     is a runnable catalog skill, not a missing capability.");
+                builder.AppendLine("  5. Each new workItem gets an id matching ^wi-[a-z0-9-]{2,60}$,");
+                builder.AppendLine("     P0 priority, approvalRequired=true, >= 2 acceptanceTests,");
+                builder.AppendLine("     the evidenceIds from the bucket, empty inputs, and");
+                builder.AppendLine("     expectedOutputs=[\"report\"] (or [\"patch\", \"report\"] for");
+                builder.AppendLine("     `python/pip-constraints-arm64-scaffold`).");
+                builder.AppendLine("  6. Do NOT rewrite, reword, or reorder any other field. Every");
+                builder.AppendLine("     other value must match the Previous plan character-for-character.");
+                builder.AppendLine("  7. Output the corrected JSON only. No prose.");
+            }
 
             if (!string.IsNullOrWhiteSpace(retryHint.PreviousPlanJson))
             {

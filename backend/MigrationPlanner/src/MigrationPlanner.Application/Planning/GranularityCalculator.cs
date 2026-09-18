@@ -163,6 +163,7 @@ public static class GranularityCalculator
         var interpreted = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "python", "javascript", "typescript", "ruby", "php", "perl", "lua",
+            "shell", "bash", "sh", "zsh", "powershell", "cmd", "batch",
         };
         var langs = assessment.Technology.Languages;
         return langs.Count > 0 && langs.All(l => interpreted.Contains(l));

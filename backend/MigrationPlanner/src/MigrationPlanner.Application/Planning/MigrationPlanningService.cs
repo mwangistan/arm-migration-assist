@@ -203,6 +203,11 @@ public sealed class MigrationPlanningService
             return PlannerRetryHint.ForSkillIoMismatch(violations, allowlists, diagnostic, previousPlanJson);
         }
 
+        if (safety.ErrorCode == PlannerErrorCode.PlanUnderGranular)
+        {
+            return PlannerRetryHint.ForUnderGranular(diagnostic, previousPlanJson, safety.Violations);
+        }
+
         return null;
     }
 
