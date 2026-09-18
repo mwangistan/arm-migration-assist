@@ -174,6 +174,32 @@ public sealed class MigrationPlanningService
                 [.. safety2.Violations]);
         }
 
+        // First-attempt synthesis shortcut: PlanUnderGranular and PlanApprovalMissing
+        // have no useful retry hint (the model consistently fails them the same way),
+        // so skip the retry and jump straight to deterministic synthesis. Saves 15-25s
+        // per plan and covers the case BuildRetryHint returns null.
+        if (retryHint is null
+            && (safety1.ErrorCode == PlannerErrorCode.PlanUnderGranular
+                || safety1.ErrorCode == PlannerErrorCode.PlanApprovalMissing))
+        {
+            var synthesized = TrySynthesizeMissingWorkItems(
+                attempt1.RawJson ?? string.Empty, assessment, score, plan);
+            if (synthesized is not null)
+            {
+                var safetyS = _safetyValidator.Validate(synthesized.Plan, assessment, score);
+                if (safetyS.IsSafe)
+                {
+                    EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha,
+                        assessment.SchemaVersion, guidanceLookup.RetrievedGuidanceIds,
+                        "success-after-synthesis", errorCode: null);
+                    var warnings = new List<string> { synthesized.SynthesisSummary };
+                    warnings.AddRange(attempt1.Observations);
+                    _planCache.Store(digest, synthesized.Plan, score, warnings);
+                    return PlanResult.Ok(synthesized.Plan, score, runId, warnings);
+                }
+            }
+        }
+
         EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha, assessment.SchemaVersion,
             guidanceLookup.RetrievedGuidanceIds, "unsafe-plan", safety1.ErrorCode);
         return PlanResult.Fail(safety1.ErrorCode ?? PlannerErrorCode.PlanSafetyViolation, runId,
