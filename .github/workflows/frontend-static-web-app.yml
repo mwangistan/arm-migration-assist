@@ -27,9 +27,6 @@ jobs:
     defaults:
       run:
         working-directory: frontend
-    env:
-      VITE_ASSESSMENT_API_URL: ${{ vars.ASSESSMENT_API_URL }}
-      VITE_MIGRATION_PLANNER_API_URL: ${{ vars.MIGRATION_PLANNER_API_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -50,11 +47,10 @@ jobs:
 
   deploy:
     name: Deploy frontend
-    # Build verification always runs; deployment starts only after both backend origins are configured.
+    # The SWA proxies /api/* to the composed host via staticwebapp.config.json, so the
+    # build no longer bakes in API origins and the deploy no longer gates on them.
     if: >-
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-      && vars.ASSESSMENT_API_URL != ''
-      && vars.MIGRATION_PLANNER_API_URL != ''
+      github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: verify
     runs-on: ubuntu-latest
     environment: production
@@ -66,18 +62,8 @@ jobs:
       - name: Validate deployment configuration
         shell: bash
         env:
-          ASSESSMENT_API_URL: ${{ vars.ASSESSMENT_API_URL }}
-          MIGRATION_PLANNER_API_URL: ${{ vars.MIGRATION_PLANNER_API_URL }}
           SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
         run: |
-          if [[ ! "$ASSESSMENT_API_URL" =~ ^https://[^/]+/?$ ]]; then
-            echo "::error::Set ASSESSMENT_API_URL to the assessment API HTTPS origin."
-            exit 1
-          fi
-          if [[ ! "$MIGRATION_PLANNER_API_URL" =~ ^https://[^/]+/?$ ]]; then
-            echo "::error::Set MIGRATION_PLANNER_API_URL to the planner API HTTPS origin."
-            exit 1
-          fi
           if [ -z "$SWA_TOKEN" ]; then
             echo "::error::Set the AZURE_STATIC_WEB_APPS_API_TOKEN secret."
             exit 1

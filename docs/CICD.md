@@ -94,14 +94,18 @@ Repository variables (non-secret; edit here to point at a different environment)
 | `AZURE_LOCATION` | `eastus2` |
 | `ACR_NAME` | `acrarmmigassist` |
 | `CONTAINER_APP_NAME` | `ca-arm-migration-planner-api` |
-| `ASSESSMENT_CONTAINER_APP_NAME` | Existing Feature 1 Container App name |
-| `ASSESSMENT_API_URL` | Feature 1 Container App HTTPS origin |
-| `MIGRATION_PLANNER_API_URL` | Feature 2 Container App HTTPS origin |
-| `STATIC_WEB_APP_ORIGIN` | Static Web App HTTPS origin allowed by both APIs |
+| `STATIC_WEB_APP_ORIGIN` | Static Web App HTTPS origin allowed by CORS on the composed host |
+
+`ASSESSMENT_API_URL` and `MIGRATION_PLANNER_API_URL` are no longer read. The
+Static Web App now proxies `/api/*` to the composed host via
+[`frontend/public/staticwebapp.config.json`](../frontend/public/staticwebapp.config.json),
+so the frontend makes same-origin calls and no API origins are baked into the
+production bundle.
 
 Set `AZURE_STATIC_WEB_APPS_API_TOKEN` as an Actions secret using the existing
-Static Web App deployment token. Set the Static Web App origin in both backend
-CORS configurations before deploying the frontend.
+Static Web App deployment token. Set the Static Web App origin in the composed
+host's `DashboardOrigins`, `MIGRATIONPLANNER_ALLOWED_ORIGINS`, and
+`AUTOMATION_ALLOWED_ORIGINS` env vars before the SWA redeploys.
 
 Cloud jobs are configuration-gated. CI, frontend verification, Dockerfile lint,
 and Bicep compilation always run; Container App and Static Web Apps deployment

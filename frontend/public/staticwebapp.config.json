@@ -1,6 +1,11 @@
 {
   "routes": [
     {
+      "route": "/api/*",
+      "rewrite": "https://ca-arm-migration-planner-api.delightfulcliff-b520a3d2.eastus2.azurecontainerapps.io/api/{*restOfPath}",
+      "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+    },
+    {
       "route": "/assets/*",
       "headers": {
         "cache-control": "public, max-age=31536000, immutable"
@@ -10,7 +15,8 @@
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": [
-      "/assets/*"
+      "/assets/*",
+      "/api/*"
     ]
   },
   "globalHeaders": {
