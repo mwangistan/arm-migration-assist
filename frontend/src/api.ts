@@ -737,13 +737,17 @@ function isBranchApplication(value: unknown): value is BranchApplication {
     && value.rejected.every(isPatchRejection);
 }
 
+function isNullableString(value: unknown): value is string | null | undefined {
+  return value === null || value === undefined || typeof value === 'string';
+}
+
 function isValidationDispatch(value: unknown): value is ValidationDispatch {
   return isRecord(value)
-    && (value.planId === null || typeof value.planId === 'string')
-    && (value.runId === null || typeof value.runId === 'string')
-    && (value.statusUrl === null || typeof value.statusUrl === 'string')
+    && isNullableString(value.planId)
+    && isNullableString(value.runId)
+    && isNullableString(value.statusUrl)
     && typeof value.dispatched === 'boolean'
-    && (value.error === null || typeof value.error === 'string');
+    && isNullableString(value.error);
 }
 
 function isMigrationActionsResult(value: unknown): value is MigrationActionsResult {
@@ -767,10 +771,10 @@ function isMigrationJob(value: unknown): value is MigrationJob {
     && typeof value.target.url === 'string'
     && typeof value.target.commitSha === 'string'
     && typeof value.createdAt === 'string'
-    && (value.startedAt === null || typeof value.startedAt === 'string')
-    && (value.finishedAt === null || typeof value.finishedAt === 'string')
+    && isNullableString(value.startedAt)
+    && isNullableString(value.finishedAt)
     && (value.result === null || value.result === undefined || isMigrationActionsResult(value.result))
-    && (value.error === null || typeof value.error === 'string');
+    && isNullableString(value.error);
 }
 
 function isMigrationJobAccepted(value: unknown): value is MigrationJobAccepted {
@@ -907,10 +911,10 @@ function isValidationRunSummary(value: unknown): value is ValidationRunSummary {
     && typeof value.planId === 'string'
     && isValidationRunStatus(value.status)
     && typeof value.createdAt === 'string'
-    && (value.startedAt === null || value.startedAt === undefined || typeof value.startedAt === 'string')
-    && (value.finishedAt === null || value.finishedAt === undefined || typeof value.finishedAt === 'string')
-    && (value.summary === null || value.summary === undefined || typeof value.summary === 'string')
-    && (value.error === null || value.error === undefined || typeof value.error === 'string');
+    && isNullableString(value.startedAt)
+    && isNullableString(value.finishedAt)
+    && isNullableString(value.summary)
+    && isNullableString(value.error);
 }
 
 function isCriterionResult(value: unknown): value is CriterionResult {
