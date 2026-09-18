@@ -307,10 +307,74 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
                     ["patch"]));
         }
 
+        // Python-specific audit skills. Declared only when the repo actually has
+        // pip manifests / Python source, so F2 doesn't cite them against a
+        // non-Python repo.
+        var pipManifests = catalog.Files
+            .Where(file => IsPipManifest(file.RelativePath))
+            .Select(file => file.RelativePath)
+            .Distinct(StringComparer.Ordinal)
+            .Take(10)
+            .ToArray();
+        var pyFiles = catalog.Files
+            .Where(file => file.RelativePath.EndsWith(".py", StringComparison.OrdinalIgnoreCase))
+            .Select(file => file.RelativePath)
+            .Distinct(StringComparer.Ordinal)
+            .Take(50)
+            .ToArray();
+        var hasRequirementsTxt = catalog.Files.Any(file =>
+            Path.GetFileName(file.RelativePath).StartsWith("requirements", StringComparison.OrdinalIgnoreCase)
+            && file.RelativePath.EndsWith(".txt", StringComparison.OrdinalIgnoreCase));
+        if (pipManifests.Length > 0)
+        {
+            candidates.Add(new AvailableSkill(
+                "python/pytorch-arm64-wheel-audit",
+                ProducerVersion,
+                "Audits torch/torchvision/torchaudio pins and reports Windows-on-Arm wheel status without modifying manifests.",
+                true,
+                pipManifests,
+                ["report"]));
+            candidates.Add(new AvailableSkill(
+                "python/native-wheel-audit",
+                ProducerVersion,
+                "Classifies pip dependencies against a hand-curated native-package table and emits an ARM64 wheel-verification checklist.",
+                true,
+                pipManifests,
+                ["report"]));
+        }
+        if (pyFiles.Length > 0)
+        {
+            candidates.Add(new AvailableSkill(
+                "python/cuda-to-directml-audit",
+                ProducerVersion,
+                "Enumerates every CUDA reference in Python source and emits a routing report; does not choose a backend.",
+                true,
+                pyFiles,
+                ["report"]));
+        }
+        if (hasRequirementsTxt)
+        {
+            candidates.Add(new AvailableSkill(
+                "python/pip-constraints-arm64-scaffold",
+                ProducerVersion,
+                "Emits a starter constraints-arm64.txt with blank pins plus a README. Skipped if constraints-arm64.txt already exists.",
+                true,
+                ["requirements.txt"],
+                ["patch", "report"]));
+        }
+
         var runnable = SkillCatalog.Default;
         return candidates
             .Where(skill => runnable.IsRunnable(skill.Name))
             .ToList();
+    }
+
+    private static bool IsPipManifest(string path)
+    {
+        var name = Path.GetFileName(path);
+        return (name.StartsWith("requirements", StringComparison.OrdinalIgnoreCase)
+                && name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+            || name.Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsSupportedBuildInput(string path)

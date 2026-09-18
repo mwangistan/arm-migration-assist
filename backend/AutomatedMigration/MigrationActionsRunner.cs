@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AutomatedMigration.BuildConfiguration;
 using AutomatedMigration.CodeMigration;
+using AutomatedMigration.CodeMigration.Python;
 using AutomatedMigration.Generators;
 using AutomatedMigration.Models;
 using AutomatedMigration.PipelineUpdates;
@@ -29,6 +30,10 @@ public sealed class MigrationActionsRunner
             ["build/add-arm64-target"] = new BuildConfigGenerator(),          // Story 3.1
             ["pipeline/github-actions-arm64-job"] = new PipelineGenerator(),  // Story 3.2
             ["code/arch-conditional-cleanup"] = new CodePatcher(chatModel),   // Story 3.3
+            ["python/pytorch-arm64-wheel-audit"] = new PyTorchArm64WheelAudit(),
+            ["python/native-wheel-audit"] = new PythonNativeWheelAudit(),
+            ["python/cuda-to-directml-audit"] = new CudaToDirectMlAudit(),
+            ["python/pip-constraints-arm64-scaffold"] = new PipConstraintsArm64Scaffold(),
         };
     }
 

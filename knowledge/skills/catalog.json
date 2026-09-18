@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
-  "catalogVersion": "2026-09-17.2",
-  "generatedAt": "2026-09-17T18:00:00Z",
+  "catalogVersion": "2026-09-18.1",
+  "generatedAt": "2026-09-18T12:00:00Z",
   "skills": [
     {
       "name": "assessment/repository-discovery",
@@ -233,6 +233,50 @@
       "supportedInputs": ["binary"],
       "supportedOutputs": ["perf-report"],
       "implementationStatus": "declared-only"
+    },
+    {
+      "name": "python/pytorch-arm64-wheel-audit",
+      "version": "0.1.0",
+      "category": "dependency",
+      "description": "Audits torch/torchvision/torchaudio pins and writes a report grounded in guidance pytorch-woa-status-01. Does not modify requirements.txt.",
+      "writeAccess": true,
+      "supportedInputs": ["requirements.txt", "pyproject.toml"],
+      "supportedOutputs": ["report"],
+      "implementationStatus": "runnable",
+      "implementedBy": "AutomatedMigration.CodeMigration.Python.PyTorchArm64WheelAudit"
+    },
+    {
+      "name": "python/native-wheel-audit",
+      "version": "0.1.0",
+      "category": "dependency",
+      "description": "Classifies pip dependencies against a hand-curated table of known-native packages and emits a per-dep ARM64 wheel-verification checklist. Grounded in guidance python-woa-wheels-01.",
+      "writeAccess": true,
+      "supportedInputs": ["requirements.txt", "pyproject.toml"],
+      "supportedOutputs": ["report"],
+      "implementationStatus": "runnable",
+      "implementedBy": "AutomatedMigration.CodeMigration.Python.PythonNativeWheelAudit"
+    },
+    {
+      "name": "python/cuda-to-directml-audit",
+      "version": "0.1.0",
+      "category": "code",
+      "description": "Enumerates every CUDA reference in Python source (torch.cuda, .to('cuda'), .cuda(), CUDA_VISIBLE_DEVICES, ...) and emits a routing report citing pytorch-woa-status-01 and onnxruntime-arm64-01. Does not choose a backend.",
+      "writeAccess": true,
+      "supportedInputs": ["source-tree"],
+      "supportedOutputs": ["report"],
+      "implementationStatus": "runnable",
+      "implementedBy": "AutomatedMigration.CodeMigration.Python.CudaToDirectMlAudit"
+    },
+    {
+      "name": "python/pip-constraints-arm64-scaffold",
+      "version": "0.1.0",
+      "category": "dependency",
+      "description": "Emits a starter constraints-arm64.txt file plus a README explaining how to use it with `pip install -c`. Pins are intentionally left blank so nothing is fabricated. Skipped if constraints-arm64.txt already exists.",
+      "writeAccess": true,
+      "supportedInputs": ["requirements.txt", "pyproject.toml"],
+      "supportedOutputs": ["patch", "report"],
+      "implementationStatus": "runnable",
+      "implementedBy": "AutomatedMigration.CodeMigration.Python.PipConstraintsArm64Scaffold"
     }
   ]
 }
