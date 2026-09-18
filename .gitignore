@@ -37,3 +37,6 @@ __azurite_db_*__.json
 __pycache__/
 *.pyc
 *.pyo
+artifacts/
+infra/*.json
+!infra/main.parameters.json

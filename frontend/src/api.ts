@@ -1,4 +1,6 @@
 import type {
+  Arm64BuildDispatch,
+  Arm64RunStatus,
   BranchApplication,
   CriterionResult,
   CriterionResultStatus,
@@ -750,6 +752,14 @@ function isValidationDispatch(value: unknown): value is ValidationDispatch {
     && isNullableString(value.error);
 }
 
+function isArm64BuildDispatch(value: unknown): value is Arm64BuildDispatch {
+  return isRecord(value)
+    && isNullableString(value.jobId)
+    && isNullableString(value.statusUrl)
+    && typeof value.dispatched === 'boolean'
+    && isNullableString(value.error);
+}
+
 function isMigrationActionsResult(value: unknown): value is MigrationActionsResult {
   return isRecord(value)
     && typeof value.planId === 'string'
@@ -759,7 +769,8 @@ function isMigrationActionsResult(value: unknown): value is MigrationActionsResu
     && Array.isArray(value.skipped)
     && value.skipped.every(isSkippedWorkItem)
     && (value.branch === null || value.branch === undefined || isBranchApplication(value.branch))
-    && (value.validation === null || value.validation === undefined || isValidationDispatch(value.validation));
+    && (value.validation === null || value.validation === undefined || isValidationDispatch(value.validation))
+    && (value.arm64Build === null || value.arm64Build === undefined || isArm64BuildDispatch(value.arm64Build));
 }
 
 function isMigrationJob(value: unknown): value is MigrationJob {
@@ -840,6 +851,40 @@ export async function getMigrationJob(
     );
   }
   return normalizeMigrationJob(payload);
+}
+
+const arm64RunStatuses = new Set<Arm64RunStatus['status']>(['queued', 'running', 'completed', 'failed', 'cancelled']);
+
+function isArm64RunStatus(value: unknown): value is Arm64RunStatus {
+  if (!isRecord(value)) return false;
+  return typeof value.jobId === 'string'
+    && typeof value.status === 'string'
+    && arm64RunStatuses.has(value.status as Arm64RunStatus['status'])
+    && typeof value.createdAt === 'string'
+    && isNullableString(value.startedAt)
+    && isNullableString(value.finishedAt)
+    && (value.scorecard === null || value.scorecard === undefined || isRecord(value.scorecard))
+    && isNullableString(value.error);
+}
+
+export async function getArm64Run(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<Arm64RunStatus> {
+  const response = await fetchAutomationService(
+    `/api/migration-actions/arm64-runs/${encodeURIComponent(runId)}`,
+    { signal },
+  );
+  const payload = await readJson(response);
+  if (!response.ok) {
+    throw new Error(
+      problemMessage(payload).replace(/^Assessment failed\.$/, 'ARM64 run status is unavailable.'),
+    );
+  }
+  if (!isArm64RunStatus(payload)) {
+    throw new Error('The ARM64 runner returned an invalid response.');
+  }
+  return payload as Arm64RunStatus;
 }
 
 function waitForNextPoll(intervalMs: number, signal?: AbortSignal) {

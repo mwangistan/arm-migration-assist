@@ -37,7 +37,8 @@ public sealed record MigrationActionsResult(
     [property: JsonPropertyName("generated")] IReadOnlyList<GeneratedPatchDto> Generated,
     [property: JsonPropertyName("skipped")] IReadOnlyList<SkippedWorkItemDto> Skipped,
     [property: JsonPropertyName("branch")] BranchApplicationDto? Branch = null,
-    [property: JsonPropertyName("validation")] ValidationDispatchDto? Validation = null);
+    [property: JsonPropertyName("validation")] ValidationDispatchDto? Validation = null,
+    [property: JsonPropertyName("arm64Build")] Arm64BuildDispatchDto? Arm64Build = null);
 
 public sealed record BranchApplicationDto(
     [property: JsonPropertyName("worktreePath")] string WorktreePath,
@@ -54,6 +55,12 @@ public sealed record PatchRejectionDto(
 public sealed record ValidationDispatchDto(
     [property: JsonPropertyName("planId")] string? PlanId,
     [property: JsonPropertyName("runId")] string? RunId,
+    [property: JsonPropertyName("statusUrl")] string? StatusUrl,
+    [property: JsonPropertyName("dispatched")] bool Dispatched,
+    [property: JsonPropertyName("error")] string? Error);
+
+public sealed record Arm64BuildDispatchDto(
+    [property: JsonPropertyName("jobId")] string? JobId,
     [property: JsonPropertyName("statusUrl")] string? StatusUrl,
     [property: JsonPropertyName("dispatched")] bool Dispatched,
     [property: JsonPropertyName("error")] string? Error);
