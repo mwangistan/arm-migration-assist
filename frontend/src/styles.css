@@ -1858,3 +1858,42 @@ footer {
 .coverage-gaps li strong {
   margin-right: 6px;
 }
+
+/* ---- Plan provenance panel ---- */
+
+.plan-provenance {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand, #0f6cbd);
+  border-radius: 6px;
+  background: var(--surface, #f8fafc);
+}
+
+.plan-provenance .eyebrow {
+  margin: 0 0 4px 0;
+  color: var(--brand, #0f6cbd);
+}
+
+.plan-provenance-context {
+  margin: 0 0 8px 0;
+  color: var(--ink-muted, #4a4a4a);
+  font-size: 13.5px;
+  max-width: 70ch;
+}
+
+.plan-provenance ul {
+  list-style: disc;
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plan-provenance li {
+  color: var(--ink, #1f2937);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+

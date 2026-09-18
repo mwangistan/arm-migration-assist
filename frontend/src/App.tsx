@@ -473,9 +473,17 @@ function PlanningResults({
       ) : null}
 
       {warnings.length > 0 ? (
-        <MessageBar className="planning-warning" intent="warning">
-          <MessageBarBody>{warnings.join(' ')}</MessageBarBody>
-        </MessageBar>
+        <section className="plan-provenance" aria-label="Plan provenance">
+          <p className="eyebrow">Plan provenance</p>
+          <p className="plan-provenance-context">
+            The pipeline recorded these observations while producing the plan. They describe how the plan was built (retries, deterministic synthesis, corpus tool calls) — none of them require reviewer action.
+          </p>
+          <ul>
+            {warnings.map((warning, index) => (
+              <li key={`${warning}-${index}`}>{warning}</li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       <div className="work-items-heading">
