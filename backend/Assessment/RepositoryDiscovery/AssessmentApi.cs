@@ -438,10 +438,11 @@ public static class AssessmentApi
             ["source"] = [message],
         });
 
-    private static string[] ReadAllowedOrigins(IConfiguration configuration)
+    // Accept ',' and ';' so the same list format works for cd.yml env vars and appsettings.
+    internal static string[] ReadAllowedOrigins(IConfiguration configuration)
     {
         var configured = configuration["DashboardOrigins"]?
-            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return configured is { Length: > 0 }
             ? configured
             : ["http://localhost:5173", "http://127.0.0.1:5173"];
