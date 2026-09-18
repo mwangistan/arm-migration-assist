@@ -252,3 +252,140 @@ export interface MigrationPlanningResult {
   score: ReadinessScore;
   warnings: string[];
 }
+
+// ---- Feature 3: reviewable changes ----
+
+export interface GeneratedPatch {
+  workItemId: string;
+  agentOrSkill: string;
+  title: string;
+  diff: string;
+  originalSizeBytes: number;
+  truncated: boolean;
+  evidenceIds: string[];
+  acceptanceTests: MigrationAcceptanceTest[];
+}
+
+export interface SkippedWorkItem {
+  workItemId: string;
+  agentOrSkill: string;
+  reason: string;
+}
+
+export interface PatchRejection {
+  id: string;
+  reason: string;
+}
+
+export interface BranchApplication {
+  worktreePath: string;
+  branchName: string;
+  branchHeadSha: string;
+  commitCreated: boolean;
+  appliedIds: string[];
+  rejected: PatchRejection[];
+}
+
+// F3 → F4 dispatch envelope populated by the composed host once F3 has committed a branch.
+export interface ValidationDispatch {
+  planId: string | null;
+  runId: string | null;
+  statusUrl: string | null;
+  dispatched: boolean;
+  error: string | null;
+}
+
+export interface MigrationActionsResult {
+  planId: string;
+  sourceCommitSha: string;
+  generated: GeneratedPatch[];
+  skipped: SkippedWorkItem[];
+  branch: BranchApplication | null;
+  validation: ValidationDispatch | null;
+}
+
+export type MigrationJobStatus = 'queued' | 'running' | 'completed' | 'failed';
+
+export interface MigrationJob {
+  jobId: string;
+  status: MigrationJobStatus;
+  planId: string;
+  target: { url: string; commitSha: string };
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  result: MigrationActionsResult | null;
+  error: string | null;
+}
+
+export interface MigrationJobAccepted {
+  jobId: string;
+  status: string;
+  statusUrl: string;
+}
+
+// ---- Feature 4: validation run + scorecard ----
+
+export type ValidationRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export interface ValidationRunSummary {
+  runId: string;
+  planId: string;
+  status: ValidationRunStatus;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  summary: string | null;
+  error: string | null;
+}
+
+export interface ValidationCriterion {
+  key: string;
+  source: string;
+  sourceId: string;
+  workItemId: string | null;
+  category: string;
+  description: string;
+  expectedOutcome: string;
+}
+
+export type CriterionResultStatus = 'passed' | 'failed' | 'not-run' | 'inconclusive' | 'skipped';
+
+export interface CriterionResult {
+  criterion: ValidationCriterion;
+  status: CriterionResultStatus;
+  reason: string;
+  commandIds: string[];
+  evidenceIds: string[];
+}
+
+export type OverallScorecardStatus =
+  | 'validated'
+  | 'validation-failed'
+  | 'partially-validated'
+  | 'not-validated';
+
+export interface ValidationScorecard {
+  status: OverallScorecardStatus;
+  passed: number;
+  failed: number;
+  notRun: number;
+  inconclusive: number;
+  skipped: number;
+  criteria: CriterionResult[];
+}
+
+export interface ValidationCoverageGap {
+  id: string;
+  description: string;
+  criterionKeys: string[];
+}
+
+export interface ValidationReport {
+  schemaVersion: string;
+  runId: string;
+  planFingerprint: string;
+  migrationPlanId: string;
+  scorecard: ValidationScorecard;
+  coverageGaps: ValidationCoverageGap[];
+}
