@@ -2,7 +2,9 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using MigrationPlanner.Api.Automation;
+using MigrationPlanner.Api.Planning;
 using MigrationPlanner.Application.Abstractions;
 using MigrationPlanner.Application.Planning;
 using MigrationPlanner.Application.Reporting;
@@ -29,9 +31,8 @@ internal static class MigrationPlansEndpoint
     private static async Task<IResult> HandleAsync(
         HttpContext context,
         IAssessmentSchemaValidator schemaValidator,
-        MigrationPlanningService planningService,
-        IPlanArtifactStore artifactStore,
-        IAutomationDispatcher automationDispatcher,
+        PlanRunStore runStore,
+        IServiceScopeFactory scopeFactory,
         CancellationToken cancellationToken)
     {
         JsonDocument document;
@@ -57,7 +58,6 @@ internal static class MigrationPlansEndpoint
                 var statusCode = schemaResult.ErrorCode == PlannerErrorCode.SchemaUnsupportedVersion
                     ? StatusCodes.Status409Conflict
                     : StatusCodes.Status400BadRequest;
-
                 return PlannerProblemDetailsFactory.Problem(
                     statusCode,
                     schemaResult.ErrorCode ?? PlannerErrorCode.SchemaInvalid,
@@ -88,6 +88,42 @@ internal static class MigrationPlansEndpoint
                     Array.Empty<string>());
             }
 
+            // Fork to a background task so the caller does not block on model generation
+            // (which frequently exceeds SWA's 45s ingress timeout). Frontend polls the
+            // returned statusUrl for completion.
+            var run = runStore.Create();
+            _ = Task.Run(() => ExecutePlanAsync(run, assessment, scopeFactory));
+
+            var statusUrl = $"/api/migration-plans/runs/{run.RunId}";
+            var envelope = new
+            {
+                runId = run.RunId,
+                status = "queued",
+                statusUrl,
+                createdAt = run.CreatedAt,
+            };
+            return Results.Accepted(statusUrl, envelope);
+        }
+    }
+
+    private static async Task ExecutePlanAsync(
+        PlanRunRecord run,
+        RepositoryAssessmentV1 assessment,
+        IServiceScopeFactory scopeFactory)
+    {
+        run.StartedAt = DateTimeOffset.UtcNow;
+        run.Status = PlanRunStatus.Running;
+
+        // Detached from the caller's cancellation token; the request already returned.
+        var cancellationToken = CancellationToken.None;
+
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var planningService = scope.ServiceProvider.GetRequiredService<MigrationPlanningService>();
+            var artifactStore = scope.ServiceProvider.GetRequiredService<IPlanArtifactStore>();
+            var automationDispatcher = scope.ServiceProvider.GetRequiredService<IAutomationDispatcher>();
+
             PlanResult result;
             try
             {
@@ -97,32 +133,32 @@ internal static class MigrationPlansEndpoint
             }
             catch (CorpusIntegrityException ex)
             {
-                return PlannerProblemDetailsFactory.Problem(
-                    StatusCodes.Status503ServiceUnavailable,
-                    PlannerErrorCode.CorpusIntegrity,
-                    "Guidance corpus integrity check failed.",
-                    [ex.Message]);
+                run.Status = PlanRunStatus.Failed;
+                run.FailureStatusCode = StatusCodes.Status503ServiceUnavailable;
+                run.FailureErrorCode = PlannerErrorCode.CorpusIntegrity;
+                run.FailureTitle = "Guidance corpus integrity check failed.";
+                run.FailureErrors = new[] { ex.Message };
+                return;
             }
 
             if (!result.IsSuccess)
             {
+                run.Status = PlanRunStatus.Failed;
                 if (result.ErrorCode == PlannerErrorCode.ModelRateLimited)
                 {
-                    var seconds = (int)Math.Ceiling((result.RetryAfter ?? TimeSpan.FromSeconds(30)).TotalSeconds);
-                    context.Response.Headers.Append("Retry-After", seconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                    return PlannerProblemDetailsFactory.Problem(
-                        StatusCodes.Status429TooManyRequests,
-                        PlannerErrorCode.ModelRateLimited,
-                        $"Rate limit reached upstream. Retry in {seconds} seconds.",
-                        result.Errors ?? Array.Empty<string>());
+                    run.RetryAfterSeconds = (int)Math.Ceiling((result.RetryAfter ?? TimeSpan.FromSeconds(30)).TotalSeconds);
+                    run.FailureStatusCode = StatusCodes.Status429TooManyRequests;
+                    run.FailureErrorCode = PlannerErrorCode.ModelRateLimited;
+                    run.FailureTitle = $"Rate limit reached upstream. Retry in {run.RetryAfterSeconds} seconds.";
                 }
-
-                var statusCode = MapErrorStatus(result.ErrorCode);
-                return PlannerProblemDetailsFactory.Problem(
-                    statusCode,
-                    result.ErrorCode ?? PlannerErrorCode.Internal,
-                    "Migration plan could not be produced.",
-                    result.Errors ?? Array.Empty<string>());
+                else
+                {
+                    run.FailureStatusCode = MapErrorStatus(result.ErrorCode);
+                    run.FailureErrorCode = result.ErrorCode ?? PlannerErrorCode.Internal;
+                    run.FailureTitle = "Migration plan could not be produced.";
+                }
+                run.FailureErrors = result.Errors ?? Array.Empty<string>();
+                return;
             }
 
             artifactStore.Store(MigrationReportFactory.From(assessment, result));
@@ -131,18 +167,25 @@ internal static class MigrationPlansEndpoint
                 .DispatchAsync(result.Plan!, assessment.Repository, cancellationToken)
                 .ConfigureAwait(false);
 
-            return Results.Ok(new
-            {
-                runId = result.RunId,
-                plan = result.Plan,
-                score = result.Score,
-                warnings = result.Warnings,
-                automation,
-            });
+            run.Result = result;
+            run.Automation = automation;
+            run.Status = PlanRunStatus.Completed;
+        }
+        catch (Exception ex)
+        {
+            run.Status = PlanRunStatus.Failed;
+            run.FailureStatusCode = StatusCodes.Status500InternalServerError;
+            run.FailureErrorCode = PlannerErrorCode.Internal;
+            run.FailureTitle = "Migration planning failed unexpectedly.";
+            run.FailureErrors = new[] { ex.Message };
+        }
+        finally
+        {
+            run.FinishedAt = DateTimeOffset.UtcNow;
         }
     }
 
-    private static int MapErrorStatus(string? errorCode) => errorCode switch
+    internal static int MapErrorStatus(string? errorCode) => errorCode switch
     {
         PlannerErrorCode.SchemaInvalid => StatusCodes.Status400BadRequest,
         PlannerErrorCode.SchemaUnsupportedVersion => StatusCodes.Status409Conflict,

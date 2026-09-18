@@ -588,6 +588,16 @@ export async function planMigration(
     body: JSON.stringify(assessment),
     signal,
   });
+  // 202 Accepted → async run; poll the returned statusUrl until it terminates.
+  // 200 OK is not used by the current server but kept as a fallback for older builds.
+  if (response.status === 202) {
+    const acceptEnvelope = await readJson(response);
+    if (!isRecord(acceptEnvelope) || typeof acceptEnvelope.runId !== 'string') {
+      throw new Error('The migration planner returned an invalid acceptance envelope.');
+    }
+    return await pollMigrationPlanRun(acceptEnvelope.runId, assessment, signal);
+  }
+
   const payload = await readJson(response);
   if (!response.ok) {
     throw new Error(problemMessage(payload).replace(/^Assessment failed\.$/, 'Migration planning failed.'));
@@ -601,6 +611,54 @@ export async function planMigration(
   }
 
   return payload;
+}
+
+async function pollMigrationPlanRun(
+  runId: string,
+  assessment: RepositoryAssessment,
+  signal?: AbortSignal,
+): Promise<MigrationPlanningResult> {
+  const startedAt = Date.now();
+  const timeoutMs = 5 * 60 * 1000;
+  const intervalMs = 2_000;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    const pollResponse = await fetchMigrationPlanner(
+      `/api/migration-plans/runs/${encodeURIComponent(runId)}`,
+      { signal },
+    );
+    const pollPayload = await readJson(pollResponse);
+    if (!pollResponse.ok) {
+      throw new Error(problemMessage(pollPayload).replace(/^Assessment failed\.$/, 'Migration planning failed.'));
+    }
+    if (!isRecord(pollPayload)) {
+      throw new Error('The migration planner returned an invalid poll response.');
+    }
+    const status = pollPayload.status;
+    if (status === 'completed') {
+      if (!isMigrationPlanningResult(pollPayload)) {
+        throw new Error('The migration planner returned an invalid completed response.');
+      }
+      if (pollPayload.plan.assessmentId !== assessment.assessmentId
+          || pollPayload.score.assessmentId !== assessment.assessmentId) {
+        throw new Error('The migration planner returned a result for a different assessment.');
+      }
+      return pollPayload;
+    }
+    if (status === 'failed') {
+      const errorObj = pollPayload.error;
+      const title = isRecord(errorObj) && typeof errorObj.title === 'string' ? errorObj.title : 'Migration planning failed.';
+      const errors = isRecord(errorObj) && Array.isArray(errorObj.errors) ? errorObj.errors.filter((e): e is string => typeof e === 'string') : [];
+      const detail = errors.length > 0 ? `${title} (${errors.join('; ')})` : title;
+      throw new Error(detail);
+    }
+    await waitForNextPoll(intervalMs, signal);
+  }
+
+  throw new Error(`Migration planning did not complete within ${Math.round(timeoutMs / 1000)}s.`);
 }
 
 export function migrationReportUrl(runId: string, extension: 'md' | 'html') {

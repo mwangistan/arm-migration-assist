@@ -22,7 +22,7 @@ public sealed class FeatureThreeHandoffTests : IClassFixture<PlannerWebApplicati
     public async Task PlannedAssessment_IsDirectlyConsumableByFeatureThree()
     {
         using var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync(
+        var response = await client.PostAndAwaitPlanAsync(
             "/api/migration-plans",
             MinimalValidAssessmentFactory.Build("assessment-feature-three"));
 
