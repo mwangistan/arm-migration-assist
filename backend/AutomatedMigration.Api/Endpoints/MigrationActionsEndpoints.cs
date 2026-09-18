@@ -1,5 +1,6 @@
 using AutomatedMigration.Api.Contracts;
 using AutomatedMigration.Api.Jobs;
+using AutomatedMigration.Api.Validation;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,6 +12,7 @@ public static class MigrationActionsEndpoints
     {
         endpoints.MapPost("/api/migration-actions", HandlePostAsync);
         endpoints.MapGet("/api/migration-actions/jobs/{jobId}", HandleGetAsync);
+        endpoints.MapGet("/api/migration-actions/arm64-runs/{runId}", HandleArm64RunStatusAsync);
         return endpoints;
     }
 
@@ -79,6 +81,46 @@ public static class MigrationActionsEndpoints
 
     private static bool IsHex(char c) =>
         (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+
+    // Proxy for the ARM64 runner status endpoint so the browser polls the composed host
+    // (avoids CORS and keeps the runner bearer token server-side only).
+    private static async Task<IResult> HandleArm64RunStatusAsync(
+        string runId,
+        [FromServices] Arm64BuildDispatcherOptions options,
+        [FromServices] IHttpClientFactory httpClientFactory,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(options.BaseUrl))
+        {
+            return Results.NotFound(Problem("ARM64 runner is not configured."));
+        }
+        if (string.IsNullOrWhiteSpace(runId) || !runId.All(IsAlphanumeric))
+        {
+            return Results.BadRequest(Problem("runId must be alphanumeric."));
+        }
+
+        var client = httpClientFactory.CreateClient("arm64RunnerProxy");
+        client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+        client.Timeout = TimeSpan.FromSeconds(15);
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/arm64/runs/{runId}");
+        if (!string.IsNullOrWhiteSpace(options.BearerToken))
+        {
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", options.BearerToken);
+        }
+        try
+        {
+            using var response = await client.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            return Results.Content(body, contentType: response.Content.Headers.ContentType?.ToString() ?? "application/json",
+                statusCode: (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            return Results.Problem($"ARM64 runner unreachable: {ex.Message}", statusCode: 502);
+        }
+    }
+
+    private static bool IsAlphanumeric(char c) => char.IsLetterOrDigit(c);
 
     private static ProblemDetails Problem(string detail) => new()
     {

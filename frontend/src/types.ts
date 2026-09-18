@@ -295,6 +295,59 @@ export interface ValidationDispatch {
   error: string | null;
 }
 
+// F3 → ARM64 runner VM dispatch envelope. Populated by the composed host after F3
+// generates patches. The runner clones the source repo, applies the patches, and
+// runs a real build+test on Ampere Cobalt 100 Arm64 hardware in Azure.
+export interface Arm64BuildDispatch {
+  jobId: string | null;
+  statusUrl: string | null;
+  dispatched: boolean;
+  error: string | null;
+}
+
+export interface Arm64Scorecard {
+  hardware: {
+    vmSku: string;
+    region: string;
+    architecture: string;
+    kernel: string;
+    cpuModel: string;
+    cpuCount: number;
+    memoryMB: number;
+  };
+  sourceCommitSha: string;
+  resolvedCommitSha: string;
+  patchApplication: {
+    applied: string[];
+    rejected: { id: string; reason: string }[];
+  };
+  build: Arm64StepOutcome | null;
+  tests: Arm64StepOutcome | null;
+  wallClockSeconds: number;
+  summary: string;
+}
+
+export interface Arm64StepOutcome {
+  tool: string;
+  command: string;
+  workingDirectory: string;
+  exitCode: number;
+  succeeded: boolean;
+  durationSeconds: number;
+  stdoutTail: string;
+  stderrTail: string;
+}
+
+export interface Arm64RunStatus {
+  jobId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  scorecard: Arm64Scorecard | null;
+  error: string | null;
+}
+
 export interface MigrationActionsResult {
   planId: string;
   sourceCommitSha: string;
@@ -302,6 +355,7 @@ export interface MigrationActionsResult {
   skipped: SkippedWorkItem[];
   branch: BranchApplication | null;
   validation: ValidationDispatch | null;
+  arm64Build: Arm64BuildDispatch | null;
 }
 
 export type MigrationJobStatus = 'queued' | 'running' | 'completed' | 'failed';

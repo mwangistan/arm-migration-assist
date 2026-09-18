@@ -31,6 +31,7 @@ public static class AutomationApiHost
         }
 
         services.AddRepositoryClonePool(configuration);
+        services.AddHttpClient();
 
         var validationOpts = new ValidationDispatcherOptions();
         configuration.GetSection(ValidationDispatcherOptions.SectionName).Bind(validationOpts);
@@ -50,6 +51,28 @@ public static class AutomationApiHost
         else
         {
             services.AddSingleton<IValidationDispatcher, NoopValidationDispatcher>();
+        }
+
+        var arm64Opts = new Arm64BuildDispatcherOptions();
+        configuration.GetSection(Arm64BuildDispatcherOptions.SectionName).Bind(arm64Opts);
+        var arm64UrlEnv = Environment.GetEnvironmentVariable("ARM64_RUNNER_URL");
+        if (!string.IsNullOrWhiteSpace(arm64UrlEnv)) arm64Opts.BaseUrl = arm64UrlEnv;
+        var arm64TokenEnv = Environment.GetEnvironmentVariable("ARM64_RUNNER_BEARER_TOKEN");
+        if (!string.IsNullOrWhiteSpace(arm64TokenEnv)) arm64Opts.BearerToken = arm64TokenEnv;
+        services.AddSingleton<Arm64BuildDispatcherOptions>(arm64Opts);
+
+        if (!string.IsNullOrWhiteSpace(arm64Opts.BaseUrl))
+        {
+            services.AddHttpClient<IArm64BuildDispatcher, HttpArm64BuildDispatcher>(client =>
+            {
+                client.BaseAddress = new Uri(arm64Opts.BaseUrl!, UriKind.Absolute);
+                client.Timeout = TimeSpan.FromSeconds(Math.Max(5, arm64Opts.TimeoutSeconds));
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("arm-migration-assist-automation-api/1.0");
+            });
+        }
+        else
+        {
+            services.AddSingleton<IArm64BuildDispatcher, NoopArm64BuildDispatcher>();
         }
 
         services.AddSingleton<MigrationJobStore>();
