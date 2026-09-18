@@ -56,6 +56,7 @@ internal static class PlannerPromptBuilder
         AppendModelProvenance(builder, provenance);
         AppendGranularityExpectations(builder, assessment, score);
         AppendAllowedEvidenceIds(builder, assessment);
+        AppendSkillIoAllowlist(builder, assessment);
 
         if (enableGuidanceLookupTool)
         {
@@ -171,6 +172,46 @@ internal static class PlannerPromptBuilder
                 builder.AppendLine("  3. Copy allowed evidenceId values CHARACTER-FOR-CHARACTER. They");
                 builder.AppendLine("     contain long hex suffixes; count the digits and echo each");
                 builder.AppendLine("     one exactly.");
+                builder.AppendLine("  4. Do NOT rewrite, reword, or reorder any other field. Every");
+                builder.AppendLine("     other value must match the Previous plan character-for-character.");
+                builder.AppendLine("  5. Output the corrected JSON only. No prose.");
+            }
+            else if (retryHint.Reason == PlannerRetryReason.SkillIoMismatch)
+            {
+                var violations = retryHint.SkillIoViolations ?? Array.Empty<SkillIoViolation>();
+                var allowlists = retryHint.SkillIoAllowlists
+                    ?? new Dictionary<string, SkillIoAllowlist>(StringComparer.Ordinal);
+
+                builder.AppendLine("Invalid workItems[] input/output values currently cited by the");
+                builder.AppendLine("previous plan (these are NOT in the referenced skill's declared");
+                builder.AppendLine("supportedInputs/supportedOutputs and MUST be replaced or removed):");
+                foreach (var v in violations)
+                {
+                    builder.AppendLine(
+                        $"  - workItems[{v.WorkItemIndex}].{v.FieldName} cites \"{v.InvalidValue}\" for skill \"{v.SkillName}\"");
+                }
+                builder.AppendLine();
+                builder.AppendLine("Allowed values per referenced skill. Pick workItems[].inputs from");
+                builder.AppendLine("that skill's supportedInputs list; pick workItems[].expectedOutputs");
+                builder.AppendLine("from its supportedOutputs list. Empty arrays are permitted:");
+                foreach (var (name, io) in allowlists)
+                {
+                    builder.Append("  ").AppendLine(name);
+                    builder.Append("    supportedInputs  : ");
+                    builder.AppendLine(io.Inputs.Count == 0 ? "(none)" : string.Join(", ", io.Inputs));
+                    builder.Append("    supportedOutputs : ");
+                    builder.AppendLine(io.Outputs.Count == 0 ? "(none)" : string.Join(", ", io.Outputs));
+                }
+                builder.AppendLine();
+                builder.AppendLine("Rules for the retry (STRICT):");
+                builder.AppendLine("  1. Copy the entire 'Previous plan' JSON below into your output.");
+                builder.AppendLine("  2. For each invalid value listed above, either replace it with");
+                builder.AppendLine("     a value drawn from the same skill's allowed list, or remove");
+                builder.AppendLine("     it. Empty inputs/expectedOutputs arrays are permitted.");
+                builder.AppendLine("  3. If the invalid value looks like an evidence identifier (long");
+                builder.AppendLine("     hex suffix), it belongs in workItems[].evidenceIds, NOT in");
+                builder.AppendLine("     workItems[].inputs. Move it there if it is present in the");
+                builder.AppendLine("     assessment; otherwise drop it.");
                 builder.AppendLine("  4. Do NOT rewrite, reword, or reorder any other field. Every");
                 builder.AppendLine("     other value must match the Previous plan character-for-character.");
                 builder.AppendLine("  5. Output the corrected JSON only. No prose.");
@@ -304,6 +345,60 @@ internal static class PlannerPromptBuilder
         }
     }
 
+    // Renders the per-skill supportedInputs / supportedOutputs enumeration so the model can
+    // populate workItems[].inputs and workItems[].expectedOutputs from these lists rather than
+    // guessing (a common failure mode: pasting evidenceIds where skill I/O is expected, which
+    // fails PlanSafetyValidator.ValidateSkillIo with planner.plan.skillIoMismatch).
+    private static void AppendSkillIoAllowlist(
+        StringBuilder builder, RepositoryAssessmentV1 assessment)
+    {
+        if (assessment.AvailableSkills.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine();
+        builder.AppendLine("=== ALLOWED workItems[] INPUT/OUTPUT VALUES (per rule 6.5) ===");
+        builder.AppendLine("For every workItems[].agentOrSkill you reference, workItems[].inputs and");
+        builder.AppendLine("workItems[].expectedOutputs MUST be subsets of that skill's declared");
+        builder.AppendLine("supportedInputs and supportedOutputs listed below. Any other string will");
+        builder.AppendLine("be rejected with HTTP 422 planner.plan.skillIoMismatch.");
+        builder.AppendLine();
+        builder.AppendLine("These are NOT evidenceIds. evidenceIds go into workItems[].evidenceIds,");
+        builder.AppendLine("never into workItems[].inputs.");
+        builder.AppendLine();
+
+        foreach (var skill in assessment.AvailableSkills)
+        {
+            if (string.IsNullOrEmpty(skill.Name)) continue;
+
+            builder.Append("  ").AppendLine(skill.Name);
+            var inputs = skill.SupportedInputs ?? Array.Empty<string>();
+            var outputs = skill.SupportedOutputs ?? Array.Empty<string>();
+
+            builder.Append("    supportedInputs  : ");
+            if (inputs.Count == 0)
+            {
+                builder.AppendLine("(none — use an empty inputs array)");
+            }
+            else
+            {
+                builder.AppendLine(string.Join(", ", inputs));
+            }
+
+            builder.Append("    supportedOutputs : ");
+            if (outputs.Count == 0)
+            {
+                builder.AppendLine("(none — use an empty expectedOutputs array)");
+            }
+            else
+            {
+                builder.AppendLine(string.Join(", ", outputs));
+            }
+        }
+    }
+
     private const string SystemPrompt = """
         You are the ARM Migration Assist planner. You produce a MigrationPlanV1
         JSON document that recommends a Windows on Arm migration strategy for
@@ -376,6 +471,15 @@ internal static class PlannerPromptBuilder
            only guidanceId values that appear in guidanceIndex. Cite only
            skill names that appear in availableSkills; anything else belongs
            in missingSkills.
+        6.5. workItems[].inputs and workItems[].expectedOutputs MUST be
+             subsets of the referenced skill's declared supportedInputs and
+             supportedOutputs. See the "ALLOWED workItems[] INPUT/OUTPUT
+             VALUES" section for the exact per-skill lists. Do NOT paste
+             evidenceIds, file paths, or human-readable descriptions here;
+             those belong in workItems[].evidenceIds, not in inputs/outputs.
+             Empty arrays are permitted when nothing applies. The server
+             rejects any other value with HTTP 422
+             planner.plan.skillIoMismatch.
         7. Never invent files, dependencies, or CI jobs. If unsure, add a
            PlanUnknown entry instead of guessing.
         8. Every workItem sets approvalRequired to true and has at least one
