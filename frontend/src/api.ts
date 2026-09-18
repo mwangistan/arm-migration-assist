@@ -945,6 +945,25 @@ export async function getArm64Run(
   return payload as Arm64RunStatus;
 }
 
+export async function pollArm64Run(
+  runId: string,
+  options: {
+    onUpdate?: (run: Arm64RunStatus) => void;
+    signal?: AbortSignal;
+    intervalMs?: number;
+  } = {},
+): Promise<Arm64RunStatus> {
+  const interval = options.intervalMs ?? 3000;
+  let latest = await getArm64Run(runId, options.signal);
+  options.onUpdate?.(latest);
+  while (latest.status === 'queued' || latest.status === 'running') {
+    await waitForNextPoll(interval, options.signal);
+    latest = await getArm64Run(runId, options.signal);
+    options.onUpdate?.(latest);
+  }
+  return latest;
+}
+
 function waitForNextPoll(intervalMs: number, signal?: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {

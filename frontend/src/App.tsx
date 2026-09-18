@@ -33,6 +33,7 @@ import {
   getValidationReport,
   migrationReportUrl,
   planMigration,
+  pollArm64Run,
   pollMigrationJob,
   pollValidationRun,
   startGitHubAuthentication,
@@ -41,6 +42,9 @@ import {
   type AssessmentProgress,
 } from './api';
 import type {
+  Arm64BuildDispatch,
+  Arm64RunStatus,
+  Arm64StepOutcome,
   CodeFinding,
   CriterionResult,
   DependencyFinding,
@@ -676,6 +680,9 @@ function TransformValidateResults({
   validationReport,
   validationPending,
   validationError,
+  arm64Run,
+  arm64Pending,
+  arm64Error,
   onRun,
   onCancel,
 }: {
@@ -688,6 +695,9 @@ function TransformValidateResults({
   validationReport: ValidationReport | null;
   validationPending: boolean;
   validationError: string | null;
+  arm64Run: Arm64RunStatus | null;
+  arm64Pending: boolean;
+  arm64Error: string | null;
   onRun: () => void;
   onCancel: () => void;
 }) {
@@ -696,6 +706,7 @@ function TransformValidateResults({
   const skipped = result?.skipped ?? [];
   const branch = result?.branch ?? null;
   const dispatch = result?.validation ?? null;
+  const arm64Dispatch = result?.arm64Build ?? null;
   const scorecard = validationReport?.scorecard ?? null;
   const canRun = Boolean(target) && !jobPending;
 
@@ -908,8 +919,194 @@ function TransformValidateResults({
           ) : null}
         </div>
       ) : null}
+
+      <Arm64BuildPanel
+        dispatch={arm64Dispatch}
+        run={arm64Run}
+        pending={arm64Pending}
+        error={arm64Error}
+      />
     </section>
   );
+}
+
+function Arm64BuildPanel({
+  dispatch,
+  run,
+  pending,
+  error,
+}: {
+  dispatch: Arm64BuildDispatch | null;
+  run: Arm64RunStatus | null;
+  pending: boolean;
+  error: string | null;
+}) {
+  if (!dispatch) return null;
+
+  const scorecard = run?.scorecard ?? null;
+  const hardware = scorecard?.hardware ?? null;
+
+  const overall: { label: string; color: BadgeColor } = (() => {
+    if (!dispatch.dispatched) return { label: 'Not dispatched', color: 'important' };
+    if (run?.status === 'failed') return { label: 'Failed', color: 'danger' };
+    if (run?.status === 'cancelled') return { label: 'Cancelled', color: 'subtle' };
+    if (scorecard) {
+      const buildOk = scorecard.build?.succeeded ?? false;
+      const testsOk = scorecard.tests?.succeeded ?? true;
+      if (buildOk && testsOk) return { label: 'Pass', color: 'success' };
+      return { label: 'Fail', color: 'danger' };
+    }
+    if (pending || run?.status === 'running') return { label: 'Running', color: 'informative' };
+    if (run?.status === 'queued') return { label: 'Queued', color: 'subtle' };
+    return { label: 'Waiting', color: 'subtle' };
+  })();
+
+  const cpuLabel = hardware
+    ? `${hardware.cpuCount} vCPU · ${hardware.architecture} · ${hardware.kernel.split(' ').slice(0, 2).join(' ')}`
+    : null;
+  const skuLabel = hardware
+    ? `${hardware.vmSku} · ${friendlyCpuModel(hardware.cpuModel)} · ${hardware.region}`
+    : dispatch.dispatched
+      ? 'Standard_D4ps_v6 · Ampere Cobalt 100 · eastus2'
+      : null;
+
+  return (
+    <div className="arm64-panel" aria-labelledby="arm64-heading">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Real ARM64 hardware verification</p>
+          <h4 id="arm64-heading">Live build + test on Azure</h4>
+        </div>
+        <StatusBadge meta={overall} />
+      </div>
+
+      {skuLabel ? (
+        <div className="arm64-hardware">
+          <span className="arm64-hardware-label">Compute</span>
+          <span className="arm64-hardware-value">{skuLabel}</span>
+          {cpuLabel ? <span className="arm64-hardware-value">{cpuLabel}</span> : null}
+          {hardware ? (
+            <span className="arm64-hardware-value">Memory {formatMemory(hardware.memoryMB)}</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!dispatch.dispatched ? (
+        <p className="arm64-note">
+          Runner not reached. {dispatch.error ?? 'No further detail.'}
+        </p>
+      ) : null}
+
+      {error ? <MessageBar intent="error"><MessageBarBody>{error}</MessageBarBody></MessageBar> : null}
+
+      {dispatch.dispatched && !scorecard && (pending || run?.status === 'queued' || run?.status === 'running') ? (
+        <>
+          <p className="arm64-note">
+            Cloning source, applying patches, and running build + test on real ARM64 hardware.
+          </p>
+          <ProgressBar aria-label="ARM64 build in progress" />
+        </>
+      ) : null}
+
+      {scorecard ? (
+        <>
+          <div className="arm64-metrics">
+            <div>
+              <span className="metric-label">Wall clock</span>
+              <span className="metric-value">{formatSeconds(scorecard.wallClockSeconds)}</span>
+            </div>
+            <div>
+              <span className="metric-label">Applied</span>
+              <span className="metric-value">
+                {scorecard.patchApplication.applied.length}/{scorecard.patchApplication.applied.length + scorecard.patchApplication.rejected.length}
+              </span>
+            </div>
+            <div>
+              <span className="metric-label">Base commit</span>
+              <span className="metric-value metric-mono">{shortSha(scorecard.sourceCommitSha)}</span>
+            </div>
+            <div>
+              <span className="metric-label">Resolved commit</span>
+              <span className="metric-value metric-mono">{shortSha(scorecard.resolvedCommitSha)}</span>
+            </div>
+          </div>
+
+          {scorecard.patchApplication.rejected.length > 0 ? (
+            <div className="arm64-rejects" aria-label="Rejected patches">
+              <h5>Patches rejected</h5>
+              <ul>
+                {scorecard.patchApplication.rejected.map((r) => (
+                  <li key={r.id}><strong>{r.id}</strong><span>{r.reason}</span></li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <Arm64StepDetail label="Build" outcome={scorecard.build} />
+          <Arm64StepDetail label="Tests" outcome={scorecard.tests} />
+
+          <p className="arm64-note arm64-summary">{scorecard.summary}</p>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function Arm64StepDetail({ label, outcome }: { label: string; outcome: Arm64StepOutcome | null }) {
+  if (!outcome) return null;
+  const meta: { label: string; color: BadgeColor } = outcome.succeeded
+    ? { label: 'Pass', color: 'success' }
+    : { label: 'Fail', color: 'danger' };
+  return (
+    <details className="arm64-step">
+      <summary>
+        <StatusBadge meta={meta} />
+        <span className="arm64-step-label">{label}</span>
+        <span className="arm64-step-duration">{formatSeconds(outcome.durationSeconds)}</span>
+        <code className="arm64-step-command">{outcome.command}</code>
+      </summary>
+      {outcome.stdoutTail ? (
+        <>
+          <p className="arm64-step-caption">stdout tail</p>
+          <pre className="arm64-step-log">{outcome.stdoutTail}</pre>
+        </>
+      ) : null}
+      {outcome.stderrTail ? (
+        <>
+          <p className="arm64-step-caption">stderr tail</p>
+          <pre className="arm64-step-log arm64-step-log-err">{outcome.stderrTail}</pre>
+        </>
+      ) : null}
+    </details>
+  );
+}
+
+function friendlyCpuModel(cpuModel: string): string {
+  const trimmed = (cpuModel ?? '').trim();
+  if (!trimmed || trimmed === 'unknown') return 'Ampere Cobalt 100';
+  if (/cobalt/i.test(trimmed)) return trimmed;
+  if (/ampere/i.test(trimmed)) return trimmed;
+  return trimmed.length > 48 ? trimmed.slice(0, 48) + '…' : trimmed;
+}
+
+function formatMemory(mb: number): string {
+  if (!mb || mb <= 0) return 'unknown';
+  const gib = mb / 1024;
+  return gib >= 10 ? `${Math.round(gib)} GiB` : `${gib.toFixed(1)} GiB`;
+}
+
+function formatSeconds(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) return '—';
+  if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
+  if (seconds < 60) return `${seconds.toFixed(1)} s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds - m * 60);
+  return `${m}m ${s}s`;
+}
+
+function shortSha(sha: string | null | undefined): string {
+  if (!sha) return '—';
+  return sha.length > 10 ? sha.slice(0, 10) : sha;
 }
 
 function AssessmentResults({
@@ -924,6 +1121,9 @@ function AssessmentResults({
   validationReport,
   validationPending,
   validationError,
+  arm64Run,
+  arm64Pending,
+  arm64Error,
   onRunMigration,
   onCancelMigration,
 }: {
@@ -938,6 +1138,9 @@ function AssessmentResults({
   validationReport: ValidationReport | null;
   validationPending: boolean;
   validationError: string | null;
+  arm64Run: Arm64RunStatus | null;
+  arm64Pending: boolean;
+  arm64Error: string | null;
   onRunMigration: () => void;
   onCancelMigration: () => void;
 }) {
@@ -1061,6 +1264,9 @@ function AssessmentResults({
               validationReport={validationReport}
               validationPending={validationPending}
               validationError={validationError}
+              arm64Run={arm64Run}
+              arm64Pending={arm64Pending}
+              arm64Error={arm64Error}
               onRun={onRunMigration}
               onCancel={onCancelMigration}
             />
@@ -1323,6 +1529,9 @@ export default function App() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [validationPending, setValidationPending] = useState(false);
   const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
+  const [arm64Run, setArm64Run] = useState<Arm64RunStatus | null>(null);
+  const [arm64Error, setArm64Error] = useState<string | null>(null);
+  const [arm64Pending, setArm64Pending] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
   const migrationControllerRef = useRef<AbortController | null>(null);
   const authenticationSessionRef = useRef<string | null>(null);
@@ -1490,6 +1699,9 @@ export default function App() {
     setValidationError(null);
     setValidationReport(null);
     setValidationPending(false);
+    setArm64Run(null);
+    setArm64Error(null);
+    setArm64Pending(false);
 
     const target = {
       url: assessment.repository.url,
@@ -1506,6 +1718,30 @@ export default function App() {
       setMigrationJobPending(false);
 
       const dispatch = finalJob.result?.validation ?? null;
+      const arm64Dispatch = finalJob.result?.arm64Build ?? null;
+
+      const arm64Task = arm64Dispatch?.dispatched && arm64Dispatch.jobId
+        ? (async (jobId: string) => {
+            setArm64Pending(true);
+            try {
+              const finalArm64 = await pollArm64Run(jobId, {
+                onUpdate: (next) => setArm64Run(next),
+                signal: controller.signal,
+              });
+              setArm64Run(finalArm64);
+            } catch (arm64ErrorRaised) {
+              if (arm64ErrorRaised instanceof DOMException && arm64ErrorRaised.name === 'AbortError') return;
+              setArm64Error(
+                arm64ErrorRaised instanceof Error
+                  ? arm64ErrorRaised.message
+                  : 'ARM64 run status is unavailable.',
+              );
+            } finally {
+              setArm64Pending(false);
+            }
+          })(arm64Dispatch.jobId)
+        : Promise.resolve();
+
       if (finalJob.status === 'completed' && dispatch?.dispatched && dispatch.runId) {
         const runId = dispatch.runId;
         setValidationPending(true);
@@ -1535,6 +1771,8 @@ export default function App() {
           setValidationPending(false);
         }
       }
+
+      await arm64Task;
     } catch (requestError) {
       if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
       setMigrationJobError(
@@ -1700,6 +1938,9 @@ export default function App() {
               validationReport={validationReport}
               validationPending={validationPending}
               validationError={validationError}
+              arm64Run={arm64Run}
+              arm64Pending={arm64Pending}
+              arm64Error={arm64Error}
               onRunMigration={handleRunMigration}
               onCancelMigration={cancelMigration}
             />
