@@ -41,9 +41,10 @@ npm run dev
 Open `http://127.0.0.1:5173`.
 
 Vite proxies assessment requests to `http://127.0.0.1:5000` and migration plan
-requests to `http://127.0.0.1:5080`. For a deployed build, set
-`VITE_ASSESSMENT_API_URL` and `VITE_MIGRATION_PLANNER_API_URL` to their HTTPS
-origins.
+requests to `http://127.0.0.1:5080` in local dev. In production the Static Web
+App proxies `/api/*` to the composed host through
+[`public/staticwebapp.config.json`](public/staticwebapp.config.json), so the
+frontend calls same-origin paths and no API origins are baked into the build.
 
 ## Dashboard coverage
 
@@ -66,21 +67,23 @@ entered into or rendered by the web application.
 ## Azure Static Web Apps
 
 The `frontend-static-web-app.yml` workflow verifies the frontend on pull
-requests and deploys the production build from `main`. Configure these GitHub
-repository settings before enabling deployment:
+requests and deploys the production build from `main`. Configure this GitHub
+repository setting before enabling deployment:
 
 | Setting | Kind | Value |
 |---------|------|-------|
 | `AZURE_STATIC_WEB_APPS_API_TOKEN` | Actions secret | Deployment token from the Static Web App |
-| `ASSESSMENT_API_URL` | Actions variable | HTTPS origin of the deployed assessment API |
-| `MIGRATION_PLANNER_API_URL` | Actions variable | HTTPS origin of the deployed planner API |
 
-Add the Static Web App origin to the assessment API's `DashboardOrigins`
-configuration (semicolon-separated) and the planner API's
-`MIGRATIONPLANNER_ALLOWED_ORIGINS` configuration (comma-separated). The
-deployed dashboard can assess public GitHub repositories. Git Credential
-Manager sign-in for protected repositories intentionally remains a local,
-loopback-only workflow; it is not exposed by the cloud deployment.
+The Static Web App's `staticwebapp.config.json` proxies `/api/*` to the
+composed host at
+`ca-arm-migration-planner-api.delightfulcliff-b520a3d2.eastus2.azurecontainerapps.io`,
+so the frontend never calls the ACA origin directly and no API URL vars are
+needed. Add the Static Web App origin to the composed host's `DashboardOrigins`,
+`MIGRATIONPLANNER_ALLOWED_ORIGINS`, and `AUTOMATION_ALLOWED_ORIGINS` env vars so
+its own CORS layer accepts the proxied preflights. The deployed dashboard can
+assess public GitHub repositories. Git Credential Manager sign-in for protected
+repositories intentionally remains a local, loopback-only workflow; it is not
+exposed by the cloud deployment.
 
 ## Verify
 
