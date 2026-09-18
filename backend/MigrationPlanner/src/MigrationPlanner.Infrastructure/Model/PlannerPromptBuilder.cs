@@ -216,6 +216,71 @@ internal static class PlannerPromptBuilder
                 builder.AppendLine("     other value must match the Previous plan character-for-character.");
                 builder.AppendLine("  5. Output the corrected JSON only. No prose.");
             }
+            else if (retryHint.Reason == PlannerRetryReason.UnderGranular)
+            {
+                var missing = retryHint.MissingBuckets ?? Array.Empty<string>();
+                var isSkillList = missing.Count > 0
+                    && missing.All(m => m.Contains('/') && !m.Contains(' '));
+
+                if (isSkillList)
+                {
+                    builder.AppendLine("The plan omitted required skills. Add one NEW workItems[]");
+                    builder.AppendLine("entry per skill listed below:");
+                    foreach (var skill in missing)
+                    {
+                        builder.AppendLine($"  - {skill}");
+                    }
+                }
+                else
+                {
+                    builder.AppendLine("The plan did not satisfy the granularity contract. The server");
+                    builder.AppendLine("reports the following bucket coverage violations:");
+                    foreach (var m in missing)
+                    {
+                        builder.AppendLine($"  - {m}");
+                    }
+                }
+                builder.AppendLine();
+                builder.AppendLine("Rules for the retry (STRICT):");
+                builder.AppendLine("  1. Copy the entire 'Previous plan' JSON below into your output.");
+                builder.AppendLine("  2. For EACH required skill above, add a NEW workItems[] entry.");
+                builder.AppendLine("     Do NOT re-assign the skill on an existing workItem — add new ones.");
+                builder.AppendLine("     Do NOT substitute `build/add-arm64-target` (rule 16.5).");
+                builder.AppendLine("  3. If the previous plan added `build/add-arm64-target` to");
+                builder.AppendLine("     `missingSkills[]` as a workaround, REMOVE that entry — it");
+                builder.AppendLine("     is a runnable catalog skill, not a missing capability.");
+                builder.AppendLine("  4. Each new workItem uses this template (fill title/objective");
+                builder.AppendLine("     with concrete text; keep the other fields exactly as shown):");
+                builder.AppendLine();
+                builder.AppendLine("     {");
+                builder.AppendLine("       \"id\": \"wi-<short-kebab-from-skill-suffix>\",");
+                builder.AppendLine("       \"sequence\": <next-integer>,");
+                builder.AppendLine("       \"priority\": \"P0\",");
+                builder.AppendLine("       \"title\": \"<one-line summary that names the skill's purpose>\",");
+                builder.AppendLine("       \"objective\": \"<1-4 sentences: what the audit inspects, where its output goes>\",");
+                builder.AppendLine("       \"agentOrSkill\": \"<exact skill name from the list above>\",");
+                builder.AppendLine("       \"inputs\": [],");
+                builder.AppendLine("       \"expectedOutputs\": [\"report\"],");
+                builder.AppendLine("       \"dependencies\": [],");
+                builder.AppendLine("       \"evidenceIds\": [<pip-dep evidenceIds from the assessment>],");
+                builder.AppendLine("       \"guidanceIds\": [],");
+                builder.AppendLine("       \"acceptanceTests\": [");
+                builder.AppendLine("         { \"id\": \"at-<short>-generates\", \"description\": \"Runner emits the report file.\",");
+                builder.AppendLine("           \"expectedOutcome\": \"A markdown report is produced under .arm-migration/reports/.\" },");
+                builder.AppendLine("         { \"id\": \"at-<short>-cites-guidance\", \"description\": \"Report cites the grounding guidance id.\",");
+                builder.AppendLine("           \"expectedOutcome\": \"Report references the associated python-woa-* or pytorch-woa-* guidance snippet.\" }");
+                builder.AppendLine("       ],");
+                builder.AppendLine("       \"approvalRequired\": true,");
+                builder.AppendLine("       \"estimatedEffort\": \"small\",");
+                builder.AppendLine("       \"risk\": \"low\"");
+                builder.AppendLine("     }");
+                builder.AppendLine();
+                builder.AppendLine("     For `python/pip-constraints-arm64-scaffold`, use");
+                builder.AppendLine("     `expectedOutputs`: [\"patch\", \"report\"].");
+                builder.AppendLine("  5. Do NOT rewrite, reword, or reorder any other field. Every");
+                builder.AppendLine("     other value must match the Previous plan character-for-character.");
+                builder.AppendLine("  6. Output the corrected JSON only. No prose.");
+            }
 
             if (!string.IsNullOrWhiteSpace(retryHint.PreviousPlanJson))
             {
@@ -292,10 +357,20 @@ internal static class PlannerPromptBuilder
                 builder.Append("  (evidence: ").Append(string.Join(", ", b.EvidenceIds)).Append(')');
             }
             builder.AppendLine();
+            if (!string.IsNullOrEmpty(b.RequiredSkill))
+            {
+                builder.Append("       -> workItems[].agentOrSkill MUST be \"")
+                    .Append(b.RequiredSkill)
+                    .AppendLine("\" for this bucket.");
+            }
         }
         builder.AppendLine();
         builder.AppendLine("Each workItem MUST cite the listed evidenceIds. If two buckets share");
         builder.AppendLine("evidence, produce two separate work items with the same evidenceId(s).");
+        builder.AppendLine("When a bucket names a REQUIRED agentOrSkill, using any other skill on");
+        builder.AppendLine("that workItem is a rule 16.5 violation, even if the other skill is in");
+        builder.AppendLine("availableSkills. Do NOT substitute build/add-arm64-target for a python/*");
+        builder.AppendLine("bucket.");
     }
 
     private static void AppendAllowedEvidenceIds(
@@ -535,6 +610,54 @@ internal static class PlannerPromptBuilder
             required inputs, expected outputs, justification, and
             evidenceIds, and then cite the same proposedName from any
             workItem that would use it.
+        16.5. Project-type routing. Before choosing a skill, look at
+              assessment.technology.languages and
+              assessment.technology.buildSystems.
+
+              PYTHON PROJECTS (technology.languages contains "python"):
+                - `build/add-arm64-target` DOES NOT APPLY. There is no
+                  MSBuild project to add ARM64 to. Do not cite it in a
+                  workItem and do not add it to missingSkills[] — it is
+                  runnable in the catalog but not applicable here.
+                  Same for `build/add-arm64ec-target`,
+                  `packaging/add-arm64-msix`, and any other MSBuild-oriented
+                  skill.
+                - The primary migration work items are the Python audit
+                  skills. When they appear in assessment.availableSkills[],
+                  cite them from workItems that address these concerns:
+                    * `python/native-wheel-audit` — for every Python repo
+                      with at least one pypi dependency. Addresses "which
+                      pip packages need a win_arm64 wheel or a source
+                      build". Inputs from the skill's supportedInputs
+                      list (requirements.txt, pyproject.toml).
+                    * `python/pytorch-arm64-wheel-audit` — when the
+                      dependencies include torch, torchvision, torchaudio,
+                      or torch-directml. Addresses "which torch pin is
+                      viable on WoA".
+                    * `python/cuda-to-directml-audit` — when the
+                      dependencies include torch or the source is expected
+                      to use CUDA. Addresses "which files/lines need to
+                      switch off CUDA".
+                    * `python/pip-constraints-arm64-scaffold` — when a
+                      requirements.txt is present. Addresses "how does
+                      the reviewer pin ARM64 wheels without editing
+                      requirements.txt".
+                - `pipeline/github-actions-arm64-job` still applies
+                  because CI matrix additions are language-agnostic. Keep
+                  it if the assessment shows github-actions.
+
+              .NET / C++ PROJECTS (build systems contain msbuild, cmake,
+              or the tree has .csproj/.vcxproj):
+                - `build/add-arm64-target` and `pipeline/*` are primary.
+                - `python/*` skills DO NOT APPLY unless technology.languages
+                  also contains "python" AND a pypi dependency is declared.
+
+              Never use missingSkills[] as a workaround for
+              "the runnable skill I want to cite isn't listed in
+              availableSkills for this repo". If a skill is in the catalog
+              as runnable but not offered by availableSkills, that means
+              the assessment did not surface the inputs the skill needs —
+              route into a different available skill instead.
         17. Risk depth. Produce enough risks that a reviewer can act on
             them. Concretely:
               - At least one Risk per entry in
@@ -574,15 +697,18 @@ internal static class PlannerPromptBuilder
               - one workItem per top-level build/CI/packaging change that
                 the score identifies (add-arm64-target, add-arm64-ci-job,
                 add-arm64-packaging, add-arm64-tests) — only for changes
-                the score's deductions actually surface;
+                the score's deductions actually surface AND only when the
+                project type in rule 16.5 supports them;
               - one workItem per critical code finding; the title MUST
-                name the ruleId and file.
+                name the ruleId and file;
+              - for Python projects (per rule 16.5) one workItem per
+                applicable python/* audit skill listed there.
             Each workItem's objective MUST be 1-4 concrete sentences
             naming what changes, in which files or configs, and what shape
             the output takes. Each MUST include >= 1 input path drawn from
             the assessment and >= 1 named expected output
             (patch, workflow-yaml, wheel-build-recipe, packaging-manifest,
-            doc-page, test-file, etc.). Each MUST include >= 2
+            doc-page, test-file, report, etc.). Each MUST include >= 2
             acceptanceTests with distinct expectedOutcomes (typically a
             build check plus a functional check; add a perf or reliability
             check when relevant). Do NOT combine multiple deps or multiple

@@ -13,7 +13,8 @@ public static class GranularityCalculator
     public sealed record ExpectedBucket(
         string Category,
         string Description,
-        IReadOnlyList<string> EvidenceIds);
+        IReadOnlyList<string> EvidenceIds,
+        string? RequiredSkill = null);
 
     public sealed record Expectation(
         IReadOnlyList<ExpectedBucket> Buckets,
@@ -82,7 +83,79 @@ public static class GranularityCalculator
                 new[] { finding.EvidenceId }));
         }
 
+        AppendPythonBuckets(assessment, buckets);
+
         return new Expectation(buckets, buckets.Count);
+    }
+
+    // Python-AI-inference projects don't have a MSBuild build target to add. Their
+    // per-package wheel matrix + CUDA→DirectML routing is the real migration work.
+    // Each bucket names the concrete python/* skill so the model routes into the
+    // right runner instead of collapsing everything into the generic build bucket.
+    private static void AppendPythonBuckets(RepositoryAssessmentV1 assessment, List<ExpectedBucket> buckets)
+    {
+        if (!IsPythonRepository(assessment))
+            return;
+
+        var pipDeps = assessment.Dependencies
+            .Where(d => string.Equals(d.Ecosystem, "pypi", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(d => d.EvidenceId, StringComparer.Ordinal)
+            .ToList();
+
+        if (pipDeps.Count == 0)
+            return;
+
+        var allPipEvidence = pipDeps
+            .Select(d => d.EvidenceId)
+            .Distinct(StringComparer.Ordinal)
+            .Take(10)
+            .ToArray();
+
+        buckets.Add(new ExpectedBucket(
+            "python-dep",
+            "Audit pip native-wheel availability for ARM64 via python/native-wheel-audit.",
+            allPipEvidence,
+            RequiredSkill: "python/native-wheel-audit"));
+
+        var torchDeps = pipDeps.Where(d => IsTorchPackage(d.Name)).ToList();
+        var torchEvidence = torchDeps
+            .Select(d => d.EvidenceId)
+            .Distinct(StringComparer.Ordinal)
+            .Take(4)
+            .ToArray();
+
+        if (torchEvidence.Length > 0)
+        {
+            buckets.Add(new ExpectedBucket(
+                "python-dep",
+                "Audit PyTorch ARM64 wheel status via python/pytorch-arm64-wheel-audit.",
+                torchEvidence,
+                RequiredSkill: "python/pytorch-arm64-wheel-audit"));
+            buckets.Add(new ExpectedBucket(
+                "python-code",
+                "Enumerate CUDA usage sites for DirectML / ONNX Runtime routing via python/cuda-to-directml-audit.",
+                torchEvidence,
+                RequiredSkill: "python/cuda-to-directml-audit"));
+        }
+
+        buckets.Add(new ExpectedBucket(
+            "python-dep",
+            "Scaffold constraints-arm64.txt with blank pins via python/pip-constraints-arm64-scaffold.",
+            new[] { allPipEvidence[0] },
+            RequiredSkill: "python/pip-constraints-arm64-scaffold"));
+    }
+
+    private static bool IsPythonRepository(RepositoryAssessmentV1 assessment) =>
+        assessment.Technology.Languages
+            .Any(l => string.Equals(l, "python", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsTorchPackage(string name)
+    {
+        var normalized = (name ?? string.Empty).ToLowerInvariant().Replace('_', '-').Replace('.', '-');
+        return normalized == "torch"
+            || normalized == "torchvision"
+            || normalized == "torchaudio"
+            || normalized == "torch-directml";
     }
 
     private static bool IsInterpretedOnly(RepositoryAssessmentV1 assessment)
@@ -90,6 +163,7 @@ public static class GranularityCalculator
         var interpreted = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "python", "javascript", "typescript", "ruby", "php", "perl", "lua",
+            "shell", "bash", "sh", "zsh", "powershell", "cmd", "batch",
         };
         var langs = assessment.Technology.Languages;
         return langs.Count > 0 && langs.All(l => interpreted.Contains(l));
