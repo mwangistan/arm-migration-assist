@@ -195,11 +195,22 @@ public sealed class PlanSafetyValidator : IPlanSafetyValidator
         }
 
         var actualCount = 0;
+        var citedSkills = new HashSet<string>(StringComparer.Ordinal);
         if (plan.AdditionalProperties is not null
             && plan.AdditionalProperties.TryGetValue("workItems", out var wiElement)
             && wiElement.ValueKind == JsonValueKind.Array)
         {
             actualCount = wiElement.GetArrayLength();
+            foreach (var wi in wiElement.EnumerateArray())
+            {
+                if (wi.ValueKind != JsonValueKind.Object) continue;
+                if (wi.TryGetProperty("agentOrSkill", out var skillEl)
+                    && skillEl.ValueKind == JsonValueKind.String)
+                {
+                    var name = skillEl.GetString();
+                    if (!string.IsNullOrEmpty(name)) citedSkills.Add(name);
+                }
+            }
         }
 
         if (actualCount < expectation.MinimumWorkItems)
@@ -210,6 +221,18 @@ public sealed class PlanSafetyValidator : IPlanSafetyValidator
                 $"Plan has {actualCount} workItems but the assessment requires at least "
                 + $"{expectation.MinimumWorkItems} to cover: {bucketSummary}. Produce one work item "
                 + "per bucket; do not collapse multiple buckets into a single \"setup\" item.");
+        }
+
+        foreach (var b in expectation.Buckets)
+        {
+            if (string.IsNullOrEmpty(b.RequiredSkill)) continue;
+            if (!citedSkills.Contains(b.RequiredSkill))
+            {
+                violations.Add(
+                    $"Plan bucket \"{b.Description}\" requires a workItem citing "
+                    + $"agentOrSkill=\"{b.RequiredSkill}\", but no workItems[] entry does. "
+                    + "Do not substitute build/add-arm64-target for a python/* bucket.");
+            }
         }
 
         return violations;

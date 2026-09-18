@@ -13,7 +13,8 @@ public static class GranularityCalculator
     public sealed record ExpectedBucket(
         string Category,
         string Description,
-        IReadOnlyList<string> EvidenceIds);
+        IReadOnlyList<string> EvidenceIds,
+        string? RequiredSkill = null);
 
     public sealed record Expectation(
         IReadOnlyList<ExpectedBucket> Buckets,
@@ -113,7 +114,8 @@ public static class GranularityCalculator
         buckets.Add(new ExpectedBucket(
             "python-dep",
             "Audit pip native-wheel availability for ARM64 via python/native-wheel-audit.",
-            allPipEvidence));
+            allPipEvidence,
+            RequiredSkill: "python/native-wheel-audit"));
 
         var torchDeps = pipDeps.Where(d => IsTorchPackage(d.Name)).ToList();
         var torchEvidence = torchDeps
@@ -127,17 +129,20 @@ public static class GranularityCalculator
             buckets.Add(new ExpectedBucket(
                 "python-dep",
                 "Audit PyTorch ARM64 wheel status via python/pytorch-arm64-wheel-audit.",
-                torchEvidence));
+                torchEvidence,
+                RequiredSkill: "python/pytorch-arm64-wheel-audit"));
             buckets.Add(new ExpectedBucket(
                 "python-code",
                 "Enumerate CUDA usage sites for DirectML / ONNX Runtime routing via python/cuda-to-directml-audit.",
-                torchEvidence));
+                torchEvidence,
+                RequiredSkill: "python/cuda-to-directml-audit"));
         }
 
         buckets.Add(new ExpectedBucket(
             "python-dep",
             "Scaffold constraints-arm64.txt with blank pins via python/pip-constraints-arm64-scaffold.",
-            new[] { allPipEvidence[0] }));
+            new[] { allPipEvidence[0] },
+            RequiredSkill: "python/pip-constraints-arm64-scaffold"));
     }
 
     private static bool IsPythonRepository(RepositoryAssessmentV1 assessment) =>

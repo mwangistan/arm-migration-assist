@@ -292,10 +292,20 @@ internal static class PlannerPromptBuilder
                 builder.Append("  (evidence: ").Append(string.Join(", ", b.EvidenceIds)).Append(')');
             }
             builder.AppendLine();
+            if (!string.IsNullOrEmpty(b.RequiredSkill))
+            {
+                builder.Append("       -> workItems[].agentOrSkill MUST be \"")
+                    .Append(b.RequiredSkill)
+                    .AppendLine("\" for this bucket.");
+            }
         }
         builder.AppendLine();
         builder.AppendLine("Each workItem MUST cite the listed evidenceIds. If two buckets share");
         builder.AppendLine("evidence, produce two separate work items with the same evidenceId(s).");
+        builder.AppendLine("When a bucket names a REQUIRED agentOrSkill, using any other skill on");
+        builder.AppendLine("that workItem is a rule 16.5 violation, even if the other skill is in");
+        builder.AppendLine("availableSkills. Do NOT substitute build/add-arm64-target for a python/*");
+        builder.AppendLine("bucket.");
     }
 
     private static void AppendAllowedEvidenceIds(

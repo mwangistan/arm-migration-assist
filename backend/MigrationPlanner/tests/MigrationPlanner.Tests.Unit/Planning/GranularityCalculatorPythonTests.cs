@@ -87,6 +87,37 @@ public sealed class GranularityCalculatorPythonTests
         pytorchBucket.EvidenceIds.Should().NotContain("dep-numpy-01");
     }
 
+    [Fact]
+    public void Python_buckets_carry_a_required_skill()
+    {
+        var assessment = BuildAssessment(
+            languages: ["python"],
+            dependencies:
+            [
+                Dep("dep-torch-01", "torch"),
+            ]);
+        var buckets = GranularityCalculator.Compute(assessment, BuildScore()).Buckets;
+
+        buckets.Single(b => b.Description.Contains("python/native-wheel-audit"))
+            .RequiredSkill.Should().Be("python/native-wheel-audit");
+        buckets.Single(b => b.Description.Contains("python/pytorch-arm64-wheel-audit"))
+            .RequiredSkill.Should().Be("python/pytorch-arm64-wheel-audit");
+        buckets.Single(b => b.Description.Contains("python/cuda-to-directml-audit"))
+            .RequiredSkill.Should().Be("python/cuda-to-directml-audit");
+        buckets.Single(b => b.Description.Contains("python/pip-constraints-arm64-scaffold"))
+            .RequiredSkill.Should().Be("python/pip-constraints-arm64-scaffold");
+    }
+
+    [Fact]
+    public void Non_python_buckets_do_not_bind_a_required_skill()
+    {
+        var assessment = BuildAssessment(languages: ["csharp"], dependencies: []);
+        var buckets = GranularityCalculator.Compute(assessment, BuildScore()).Buckets;
+
+        // The existing MSBuild/CI buckets are free-choice; only python/* buckets are bound.
+        buckets.Should().OnlyContain(b => b.RequiredSkill == null);
+    }
+
     private static DependencyFinding Dep(string evidenceId, string name, string ecosystem = "pypi") => new(
         EvidenceId: evidenceId,
         Name: name,
