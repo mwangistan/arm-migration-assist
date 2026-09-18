@@ -28,6 +28,7 @@ COPY backend/AutomatedMigration/ backend/AutomatedMigration/
 COPY backend/AutomatedMigration.Api/ backend/AutomatedMigration.Api/
 COPY backend/MigrationPlanner/src/       backend/MigrationPlanner/src/
 COPY backend/MigrationPlanner/contracts/ backend/MigrationPlanner/contracts/
+COPY backend/Shared/             backend/Shared/
 COPY backend/Validation/         backend/Validation/
 COPY backend/ArmMigrationAssist.Api/ backend/ArmMigrationAssist.Api/
 COPY knowledge/                  knowledge/
