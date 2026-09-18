@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MigrationPlanner.Application.Abstractions;
 using MigrationPlanner.Application.Auditing;
 using MigrationPlanner.Application.Mcp;
@@ -134,6 +135,37 @@ public sealed class MigrationPlanningService
                 warnings.AddRange(attempt2.Observations);
                 _planCache.Store(digest, plan2, score, warnings);
                 return PlanResult.Ok(plan2, score, runId, warnings);
+            }
+
+            // Deterministic synthesis fallback: if the retry still failed because
+            // required bucket skills are missing, synthesize the missing work items
+            // ourselves. The bucket contract already knows every value we need.
+            if (safety2.ErrorCode == PlannerErrorCode.PlanUnderGranular)
+            {
+                var synthesized = TrySynthesizeMissingWorkItems(
+                    attempt2.RawJson ?? attempt1.RawJson ?? string.Empty,
+                    assessment, score, plan2);
+                if (synthesized is not null)
+                {
+                    var safety3 = _safetyValidator.Validate(synthesized.Plan, assessment, score);
+                    if (safety3.IsSafe)
+                    {
+                        EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha,
+                            assessment.SchemaVersion, guidanceLookup.RetrievedGuidanceIds,
+                            "success-after-synthesis", errorCode: null);
+                        var warnings = new List<string>
+                        {
+                            BuildRetryWarning(retryHint),
+                            $"Synthesized {synthesized.AddedSkills.Count} workItem(s) after the model retry did not add required skill(s): "
+                                + string.Join(", ", synthesized.AddedSkills)
+                                + ". Synthesized work items are evidence-linked to the same bucket the model was told to satisfy.",
+                        };
+                        warnings.AddRange(attempt1.Observations);
+                        warnings.AddRange(attempt2.Observations);
+                        _planCache.Store(digest, synthesized.Plan, score, warnings);
+                        return PlanResult.Ok(synthesized.Plan, score, runId, warnings);
+                    }
+                }
             }
 
             EmitAudit(runId, assessment.AssessmentId, assessment.Repository.CommitSha, assessment.SchemaVersion,
@@ -573,6 +605,117 @@ public sealed class MigrationPlanningService
             new(null, null, result, null, Array.Empty<string>());
         public static AttemptOutcome FromShapeInvalid(string rawJson, IReadOnlyList<string> errors, PlanResult fallback, IReadOnlyList<string> observations) =>
             new(null, rawJson, fallback, errors, observations);
+    }
+
+    private sealed record SynthesisResult(MigrationPlanV1 Plan, IReadOnlyList<string> AddedSkills);
+
+    private static SynthesisResult? TrySynthesizeMissingWorkItems(
+        string previousPlanJson,
+        Domain.Assessment.RepositoryAssessmentV1 assessment,
+        ReadinessScoreV1 score,
+        MigrationPlanV1 previousPlan)
+    {
+        var missingSkills = ExtractMissingRequiredSkills(assessment, score, previousPlan);
+        if (missingSkills.Count == 0) return null;
+        var buckets = Application.Planning.GranularityCalculator.Compute(assessment, score).Buckets;
+        var bucketBySkill = buckets
+            .Where(b => !string.IsNullOrEmpty(b.RequiredSkill))
+            .GroupBy(b => b.RequiredSkill!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        JsonNode? rootNode;
+        try { rootNode = JsonNode.Parse(previousPlanJson); }
+        catch (JsonException) { return null; }
+        if (rootNode is not JsonObject root) return null;
+        if (root["workItems"] is not JsonArray workItems) return null;
+
+        int nextSeq = 1;
+        foreach (var wi in workItems.OfType<JsonObject>())
+        {
+            var s = wi["sequence"]?.GetValue<int>() ?? 0;
+            if (s >= nextSeq) nextSeq = s + 1;
+        }
+
+        // Drop build/add-arm64-target from missingSkills[] if the model stuffed it there
+        // as a workaround. It's a runnable catalog skill, not a missing capability.
+        if (root["missingSkills"] is JsonArray declaredMissing)
+        {
+            for (int i = declaredMissing.Count - 1; i >= 0; i--)
+            {
+                if (declaredMissing[i] is JsonObject entry
+                    && entry["proposedName"]?.GetValue<string>() == "build/add-arm64-target")
+                {
+                    declaredMissing.RemoveAt(i);
+                }
+            }
+        }
+
+        var added = new List<string>();
+        foreach (var skill in missingSkills)
+        {
+            if (!bucketBySkill.TryGetValue(skill, out var bucket)) continue;
+            workItems.Add(BuildSynthesizedWorkItem(bucket, nextSeq++));
+            added.Add(skill);
+        }
+        if (added.Count == 0) return null;
+
+        MigrationPlanV1? synth;
+        try
+        {
+            using var doc = JsonDocument.Parse(root.ToJsonString(JsonOptions));
+            synth = doc.RootElement.Deserialize<MigrationPlanV1>(JsonOptions);
+        }
+        catch (JsonException) { return null; }
+        return synth is null ? null : new SynthesisResult(synth, added);
+    }
+
+    private static JsonObject BuildSynthesizedWorkItem(
+        Application.Planning.GranularityCalculator.ExpectedBucket bucket, int seq)
+    {
+        var skill = bucket.RequiredSkill!;
+        var suffix = skill.Substring(skill.LastIndexOf('/') + 1);
+        var idSuffix = ("py-" + suffix).ToLowerInvariant();
+        if (idSuffix.Length > 60) idSuffix = idSuffix[..60];
+        var isScaffold = skill == "python/pip-constraints-arm64-scaffold";
+        var outputs = new JsonArray { "report" };
+        if (isScaffold) outputs = new JsonArray { "patch", "report" };
+        var evidenceIds = new JsonArray();
+        foreach (var eid in bucket.EvidenceIds)
+        {
+            evidenceIds.Add(eid);
+        }
+        return new JsonObject
+        {
+            ["id"] = "wi-" + idSuffix,
+            ["sequence"] = seq,
+            ["priority"] = "P0",
+            ["title"] = bucket.Description,
+            ["objective"] = $"Run {skill} against the pinned commit to produce an evidence-linked audit report. This workItem was synthesized from the deterministic granularity contract after the model retry did not add it.",
+            ["agentOrSkill"] = skill,
+            ["inputs"] = new JsonArray(),
+            ["expectedOutputs"] = outputs,
+            ["dependencies"] = new JsonArray(),
+            ["evidenceIds"] = evidenceIds,
+            ["guidanceIds"] = new JsonArray(),
+            ["acceptanceTests"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["id"] = "at-" + idSuffix + "-emits",
+                    ["description"] = "Runner emits a report file.",
+                    ["expectedOutcome"] = "A markdown report is produced under .arm-migration/reports/.",
+                },
+                new JsonObject
+                {
+                    ["id"] = "at-" + idSuffix + "-cites",
+                    ["description"] = "Report cites its grounding guidance id.",
+                    ["expectedOutcome"] = "The report references the associated python-woa-* or pytorch-woa-* corpus snippet.",
+                },
+            },
+            ["approvalRequired"] = true,
+            ["estimatedEffort"] = "small",
+            ["risk"] = "low",
+        };
     }
 
     private void EmitAudit(
