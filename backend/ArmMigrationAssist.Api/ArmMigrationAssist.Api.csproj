@@ -6,6 +6,10 @@
     <Nullable>enable</Nullable>
     <RootNamespace>ArmMigrationAssist.Api</RootNamespace>
     <AssemblyName>ArmMigrationAssist.Api</AssemblyName>
+    <!-- The four referenced Web projects each ship their own appsettings.json for standalone
+         runs. The composed host publishes only its own; the referenced copies would collide on
+         the same publish path and trigger NETSDK1152. -->
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
   <ItemGroup>
