@@ -23,6 +23,10 @@ public sealed class SkillCatalogTests
     [InlineData("assessment/code-compatibility-scan")]
     [InlineData("build/add-arm64-target")]
     [InlineData("pipeline/github-actions-arm64-job")]
+    [InlineData("python/pytorch-arm64-wheel-audit")]
+    [InlineData("python/native-wheel-audit")]
+    [InlineData("python/cuda-to-directml-audit")]
+    [InlineData("python/pip-constraints-arm64-scaffold")]
     public void Runnable_skills_used_by_F1_are_present(string skillName)
     {
         Assert.True(SkillCatalog.Default.IsRunnable(skillName),
