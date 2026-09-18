@@ -138,9 +138,11 @@ public sealed class MigrationPlanningService
             }
 
             // Deterministic synthesis fallback: if the retry still failed because
-            // required bucket skills are missing, synthesize the missing work items
-            // ourselves. The bucket contract already knows every value we need.
-            if (safety2.ErrorCode == PlannerErrorCode.PlanUnderGranular)
+            // required bucket skills are missing or writeAccess work items are not
+            // covered by an approval gate, synthesize the missing entries ourselves.
+            // The bucket contract and F1's availableSkills already know every value we need.
+            if (safety2.ErrorCode == PlannerErrorCode.PlanUnderGranular
+                || safety2.ErrorCode == PlannerErrorCode.PlanApprovalMissing)
             {
                 var synthesized = TrySynthesizeMissingWorkItems(
                     attempt2.RawJson ?? attempt1.RawJson ?? string.Empty,
@@ -156,9 +158,7 @@ public sealed class MigrationPlanningService
                         var warnings = new List<string>
                         {
                             BuildRetryWarning(retryHint),
-                            $"Synthesized {synthesized.AddedSkills.Count} workItem(s) after the model retry did not add required skill(s): "
-                                + string.Join(", ", synthesized.AddedSkills)
-                                + ". Synthesized work items are evidence-linked to the same bucket the model was told to satisfy.",
+                            synthesized.SynthesisSummary,
                         };
                         warnings.AddRange(attempt1.Observations);
                         warnings.AddRange(attempt2.Observations);
@@ -607,7 +607,7 @@ public sealed class MigrationPlanningService
             new(null, rawJson, fallback, errors, observations);
     }
 
-    private sealed record SynthesisResult(MigrationPlanV1 Plan, IReadOnlyList<string> AddedSkills);
+    private sealed record SynthesisResult(MigrationPlanV1 Plan, string SynthesisSummary);
 
     private static SynthesisResult? TrySynthesizeMissingWorkItems(
         string previousPlanJson,
@@ -615,26 +615,11 @@ public sealed class MigrationPlanningService
         ReadinessScoreV1 score,
         MigrationPlanV1 previousPlan)
     {
-        var missingSkills = ExtractMissingRequiredSkills(assessment, score, previousPlan);
-        if (missingSkills.Count == 0) return null;
-        var buckets = Application.Planning.GranularityCalculator.Compute(assessment, score).Buckets;
-        var bucketBySkill = buckets
-            .Where(b => !string.IsNullOrEmpty(b.RequiredSkill))
-            .GroupBy(b => b.RequiredSkill!, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-
         JsonNode? rootNode;
         try { rootNode = JsonNode.Parse(previousPlanJson); }
         catch (JsonException) { return null; }
         if (rootNode is not JsonObject root) return null;
         if (root["workItems"] is not JsonArray workItems) return null;
-
-        int nextSeq = 1;
-        foreach (var wi in workItems.OfType<JsonObject>())
-        {
-            var s = wi["sequence"]?.GetValue<int>() ?? 0;
-            if (s >= nextSeq) nextSeq = s + 1;
-        }
 
         // Drop build/add-arm64-target from missingSkills[] if the model stuffed it there
         // as a workaround. It's a runnable catalog skill, not a missing capability.
@@ -650,14 +635,35 @@ public sealed class MigrationPlanningService
             }
         }
 
-        var added = new List<string>();
-        foreach (var skill in missingSkills)
+        var missingSkills = ExtractMissingRequiredSkills(assessment, score, previousPlan);
+        var addedSkills = new List<string>();
+        if (missingSkills.Count > 0)
         {
-            if (!bucketBySkill.TryGetValue(skill, out var bucket)) continue;
-            workItems.Add(BuildSynthesizedWorkItem(bucket, nextSeq++));
-            added.Add(skill);
+            var buckets = Application.Planning.GranularityCalculator.Compute(assessment, score).Buckets;
+            var bucketBySkill = buckets
+                .Where(b => !string.IsNullOrEmpty(b.RequiredSkill))
+                .GroupBy(b => b.RequiredSkill!, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+            int nextSeq = 1;
+            foreach (var wi in workItems.OfType<JsonObject>())
+            {
+                var s = wi["sequence"]?.GetValue<int>() ?? 0;
+                if (s >= nextSeq) nextSeq = s + 1;
+            }
+
+            foreach (var skill in missingSkills)
+            {
+                if (!bucketBySkill.TryGetValue(skill, out var bucket)) continue;
+                workItems.Add(BuildSynthesizedWorkItem(bucket, nextSeq++));
+                addedSkills.Add(skill);
+            }
         }
-        if (added.Count == 0) return null;
+
+        // Fill any writeAccess work items that are missing an approval gate.
+        var approvalsAdded = EnsureApprovalCoverage(root, workItems, assessment);
+
+        if (addedSkills.Count == 0 && approvalsAdded == 0) return null;
 
         MigrationPlanV1? synth;
         try
@@ -666,7 +672,74 @@ public sealed class MigrationPlanningService
             synth = doc.RootElement.Deserialize<MigrationPlanV1>(JsonOptions);
         }
         catch (JsonException) { return null; }
-        return synth is null ? null : new SynthesisResult(synth, added);
+        if (synth is null) return null;
+
+        var parts = new List<string>();
+        if (addedSkills.Count > 0)
+        {
+            parts.Add($"synthesized {addedSkills.Count} workItem(s) for required skill(s): {string.Join(", ", addedSkills)}");
+        }
+        if (approvalsAdded > 0)
+        {
+            parts.Add($"synthesized 1 requiredApprovals[] gate covering {approvalsAdded} write-capable workItem(s) the model did not gate");
+        }
+        var summary = "Deterministic synthesis: " + string.Join("; ", parts)
+            + ". Synthesized entries are evidence-linked to the bucket the model was told to satisfy.";
+        return new SynthesisResult(synth, summary);
+    }
+
+    // Adds a single "auto-arm64-approval" entry covering every writeAccess workItem
+    // that isn't already gated by an existing requiredApprovals[] entry. Returns the
+    // number of workItems that were newly covered (0 if all were already gated).
+    private static int EnsureApprovalCoverage(
+        JsonObject root, JsonArray workItems,
+        Domain.Assessment.RepositoryAssessmentV1 assessment)
+    {
+        var writeAccess = new HashSet<string>(
+            assessment.AvailableSkills.Where(s => s.WriteAccess).Select(s => s.Name),
+            StringComparer.Ordinal);
+
+        var alreadyApproved = new HashSet<string>(StringComparer.Ordinal);
+        if (root["requiredApprovals"] is JsonArray existingApprovals)
+        {
+            foreach (var approval in existingApprovals.OfType<JsonObject>())
+            {
+                if (approval["workItemIds"] is not JsonArray ids) continue;
+                foreach (var idNode in ids)
+                {
+                    var id = idNode?.GetValue<string>();
+                    if (!string.IsNullOrEmpty(id)) alreadyApproved.Add(id!);
+                }
+            }
+        }
+
+        var needsGate = new List<string>();
+        foreach (var wi in workItems.OfType<JsonObject>())
+        {
+            var skill = wi["agentOrSkill"]?.GetValue<string>() ?? string.Empty;
+            var id = wi["id"]?.GetValue<string>() ?? string.Empty;
+            if (string.IsNullOrEmpty(skill) || string.IsNullOrEmpty(id)) continue;
+            if (!writeAccess.Contains(skill)) continue;
+            if (alreadyApproved.Contains(id)) continue;
+            needsGate.Add(id);
+        }
+        if (needsGate.Count == 0) return 0;
+
+        var approvalArr = root["requiredApprovals"] as JsonArray;
+        if (approvalArr is null)
+        {
+            approvalArr = new JsonArray();
+            root["requiredApprovals"] = approvalArr;
+        }
+        var workItemIds = new JsonArray();
+        foreach (var id in needsGate) workItemIds.Add(id);
+        approvalArr.Add(new JsonObject
+        {
+            ["approvalId"] = "ap-auto-arm64-writes",
+            ["summary"] = "Approve every write-capable ARM64 migration workItem before F3 executes it.",
+            ["workItemIds"] = workItemIds,
+        });
+        return needsGate.Count;
     }
 
     private static JsonObject BuildSynthesizedWorkItem(
