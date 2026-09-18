@@ -62,7 +62,7 @@ public sealed class ScoringFixturesEndpointTests : IClassFixture<PlannerWebAppli
     private async Task<(string Band, string Path, JsonElement Plan)> PostAsync(RepositoryAssessmentV1 assessment)
     {
         using var client = _factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/migration-plans", assessment);
+        var response = await client.PostAndAwaitPlanAsync("/api/migration-plans", assessment);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK,
             because: await response.Content.ReadAsStringAsync());
