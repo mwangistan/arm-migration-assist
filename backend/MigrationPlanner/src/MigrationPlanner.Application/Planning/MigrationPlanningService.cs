@@ -205,10 +205,45 @@ public sealed class MigrationPlanningService
 
         if (safety.ErrorCode == PlannerErrorCode.PlanUnderGranular)
         {
-            return PlannerRetryHint.ForUnderGranular(diagnostic, previousPlanJson, safety.Violations);
+            var missingSkills = ExtractMissingRequiredSkills(assessment, score, plan);
+            var payload = missingSkills.Count > 0 ? missingSkills : safety.Violations;
+            return PlannerRetryHint.ForUnderGranular(diagnostic, previousPlanJson, payload);
         }
 
         return null;
+    }
+
+    // For an UnderGranular retry, pull the ExpectedBucket.RequiredSkill values that
+    // the previous plan did not cite. Handing the model a clean list of skill names
+    // is more actionable than the violation prose.
+    private static IReadOnlyList<string> ExtractMissingRequiredSkills(
+        Domain.Assessment.RepositoryAssessmentV1 assessment,
+        ReadinessScoreV1 score,
+        MigrationPlanV1 plan)
+    {
+        var buckets = Application.Planning.GranularityCalculator.Compute(assessment, score).Buckets;
+        var cited = new HashSet<string>(StringComparer.Ordinal);
+        if (plan.AdditionalProperties is not null
+            && plan.AdditionalProperties.TryGetValue("workItems", out var wiEl)
+            && wiEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var wi in wiEl.EnumerateArray())
+            {
+                if (wi.ValueKind != JsonValueKind.Object) continue;
+                if (wi.TryGetProperty("agentOrSkill", out var skillEl)
+                    && skillEl.ValueKind == JsonValueKind.String)
+                {
+                    var name = skillEl.GetString();
+                    if (!string.IsNullOrEmpty(name)) cited.Add(name);
+                }
+            }
+        }
+
+        return buckets
+            .Where(b => !string.IsNullOrEmpty(b.RequiredSkill) && !cited.Contains(b.RequiredSkill!))
+            .Select(b => b.RequiredSkill!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
     }
 
     private static IReadOnlyList<string> ExtractInvalidEvidenceIds(IReadOnlyList<string> violations)
