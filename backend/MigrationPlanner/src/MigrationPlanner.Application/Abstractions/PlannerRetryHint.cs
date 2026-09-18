@@ -11,7 +11,28 @@ public enum PlannerRetryReason
     ShapeInvalid,
     UnderGranular,
     MissingEvidence,
+    SkillIoMismatch,
 }
+
+/// <summary>
+/// A single workItem input/output violation surfaced by PlanSafetyValidator's
+/// ValidateSkillIo pass. Rendered per-entry into the retry prompt.
+/// </summary>
+public sealed record SkillIoViolation(
+    int WorkItemIndex,
+    string SkillName,
+    /// <summary>"inputs" or "expectedOutputs" — matches the workItem field name.</summary>
+    string FieldName,
+    string InvalidValue);
+
+/// <summary>
+/// Per-skill allowed input/output enumerations, drawn from
+/// assessment.availableSkills or plan.missingSkills. Given to the model so it
+/// can pick concrete replacements for the invalid values.
+/// </summary>
+public sealed record SkillIoAllowlist(
+    IReadOnlyList<string> Inputs,
+    IReadOnlyList<string> Outputs);
 
 /// <summary>
 /// Structured correction hint the orchestrator hands the model on retry when
@@ -31,7 +52,9 @@ public sealed record PlannerRetryHint(
     IReadOnlyList<string>? UnresolvedSkills = null,
     IReadOnlyList<string>? MissingBuckets = null,
     IReadOnlyList<string>? InvalidEvidenceIds = null,
-    IReadOnlyList<string>? AllowedEvidenceIds = null)
+    IReadOnlyList<string>? AllowedEvidenceIds = null,
+    IReadOnlyList<SkillIoViolation>? SkillIoViolations = null,
+    IReadOnlyDictionary<string, SkillIoAllowlist>? SkillIoAllowlists = null)
 {
     public static PlannerRetryHint ForRecommendation(
         string previousPath, string previousConfidence,
@@ -79,4 +102,16 @@ public sealed record PlannerRetryHint(
             PreviousPlanJson: previousPlanJson,
             InvalidEvidenceIds: invalidEvidenceIds,
             AllowedEvidenceIds: allowedEvidenceIds);
+
+    public static PlannerRetryHint ForSkillIoMismatch(
+        IReadOnlyList<SkillIoViolation> violations,
+        IReadOnlyDictionary<string, SkillIoAllowlist> allowlists,
+        string diagnostic,
+        string previousPlanJson) =>
+        new(
+            Reason: PlannerRetryReason.SkillIoMismatch,
+            Diagnostic: diagnostic,
+            PreviousPlanJson: previousPlanJson,
+            SkillIoViolations: violations,
+            SkillIoAllowlists: allowlists);
 }

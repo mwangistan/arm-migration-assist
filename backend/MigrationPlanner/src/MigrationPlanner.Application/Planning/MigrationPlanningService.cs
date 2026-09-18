@@ -188,6 +188,21 @@ public sealed class MigrationPlanningService
             return PlannerRetryHint.ForMissingEvidence(invalid, allowed, diagnostic, previousPlanJson);
         }
 
+        if (safety.ErrorCode == PlannerErrorCode.PlanSkillIoMismatch)
+        {
+            var violations = ExtractSkillIoViolations(safety.Violations);
+            if (violations.Count == 0)
+            {
+                return null;
+            }
+            var allowlists = CollectSkillIoAllowlists(plan, assessment, violations);
+            if (allowlists.Count == 0)
+            {
+                return null;
+            }
+            return PlannerRetryHint.ForSkillIoMismatch(violations, allowlists, diagnostic, previousPlanJson);
+        }
+
         return null;
     }
 
@@ -233,6 +248,112 @@ public sealed class MigrationPlanningService
         return set.ToArray();
     }
 
+    // PlanSafetyValidator emits violations of the form:
+    //   "Plan workItems[<idx>].<inputs|expectedOutputs> cites '<value>' which is not in
+    //    <source> entry '<skillName>'. workItem <inputs|outputs> must be a subset of the
+    //    skill's declared <inputs|outputs>."
+    // Parse them back into structured violations the model can act on.
+    private static IReadOnlyList<SkillIoViolation> ExtractSkillIoViolations(
+        IReadOnlyList<string> violations)
+    {
+        var results = new List<SkillIoViolation>(violations.Count);
+        foreach (var v in violations)
+        {
+            var openBracket = v.IndexOf('[');
+            var closeBracket = v.IndexOf(']');
+            if (openBracket < 0 || closeBracket <= openBracket) continue;
+            if (!int.TryParse(v.AsSpan(openBracket + 1, closeBracket - openBracket - 1), out var idx))
+                continue;
+
+            var afterBracket = v.AsSpan(closeBracket + 1);
+            string fieldName;
+            if (afterBracket.StartsWith(".inputs"))
+                fieldName = "inputs";
+            else if (afterBracket.StartsWith(".expectedOutputs"))
+                fieldName = "expectedOutputs";
+            else
+                continue;
+
+            var firstQuote = v.IndexOf('\'', closeBracket);
+            if (firstQuote < 0) continue;
+            var secondQuote = v.IndexOf('\'', firstQuote + 1);
+            if (secondQuote <= firstQuote) continue;
+            var invalidValue = v.Substring(firstQuote + 1, secondQuote - firstQuote - 1);
+
+            var entryLiteral = "entry '";
+            var entryStart = v.IndexOf(entryLiteral, secondQuote + 1, StringComparison.Ordinal);
+            if (entryStart < 0) continue;
+            var skillNameStart = entryStart + entryLiteral.Length;
+            var skillNameEnd = v.IndexOf('\'', skillNameStart);
+            if (skillNameEnd <= skillNameStart) continue;
+            var skillName = v.Substring(skillNameStart, skillNameEnd - skillNameStart);
+
+            results.Add(new SkillIoViolation(idx, skillName, fieldName, invalidValue));
+        }
+        return results;
+    }
+
+    // The referenced skill can live in assessment.availableSkills OR plan.missingSkills;
+    // collect the allowed input/output enumerations from whichever declared it so the model
+    // has concrete replacements.
+    private static IReadOnlyDictionary<string, SkillIoAllowlist> CollectSkillIoAllowlists(
+        MigrationPlanV1 plan,
+        Domain.Assessment.RepositoryAssessmentV1 assessment,
+        IReadOnlyList<SkillIoViolation> violations)
+    {
+        var needed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var v in violations)
+        {
+            needed.Add(v.SkillName);
+        }
+
+        var result = new Dictionary<string, SkillIoAllowlist>(StringComparer.Ordinal);
+
+        foreach (var s in assessment.AvailableSkills)
+        {
+            if (string.IsNullOrEmpty(s.Name) || !needed.Contains(s.Name)) continue;
+            result[s.Name] = new SkillIoAllowlist(
+                (s.SupportedInputs ?? Array.Empty<string>()).ToArray(),
+                (s.SupportedOutputs ?? Array.Empty<string>()).ToArray());
+        }
+
+        if (plan.AdditionalProperties is not null &&
+            plan.AdditionalProperties.TryGetValue("missingSkills", out var missingEl) &&
+            missingEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var entry in missingEl.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object) continue;
+                if (!entry.TryGetProperty("proposedName", out var nameEl) ||
+                    nameEl.ValueKind != JsonValueKind.String) continue;
+                var name = nameEl.GetString();
+                if (string.IsNullOrEmpty(name) || !needed.Contains(name) || result.ContainsKey(name)) continue;
+
+                result[name] = new SkillIoAllowlist(
+                    ReadStringArray(entry, "requiredInputs"),
+                    ReadStringArray(entry, "expectedOutputs"));
+            }
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyList<string> ReadStringArray(JsonElement obj, string propertyName)
+    {
+        if (!obj.TryGetProperty(propertyName, out var el) || el.ValueKind != JsonValueKind.Array)
+            return Array.Empty<string>();
+        var list = new List<string>();
+        foreach (var item in el.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                var s = item.GetString();
+                if (!string.IsNullOrEmpty(s)) list.Add(s);
+            }
+        }
+        return list;
+    }
+
     private static string BuildRetryWarning(PlannerRetryHint hint) => hint.Reason switch
     {
         PlannerRetryReason.RecommendationInconsistent =>
@@ -243,6 +364,8 @@ public sealed class MigrationPlanningService
             "Model plan shape corrected on retry after JSON Schema failure.",
         PlannerRetryReason.MissingEvidence =>
             $"Model plan corrected on retry: invented evidenceId(s) {string.Join(", ", hint.InvalidEvidenceIds ?? Array.Empty<string>())} replaced.",
+        PlannerRetryReason.SkillIoMismatch =>
+            $"Model plan corrected on retry: {hint.SkillIoViolations?.Count ?? 0} workItem input/output value(s) re-mapped to the referenced skill's declared inputs/outputs.",
         _ => "Model plan corrected on retry.",
     };
 
