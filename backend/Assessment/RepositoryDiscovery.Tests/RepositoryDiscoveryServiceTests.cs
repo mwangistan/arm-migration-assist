@@ -240,6 +240,17 @@ public sealed class RepositoryDiscoveryServiceTests
             #include <immintrin.h>
             int read_value() { return __asm { mov eax, 1 } }
             """);
+        repository.WriteTrackedFile("Automation.cs",
+            """
+            internal static class Automation
+            {
+                internal static void Run()
+                {
+                    var excel = System.Activator.CreateInstance(
+                        System.Type.GetTypeFromProgID("Excel.Application"));
+                }
+            }
+            """);
         repository.CommitChanges("add dependency and compatibility fixtures");
 
         var assessment = await new RepositoryDiscoveryService().DiscoverAsync(repository.Path);
@@ -262,6 +273,11 @@ public sealed class RepositoryDiscoveryServiceTests
             finding => finding.RuleId == "ARM-CODE-INLINE-ASM-01" && finding.File == "native.cpp");
         Assert.Contains(assessment.CodeFindings,
             finding => finding.RuleId == "ARM-CODE-SIMD-01" && finding.File == "native.cpp");
+        Assert.Contains(assessment.Dependencies,
+            dependency => dependency.Name == "Excel.Application"
+                && dependency.Ecosystem == "com"
+                && dependency.Type == "com"
+                && dependency.ArchitectureStatus == "unknown");
         Assert.Contains("dependency-scanner", assessment.ScanCoverage.ScannersCompleted);
         Assert.Contains("code-compatibility-scanner", assessment.ScanCoverage.ScannersCompleted);
         Assert.DoesNotContain(assessment.Unknowns, unknown => unknown.RequiredSkill == "assessment/dependency-scan");

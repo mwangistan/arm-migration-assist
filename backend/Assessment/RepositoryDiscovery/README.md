@@ -112,6 +112,8 @@ Open `http://127.0.0.1:5173`. Vite proxies `/api` requests to the local API.
 - NuGet, npm, Python, vcpkg, Cargo, and Go dependency declarations
 - checked-in PE and ELF binary architecture from validated headers
 - checked-in Python extensions (`.pyd`) and assembly source (`.asm`/`.s`)
+- COM activation signals (ProgID/CLSID activation, `.NET` interop, `COMReference`,
+  `regsvr32` registration, and `.tlb`/`.olb` type libraries) as `com` dependencies
 - architecture status backed by package or binary evidence
 - P/Invoke, inline assembly, x86 SIMD, architecture conditionals,
   pointer-size-sensitive code, and dynamic native loading
