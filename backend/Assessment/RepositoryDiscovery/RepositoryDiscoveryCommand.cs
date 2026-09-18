@@ -27,7 +27,8 @@ public static class RepositoryDiscoveryCommand
         try
         {
             var options = Parse(args);
-            var assessment = await new RepositoryDiscoveryService()
+            var assessment = await new RepositoryDiscoveryService(
+                    RepositoryDiscoveryService.CreateRegistryVerifier())
                 .DiscoverAsync(options.Source, cancellationToken);
             await WriteAssessmentAsync(assessment, options.OutputPath, cancellationToken);
             await standardOutput.WriteLineAsync($"Wrote repository assessment to {options.OutputPath}");

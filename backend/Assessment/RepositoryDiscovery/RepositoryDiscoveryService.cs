@@ -28,9 +28,11 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
 {
     private const string Ruleset = "repository-discovery-1.2";
     private static readonly string ProducerVersion = ResolveProducerVersion();
+    private static readonly HttpClient RegistryHttpClient = CreateRegistryHttpClient();
     private readonly IGitHubRepositorySource gitHubRepositorySource;
     private readonly IGitHubMetadataResolver? metadataResolver;
     private readonly IRepositoryClonePool? clonePool;
+    private readonly IDependencyArchitectureVerifier registryVerifier = new NullDependencyArchitectureVerifier();
 
     public RepositoryDiscoveryService()
         : this(new GitHubRepositorySource())
@@ -45,12 +47,21 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
     {
         this.clonePool = clonePool;
         this.metadataResolver = (IGitHubMetadataResolver)this.gitHubRepositorySource;
+        this.registryVerifier = CreateRegistryVerifier();
     }
 
     internal RepositoryDiscoveryService(IGitHubRepositorySource gitHubRepositorySource)
     {
         this.gitHubRepositorySource = gitHubRepositorySource;
         this.metadataResolver = gitHubRepositorySource as IGitHubMetadataResolver;
+    }
+
+    // Enables always-on live registry verification for the CLI entrypoint without requiring a
+    // clone pool. Kept internal so unit tests keep the offline no-op default.
+    internal RepositoryDiscoveryService(IDependencyArchitectureVerifier registryVerifier)
+        : this(new GitHubRepositorySource())
+    {
+        this.registryVerifier = registryVerifier;
     }
 
     internal RepositoryDiscoveryService(
@@ -61,6 +72,32 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
         this.gitHubRepositorySource = gitHubRepositorySource;
         this.clonePool = clonePool;
         this.metadataResolver = metadataResolver ?? gitHubRepositorySource as IGitHubMetadataResolver;
+    }
+
+    internal static IDependencyArchitectureVerifier CreateRegistryVerifier() =>
+        new DependencyRegistryVerifier(RegistryHttpClient);
+
+    private static HttpClient CreateRegistryHttpClient()
+    {
+        var client = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(10),
+        };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("arm-migration-assist-assessment/1.0");
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        return client;
+    }
+
+    private static decimal ComputeResolutionRate(IReadOnlyList<DependencyFinding> findings)
+    {
+        if (findings.Count == 0)
+        {
+            return 1m;
+        }
+
+        var classified = findings.Count(finding =>
+            !string.Equals(finding.ArchitectureStatus, "unknown", StringComparison.Ordinal));
+        return decimal.Round((decimal)classified / findings.Count, 4, MidpointRounding.AwayFromZero);
     }
 
     private static string ResolveProducerVersion()
@@ -128,6 +165,11 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
         var codeFindings = await codeTask;
         progress?.Report(new AssessmentProgress("finalizing", 95, "Validating assessment evidence."));
 
+        // Always-on live registry verification (pypi/npm/nuget). The no-op verifier is used by
+        // unit tests so they stay offline and deterministic; product surfaces inject the real one.
+        var dependencyFindings = await registryVerifier.VerifyAsync(dependencyScan.Findings, cancellationToken);
+        var dependencyResolutionRate = ComputeResolutionRate(dependencyFindings);
+
         async Task<T> RunScannerAsync<T>(string phase, string message, Func<T> scanOperation)
         {
             var result = await Task.Run(scanOperation, cancellationToken);
@@ -138,7 +180,7 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
 
         var unknowns = new List<AssessmentUnknown>();
 
-        var unresolvedDependencies = dependencyScan.Findings
+        var unresolvedDependencies = dependencyFindings
             .Where(finding => finding.ArchitectureStatus == "unknown")
             .ToArray();
         if (unresolvedDependencies.Length > 0)
@@ -215,14 +257,14 @@ public sealed class RepositoryDiscoveryService : IRepositoryAssessmentService
                 workspace.DefaultBranch,
                 scan.License),
             Technology: scan.Technology,
-            Dependencies: dependencyScan.Findings,
+            Dependencies: dependencyFindings,
             CodeFindings: codeFindings,
             BuildFindings: scan.BuildFindings,
             WindowsExperience: scan.WindowsExperience,
             ScanCoverage: new ScanCoverage(
                 catalog.TotalFiles - catalog.SkippedFiles,
                 catalog.TotalFiles,
-                dependencyScan.ResolutionRate,
+                dependencyResolutionRate,
                 ["repository-intake", "technology-discovery", "dependency-scanner", "code-compatibility-scanner"],
                 []),
             Unknowns: unknowns,

@@ -87,7 +87,7 @@ internal sealed partial class DependencyScanner
 
     private static void AddComFinding(
         IDictionary<string, DependencyFinding> byName,
-        string name,
+        string? name,
         string category,
         string observation,
         string path,
