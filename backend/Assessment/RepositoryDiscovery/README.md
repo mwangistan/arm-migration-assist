@@ -112,7 +112,11 @@ Open `http://127.0.0.1:5173`. Vite proxies `/api` requests to the local API.
 - NuGet, npm, Python, vcpkg, Cargo, and Go dependency declarations
 - checked-in PE and ELF binary architecture from validated headers
 - checked-in Python extensions (`.pyd`) and assembly source (`.asm`/`.s`)
+- COM activation signals (ProgID/CLSID activation, `.NET` interop, `COMReference`,
+  `regsvr32` registration, and `.tlb`/`.olb` type libraries) as `com` dependencies
 - architecture status backed by package or binary evidence
+- live ARM64 availability for PyPI, npm, and NuGet packages, resolved from the
+  public registries and recorded as `artifact` evidence
 - P/Invoke, inline assembly, x86 SIMD, architecture conditionals,
   pointer-size-sensitive code, and dynamic native loading
 - ARM64 and Arm64EC build targets
@@ -120,10 +124,22 @@ Open `http://127.0.0.1:5173`. Vite proxies `/api` requests to the local API.
 - test-suite and conservative Windows experience signals
 - scan coverage, malformed-manifest gaps, explicit unknowns, and reusable skills
 
-The scanners use static repository evidence only. A dependency with no
-repository-visible architecture signal remains `unknown`; Feature 1 does not
-query package registries, execute builds, calculate readiness scores, or propose
-migration strategy.
+Static repository scanners run first and classify only what is visible in the
+commit. A dependency with no repository-visible architecture signal is then
+verified against its package registry (PyPI, npm, NuGet): the verifier resolves
+real ARM64 artifact availability and can promote an `unknown` to `ready`,
+`emulation-only`, or `blocked`, attaching an `artifact` evidence record and
+never overwriting a decisive scanner status with an inconclusive verdict.
+npm and NuGet are resolved through the Microsoft PackageFeedProxy
+(`packagefeedproxy.microsoft.io`) first — it mirrors the public feeds and stays
+reachable on Microsoft-managed devices where the public registries are blocked —
+then fall back to `registry.npmjs.org` / `api.nuget.org`; PyPI is queried
+directly at `pypi.org`. The npm (`NPM_REGISTRY` / `NPM_CONFIG_REGISTRY`) and
+NuGet (`NUGET_FLAT_CONTAINER`) endpoints can be overridden by environment
+variable, which take precedence over the proxy. Registry verification is always
+on for the CLI and served API; it is disabled in unit tests to keep them offline
+and deterministic. Feature 1 still does not execute builds, calculate readiness
+scores, or propose migration strategy.
 
 ## Safety and privacy
 

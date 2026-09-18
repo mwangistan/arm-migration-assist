@@ -92,15 +92,21 @@ public sealed class RepositoryClonePool : IRepositoryClonePool, IDisposable
     private async Task<RepositoryClone> MaterializeAsync(RepositoryCloneKey key, CancellationToken cancellationToken)
     {
         var destination = Path.Combine(_rootDirectory, key.DirectorySegment);
+        var readyMarker = destination + ".ready";
 
-        if (Directory.Exists(destination) && Directory.EnumerateFileSystemEntries(destination).Any())
+        // Only reuse a clone that a previous run marked complete. A directory that exists without
+        // the marker is a half-materialized clone from a crash or an interrupted/failed clone (for
+        // example a "Filename too long" abort); reusing it would silently yield an empty, tracked-
+        // file-less workspace instead of a real assessment.
+        if (Directory.Exists(destination) && File.Exists(readyMarker))
         {
             _logger.LogDebug("Reusing existing clone at {Path} for {Sha}", destination, key.CommitSha);
             return new RepositoryClone(destination, key, key.CommitSha);
         }
 
-        // Fresh directory. Delete anything half-materialized from a previous crash so `git clone`
-        // doesn't refuse to write into a non-empty target.
+        // Fresh or half-materialized directory. Delete anything left behind (including a stale
+        // marker) so `git clone` doesn't refuse to write into a non-empty target.
+        TryDeleteMarker(readyMarker);
         if (Directory.Exists(destination))
         {
             TryDeleteDirectory(destination);
@@ -123,6 +129,7 @@ public sealed class RepositoryClonePool : IRepositoryClonePool, IDisposable
                 "--depth=1",
                 "-c", "core.autocrlf=false",
                 "-c", "core.eol=lf",
+                "-c", "core.longpaths=true",
                 key.RepositoryUrl,
                 destination,
             }, cancellationToken).ConfigureAwait(false);
@@ -156,10 +163,15 @@ public sealed class RepositoryClonePool : IRepositoryClonePool, IDisposable
                 .ConfigureAwait(false);
             var resolvedSha = resolved.Succeeded ? resolved.StdOut.Trim().ToLowerInvariant() : key.CommitSha;
 
+            // Mark the clone complete only now, after checkout succeeded, so a later run reuses it
+            // instead of re-cloning — and never mistakes a failed clone for a usable one.
+            TryWriteMarker(readyMarker, resolvedSha);
+
             return new RepositoryClone(destination, key, resolvedSha);
         }
         catch
         {
+            TryDeleteMarker(readyMarker);
             TryDeleteDirectory(destination);
             throw;
         }
@@ -206,9 +218,30 @@ public sealed class RepositoryClonePool : IRepositoryClonePool, IDisposable
         {
             if (task.Status == TaskStatus.RanToCompletion)
             {
+                TryDeleteMarker(task.Result.RootPath + ".ready");
                 TryDeleteDirectory(task.Result.RootPath);
             }
         }
+    }
+
+    private static void TryWriteMarker(string markerPath, string content)
+    {
+        try
+        {
+            File.WriteAllText(markerPath, content);
+        }
+        catch (IOException) { /* best effort: a missing marker just forces a reclone next time */ }
+        catch (UnauthorizedAccessException) { /* best effort */ }
+    }
+
+    private static void TryDeleteMarker(string markerPath)
+    {
+        try
+        {
+            if (File.Exists(markerPath)) File.Delete(markerPath);
+        }
+        catch (IOException) { /* best effort */ }
+        catch (UnauthorizedAccessException) { /* best effort */ }
     }
 
     private static void TryDeleteDirectory(string path)

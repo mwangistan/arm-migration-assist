@@ -103,8 +103,11 @@ internal sealed partial class DependencyScanner
             .Take(MaximumDependencies)
             .ToArray();
         cancellationToken.ThrowIfCancellationRequested();
+        var comFindings = CollectComFindings(files, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var findings = packageFindings
             .Concat(binaryFindings)
+            .Concat(comFindings)
             .OrderBy(finding => finding.Ecosystem, StringComparer.Ordinal)
             .ThenBy(finding => finding.Name, StringComparer.OrdinalIgnoreCase)
             .Take(MaximumDependencies)
