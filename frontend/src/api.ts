@@ -1,8 +1,25 @@
 import type {
+  BranchApplication,
+  CriterionResult,
+  CriterionResultStatus,
+  GeneratedPatch,
+  MigrationActionsResult,
+  MigrationJob,
+  MigrationJobAccepted,
+  MigrationJobStatus,
   MigrationPlanningResult,
   MigrationWorkItem,
+  OverallScorecardStatus,
+  PatchRejection,
   ReadinessDimension,
   RepositoryAssessment,
+  SkippedWorkItem,
+  ValidationCoverageGap,
+  ValidationDispatch,
+  ValidationReport,
+  ValidationRunStatus,
+  ValidationRunSummary,
+  ValidationScorecard,
 } from './types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -185,6 +202,16 @@ function migrationPlannerApiUrl(path: string) {
   return configuredBase ? `${configuredBase.replace(/\/+$/, '')}${path}` : path;
 }
 
+function automationApiUrl(path: string) {
+  const configuredBase = import.meta.env.VITE_AUTOMATION_API_URL?.trim();
+  return configuredBase ? `${configuredBase.replace(/\/+$/, '')}${path}` : path;
+}
+
+function validationApiUrl(path: string) {
+  const configuredBase = import.meta.env.VITE_VALIDATION_API_URL?.trim();
+  return configuredBase ? `${configuredBase.replace(/\/+$/, '')}${path}` : path;
+}
+
 async function fetchService(
   input: string,
   init: RequestInit | undefined,
@@ -211,6 +238,22 @@ function fetchMigrationPlanner(path: string, init?: RequestInit) {
     migrationPlannerApiUrl(path),
     init,
     'The migration planner is unavailable. Your assessment results are still available.',
+  );
+}
+
+function fetchAutomationService(path: string, init?: RequestInit) {
+  return fetchService(
+    automationApiUrl(path),
+    init,
+    'The migration action runner is unavailable. Your plan is still available.',
+  );
+}
+
+function fetchValidationService(path: string, init?: RequestInit) {
+  return fetchService(
+    validationApiUrl(path),
+    init,
+    'The validation service is unavailable. Migration patches are still available.',
   );
 }
 
@@ -637,4 +680,349 @@ export async function cancelGitHubAuthentication(sessionId: string): Promise<voi
   if (!response.ok && response.status !== 404) {
     throw new Error('GitHub sign-in could not be canceled.');
   }
+}
+
+// ---- Feature 3: migration actions runner ----
+
+const migrationJobStatuses: readonly MigrationJobStatus[] =
+  ['queued', 'running', 'completed', 'failed'];
+
+const migrationJobStatusSet = new Set<string>(migrationJobStatuses);
+
+function isMigrationJobStatus(value: unknown): value is MigrationJobStatus {
+  return typeof value === 'string' && migrationJobStatusSet.has(value);
+}
+
+function isMigrationAcceptanceTest(value: unknown) {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.description === 'string'
+    && typeof value.expectedOutcome === 'string';
+}
+
+function isGeneratedPatch(value: unknown): value is GeneratedPatch {
+  return isRecord(value)
+    && typeof value.workItemId === 'string'
+    && typeof value.agentOrSkill === 'string'
+    && typeof value.title === 'string'
+    && typeof value.diff === 'string'
+    && typeof value.originalSizeBytes === 'number'
+    && typeof value.truncated === 'boolean'
+    && isStringArray(value.evidenceIds)
+    && Array.isArray(value.acceptanceTests)
+    && value.acceptanceTests.every(isMigrationAcceptanceTest);
+}
+
+function isSkippedWorkItem(value: unknown): value is SkippedWorkItem {
+  return isRecord(value)
+    && typeof value.workItemId === 'string'
+    && typeof value.agentOrSkill === 'string'
+    && typeof value.reason === 'string';
+}
+
+function isPatchRejection(value: unknown): value is PatchRejection {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.reason === 'string';
+}
+
+function isBranchApplication(value: unknown): value is BranchApplication {
+  return isRecord(value)
+    && typeof value.worktreePath === 'string'
+    && typeof value.branchName === 'string'
+    && typeof value.branchHeadSha === 'string'
+    && typeof value.commitCreated === 'boolean'
+    && isStringArray(value.appliedIds)
+    && Array.isArray(value.rejected)
+    && value.rejected.every(isPatchRejection);
+}
+
+function isValidationDispatch(value: unknown): value is ValidationDispatch {
+  return isRecord(value)
+    && (value.planId === null || typeof value.planId === 'string')
+    && (value.runId === null || typeof value.runId === 'string')
+    && (value.statusUrl === null || typeof value.statusUrl === 'string')
+    && typeof value.dispatched === 'boolean'
+    && (value.error === null || typeof value.error === 'string');
+}
+
+function isMigrationActionsResult(value: unknown): value is MigrationActionsResult {
+  return isRecord(value)
+    && typeof value.planId === 'string'
+    && typeof value.sourceCommitSha === 'string'
+    && Array.isArray(value.generated)
+    && value.generated.every(isGeneratedPatch)
+    && Array.isArray(value.skipped)
+    && value.skipped.every(isSkippedWorkItem)
+    && (value.branch === null || value.branch === undefined || isBranchApplication(value.branch))
+    && (value.validation === null || value.validation === undefined || isValidationDispatch(value.validation));
+}
+
+function isMigrationJob(value: unknown): value is MigrationJob {
+  if (!isRecord(value)) return false;
+  return typeof value.jobId === 'string'
+    && isMigrationJobStatus(value.status)
+    && typeof value.planId === 'string'
+    && isRecord(value.target)
+    && typeof value.target.url === 'string'
+    && typeof value.target.commitSha === 'string'
+    && typeof value.createdAt === 'string'
+    && (value.startedAt === null || typeof value.startedAt === 'string')
+    && (value.finishedAt === null || typeof value.finishedAt === 'string')
+    && (value.result === null || value.result === undefined || isMigrationActionsResult(value.result))
+    && (value.error === null || typeof value.error === 'string');
+}
+
+function isMigrationJobAccepted(value: unknown): value is MigrationJobAccepted {
+  return isRecord(value)
+    && typeof value.jobId === 'string'
+    && typeof value.status === 'string'
+    && typeof value.statusUrl === 'string';
+}
+
+function normalizeMigrationJob(value: unknown): MigrationJob {
+  if (!isMigrationJob(value)) {
+    throw new Error('The migration action runner returned an invalid response.');
+  }
+  const raw = value as unknown as Record<string, unknown>;
+  return {
+    jobId: value.jobId,
+    status: value.status,
+    planId: value.planId,
+    target: value.target,
+    createdAt: value.createdAt,
+    startedAt: value.startedAt ?? null,
+    finishedAt: value.finishedAt ?? null,
+    result: (raw.result as MigrationActionsResult | null | undefined) ?? null,
+    error: value.error ?? null,
+  };
+}
+
+export async function submitMigrationJob(
+  plan: MigrationPlanningResult['plan'],
+  target: { url: string; commitSha: string },
+  signal?: AbortSignal,
+): Promise<MigrationJobAccepted> {
+  const response = await fetchAutomationService('/api/migration-actions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan, target }),
+    signal,
+  });
+  const payload = await readJson(response);
+  if (!response.ok) {
+    throw new Error(
+      problemMessage(payload).replace(/^Assessment failed\.$/, 'Migration actions were rejected.'),
+    );
+  }
+  if (!isMigrationJobAccepted(payload)) {
+    throw new Error('The migration action runner returned an invalid response.');
+  }
+  return payload;
+}
+
+export async function getMigrationJob(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<MigrationJob> {
+  const response = await fetchAutomationService(
+    `/api/migration-actions/jobs/${encodeURIComponent(jobId)}`,
+    { signal },
+  );
+  const payload = await readJson(response);
+  if (!response.ok) {
+    throw new Error(
+      problemMessage(payload).replace(/^Assessment failed\.$/, 'Migration job status is unavailable.'),
+    );
+  }
+  return normalizeMigrationJob(payload);
+}
+
+function waitForNextPoll(intervalMs: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, intervalMs);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export async function pollMigrationJob(
+  jobId: string,
+  options: { onUpdate?: (job: MigrationJob) => void; signal?: AbortSignal; intervalMs?: number } = {},
+): Promise<MigrationJob> {
+  const interval = options.intervalMs ?? 1500;
+  let latest = await getMigrationJob(jobId, options.signal);
+  options.onUpdate?.(latest);
+  while (latest.status === 'queued' || latest.status === 'running') {
+    await waitForNextPoll(interval, options.signal);
+    latest = await getMigrationJob(jobId, options.signal);
+    options.onUpdate?.(latest);
+  }
+  return latest;
+}
+
+// ---- Feature 4: validation runs and reports ----
+
+const validationRunStatuses: readonly ValidationRunStatus[] =
+  ['queued', 'running', 'completed', 'failed', 'cancelled'];
+
+const validationRunStatusSet = new Set<string>(validationRunStatuses);
+
+function isValidationRunStatus(value: unknown): value is ValidationRunStatus {
+  return typeof value === 'string' && validationRunStatusSet.has(value);
+}
+
+const criterionResultStatuses: readonly CriterionResultStatus[] =
+  ['passed', 'failed', 'not-run', 'inconclusive', 'skipped'];
+
+const criterionResultStatusSet = new Set<string>(criterionResultStatuses);
+
+function isCriterionResultStatus(value: unknown): value is CriterionResultStatus {
+  return typeof value === 'string' && criterionResultStatusSet.has(value);
+}
+
+const overallStatusValues: readonly OverallScorecardStatus[] =
+  ['validated', 'validation-failed', 'partially-validated', 'not-validated'];
+
+const overallStatusSet = new Set<string>(overallStatusValues);
+
+function isOverallStatus(value: unknown): value is OverallScorecardStatus {
+  return typeof value === 'string' && overallStatusSet.has(value);
+}
+
+function isValidationRunSummary(value: unknown): value is ValidationRunSummary {
+  if (!isRecord(value)) return false;
+  return typeof value.runId === 'string'
+    && typeof value.planId === 'string'
+    && isValidationRunStatus(value.status)
+    && typeof value.createdAt === 'string'
+    && (value.startedAt === null || value.startedAt === undefined || typeof value.startedAt === 'string')
+    && (value.finishedAt === null || value.finishedAt === undefined || typeof value.finishedAt === 'string')
+    && (value.summary === null || value.summary === undefined || typeof value.summary === 'string')
+    && (value.error === null || value.error === undefined || typeof value.error === 'string');
+}
+
+function isCriterionResult(value: unknown): value is CriterionResult {
+  if (!isRecord(value)) return false;
+  if (!isRecord(value.criterion)) return false;
+  return typeof value.criterion.key === 'string'
+    && typeof value.criterion.category === 'string'
+    && typeof value.criterion.description === 'string'
+    && typeof value.criterion.expectedOutcome === 'string'
+    && isCriterionResultStatus(value.status)
+    && typeof value.reason === 'string'
+    && isStringArray(value.commandIds)
+    && isStringArray(value.evidenceIds);
+}
+
+function isCoverageGap(value: unknown): value is ValidationCoverageGap {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.description === 'string'
+    && isStringArray(value.criterionKeys);
+}
+
+function isScorecard(value: unknown): value is ValidationScorecard {
+  return isRecord(value)
+    && isOverallStatus(value.status)
+    && typeof value.passed === 'number'
+    && typeof value.failed === 'number'
+    && typeof value.notRun === 'number'
+    && typeof value.inconclusive === 'number'
+    && typeof value.skipped === 'number'
+    && Array.isArray(value.criteria)
+    && value.criteria.every(isCriterionResult);
+}
+
+function isValidationReport(value: unknown): value is ValidationReport {
+  return isRecord(value)
+    && typeof value.runId === 'string'
+    && typeof value.planFingerprint === 'string'
+    && typeof value.migrationPlanId === 'string'
+    && isScorecard(value.scorecard)
+    && Array.isArray(value.coverageGaps)
+    && value.coverageGaps.every(isCoverageGap);
+}
+
+function normalizeValidationRun(value: unknown): ValidationRunSummary {
+  if (!isValidationRunSummary(value)) {
+    throw new Error('The validation service returned an invalid response.');
+  }
+  return {
+    runId: value.runId,
+    planId: value.planId,
+    status: value.status,
+    createdAt: value.createdAt,
+    startedAt: value.startedAt ?? null,
+    finishedAt: value.finishedAt ?? null,
+    summary: value.summary ?? null,
+    error: value.error ?? null,
+  };
+}
+
+export async function getValidationRun(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<ValidationRunSummary> {
+  const response = await fetchValidationService(
+    `/api/v1/validation/runs/${encodeURIComponent(runId)}`,
+    { signal },
+  );
+  const payload = await readJson(response);
+  if (!response.ok) {
+    throw new Error(
+      problemMessage(payload).replace(/^Assessment failed\.$/, 'Validation run status is unavailable.'),
+    );
+  }
+  return normalizeValidationRun(payload);
+}
+
+export async function pollValidationRun(
+  runId: string,
+  options: {
+    onUpdate?: (run: ValidationRunSummary) => void;
+    signal?: AbortSignal;
+    intervalMs?: number;
+  } = {},
+): Promise<ValidationRunSummary> {
+  const interval = options.intervalMs ?? 2000;
+  let latest = await getValidationRun(runId, options.signal);
+  options.onUpdate?.(latest);
+  while (latest.status === 'queued' || latest.status === 'running') {
+    await waitForNextPoll(interval, options.signal);
+    latest = await getValidationRun(runId, options.signal);
+    options.onUpdate?.(latest);
+  }
+  return latest;
+}
+
+export async function getValidationReport(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<ValidationReport> {
+  const response = await fetchValidationService(
+    `/api/v1/validation/runs/${encodeURIComponent(runId)}/report`,
+    { signal },
+  );
+  const payload = await readJson(response);
+  if (!response.ok) {
+    throw new Error(
+      problemMessage(payload).replace(/^Assessment failed\.$/, 'Validation report is unavailable.'),
+    );
+  }
+  if (!isValidationReport(payload)) {
+    throw new Error('The validation service returned an invalid report.');
+  }
+  return payload;
 }

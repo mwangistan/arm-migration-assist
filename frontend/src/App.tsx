@@ -30,18 +30,27 @@ import {
   cancelAssessmentJob,
   cancelGitHubAuthentication,
   getGitHubAuthentication,
+  getValidationReport,
   migrationReportUrl,
   planMigration,
+  pollMigrationJob,
+  pollValidationRun,
   startGitHubAuthentication,
+  submitMigrationJob,
   type AssessmentJob,
   type AssessmentProgress,
 } from './api';
 import type {
   CodeFinding,
+  CriterionResult,
   DependencyFinding,
+  GeneratedPatch,
+  MigrationJob,
   MigrationPlanningResult,
   MigrationWorkItem,
   RepositoryAssessment,
+  ValidationReport,
+  ValidationRunSummary,
 } from './types';
 
 type BadgeColor =
@@ -228,12 +237,24 @@ function ProductWorkflow({
   planningError,
   loading,
   progressPhase,
+  migrationJob,
+  migrationJobPending,
+  migrationJobError,
+  validationRun,
+  validationReport,
+  validationPending,
 }: {
   assessment: RepositoryAssessment | null;
   planning: MigrationPlanningResult | null;
   planningError: string | null;
   loading: boolean;
   progressPhase: string;
+  migrationJob: MigrationJob | null;
+  migrationJobPending: boolean;
+  migrationJobError: string | null;
+  validationRun: ValidationRunSummary | null;
+  validationReport: ValidationReport | null;
+  validationPending: boolean;
 }) {
   const actionableSkills = new Set([
     'build/add-arm64-target',
@@ -248,6 +269,52 @@ function ProductWorkflow({
         .reduce((total, [, value]) => total + value.length, 0)
     : 0;
   const assessing = loading && progressPhase !== 'migration-planning';
+  const job = migrationJob;
+  const jobFailed = migrationJobError !== null || job?.status === 'failed';
+  const transformDetail = job?.status === 'completed'
+    ? `${pluralize(job.result?.generated.length ?? 0, 'patch', 'patches')} generated`
+    : migrationJobPending
+      ? job?.status === 'running' ? 'Generating patches' : 'Queued'
+      : jobFailed
+        ? 'Run failed'
+        : planning
+          ? `${actionableWork} ready / ${planning.plan.missingSkills.length} gaps`
+          : 'Reviewable patches';
+  const transformState: WorkflowStageState = job?.status === 'completed'
+    ? 'complete'
+    : jobFailed
+      ? 'attention'
+      : migrationJobPending
+        ? 'active'
+        : planning
+          ? actionableWork > 0 ? 'ready' : 'attention'
+          : 'waiting';
+  const scorecard = validationReport?.scorecard ?? null;
+  const validationFailed = validationRun?.status === 'failed';
+  const validateDetail = scorecard
+    ? scorecard.status === 'validated'
+      ? `${scorecard.passed} passed`
+      : scorecard.status === 'validation-failed'
+        ? `${scorecard.failed} failed`
+        : scorecard.status === 'partially-validated'
+          ? `${scorecard.passed}/${scorecard.criteria.length} passed`
+          : 'Not validated'
+    : validationPending
+      ? validationRun?.status === 'running' ? 'Validation running' : 'Validation queued'
+      : validationFailed
+        ? 'Validation failed'
+        : planning
+          ? `${pluralize(validationChecks, 'check')} defined`
+          : 'ARM64 verification';
+  const validateState: WorkflowStageState = scorecard
+    ? scorecard.status === 'validated'
+      ? 'complete'
+      : scorecard.status === 'validation-failed' ? 'attention' : 'ready'
+    : validationFailed
+      ? 'attention'
+      : validationPending
+        ? 'active'
+        : planning ? 'ready' : 'waiting';
   const stages: Array<{
     label: string;
     detail: string;
@@ -270,15 +337,13 @@ function ProductWorkflow({
     },
     {
       label: 'Transform',
-      detail: planning
-        ? `${actionableWork} ready / ${planning.plan.missingSkills.length} gaps`
-        : 'Reviewable patches',
-      state: planning ? actionableWork > 0 ? 'ready' : 'attention' : 'waiting',
+      detail: transformDetail,
+      state: transformState,
     },
     {
       label: 'Validate',
-      detail: planning ? `${pluralize(validationChecks, 'check')} defined` : 'ARM64 verification',
-      state: planning ? 'ready' : 'waiting',
+      detail: validateDetail,
+      state: validateState,
     },
   ];
 
@@ -536,16 +601,337 @@ function WorkItemRow({ item }: { item: MigrationWorkItem }) {
   );
 }
 
+function migrationJobLabel(job: MigrationJob | null, pending: boolean) {
+  if (pending && (!job || job.status === 'queued' || job.status === 'running')) {
+    return job?.status === 'running' ? 'Generating patches' : 'Queued';
+  }
+  if (!job) return 'Ready';
+  if (job.status === 'completed') return 'Patches ready';
+  if (job.status === 'failed') return 'Run failed';
+  return titleCase(job.status);
+}
+
+function migrationJobBadgeColor(job: MigrationJob | null, pending: boolean): BadgeColor {
+  if (pending) return 'informative';
+  if (!job) return 'subtle';
+  if (job.status === 'completed') return 'success';
+  if (job.status === 'failed') return 'danger';
+  return 'informative';
+}
+
+function validationStatusMeta(status: string): StatusMeta {
+  switch (status) {
+    case 'validated': return { label: 'Validated', color: 'success' };
+    case 'validation-failed': return { label: 'Validation failed', color: 'danger' };
+    case 'partially-validated': return { label: 'Partially validated', color: 'warning' };
+    default: return { label: 'Not validated', color: 'subtle' };
+  }
+}
+
+function criterionStatusMeta(status: CriterionResult['status']): StatusMeta {
+  switch (status) {
+    case 'passed': return { label: 'Passed', color: 'success' };
+    case 'failed': return { label: 'Failed', color: 'danger' };
+    case 'inconclusive': return { label: 'Inconclusive', color: 'warning' };
+    case 'skipped': return { label: 'Skipped', color: 'subtle' };
+    default: return { label: 'Not run', color: 'subtle' };
+  }
+}
+
+function GeneratedPatchRow({ patch }: { patch: GeneratedPatch }) {
+  const label = `${patch.originalSizeBytes.toLocaleString()} bytes`;
+  return (
+    <details className="patch-row">
+      <summary>
+        <div>
+          <Badge appearance="outline" color="informative" size="small">
+            {titleCase(patch.agentOrSkill)}
+          </Badge>
+          <strong>{patch.title}</strong>
+        </div>
+        <span>
+          {label}{patch.truncated ? ' (truncated)' : ''}
+        </span>
+      </summary>
+      <pre className="patch-diff" aria-label={`Diff for ${patch.title}`}>{patch.diff}</pre>
+    </details>
+  );
+}
+
+function TransformValidateResults({
+  planning,
+  target,
+  job,
+  jobPending,
+  jobError,
+  validationRun,
+  validationReport,
+  validationPending,
+  validationError,
+  onRun,
+  onCancel,
+}: {
+  planning: MigrationPlanningResult;
+  target: { url: string; commitSha: string } | null;
+  job: MigrationJob | null;
+  jobPending: boolean;
+  jobError: string | null;
+  validationRun: ValidationRunSummary | null;
+  validationReport: ValidationReport | null;
+  validationPending: boolean;
+  validationError: string | null;
+  onRun: () => void;
+  onCancel: () => void;
+}) {
+  const result = job?.result ?? null;
+  const generated = result?.generated ?? [];
+  const skipped = result?.skipped ?? [];
+  const branch = result?.branch ?? null;
+  const dispatch = result?.validation ?? null;
+  const scorecard = validationReport?.scorecard ?? null;
+  const canRun = Boolean(target) && !jobPending;
+
+  return (
+    <section
+      className="content-section transform-section"
+      id="migration-actions"
+      aria-labelledby="transform-heading"
+    >
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Transform + validate</p>
+          <h3 id="transform-heading">Reviewable changes</h3>
+        </div>
+        <StatusBadge meta={{
+          label: migrationJobLabel(job, jobPending),
+          color: migrationJobBadgeColor(job, jobPending),
+        }} />
+      </div>
+
+      <p className="transform-context">
+        Runs the runnable work items in the plan against a fresh clone of the pinned commit,
+        applies the resulting patches to a scratch branch, and dispatches the ARM64 validation
+        run. Nothing is pushed to your repository.
+      </p>
+
+      <div className="transform-actions">
+        <Button
+          appearance="primary"
+          onClick={onRun}
+          disabled={!canRun}
+          icon={jobPending ? <Spinner size="tiny" /> : <ArrowRight20Regular />}
+          iconPosition="after"
+        >
+          {jobPending
+            ? job?.status === 'running' ? 'Generating patches' : 'Queued'
+            : job?.status === 'completed' ? 'Rerun migration actions' : 'Generate reviewable changes'}
+        </Button>
+        {jobPending ? (
+          <Button appearance="secondary" onClick={onCancel} icon={<Dismiss20Regular />}>
+            Cancel
+          </Button>
+        ) : null}
+        <span className="transform-plan-id">Plan {planning.plan.planId}</span>
+      </div>
+
+      {jobPending ? <ProgressBar aria-label="Migration actions in progress" /> : null}
+
+      {jobError ? (
+        <MessageBar intent="error"><MessageBarBody>{jobError}</MessageBarBody></MessageBar>
+      ) : null}
+
+      {job?.status === 'failed' && job.error ? (
+        <MessageBar intent="error"><MessageBarBody>{job.error}</MessageBarBody></MessageBar>
+      ) : null}
+
+      {result ? (
+        <div className="transform-summary">
+          <div className="transform-summary-grid">
+            <div>
+              <span className="metric-label">Patches generated</span>
+              <span className="metric-value">{generated.length}</span>
+            </div>
+            <div>
+              <span className="metric-label">Skipped</span>
+              <span className="metric-value">{skipped.length}</span>
+            </div>
+            <div>
+              <span className="metric-label">Applied</span>
+              <span className="metric-value">{branch?.appliedIds.length ?? 0}</span>
+            </div>
+            <div>
+              <span className="metric-label">Rejected</span>
+              <span className="metric-value">{branch?.rejected.length ?? 0}</span>
+            </div>
+          </div>
+
+          {branch ? (
+            <div className="transform-branch">
+              <p>
+                <strong>Branch </strong>
+                <code>{branch.branchName}</code>
+                {branch.commitCreated ? (
+                  <>
+                    {' at '}
+                    <code title={branch.branchHeadSha}>{branch.branchHeadSha.slice(0, 12)}</code>
+                  </>
+                ) : (
+                  <span> (no commit — all patches rejected)</span>
+                )}
+              </p>
+              {branch.rejected.length > 0 ? (
+                <ul className="rejection-list" aria-label="Rejected patches">
+                  {branch.rejected.map((rejection) => (
+                    <li key={rejection.id}>
+                      <code>{rejection.id}</code>
+                      <span>{rejection.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+
+          {generated.length > 0 ? (
+            <div className="patch-list" aria-label="Generated patches">
+              {generated.map((patch) => (
+                <GeneratedPatchRow key={patch.workItemId} patch={patch} />
+              ))}
+            </div>
+          ) : null}
+
+          {skipped.length > 0 ? (
+            <div className="skipped-list" aria-label="Skipped work items">
+              <h4>Skipped work items</h4>
+              <ul>
+                {skipped.map((item) => (
+                  <li key={item.workItemId}>
+                    <div>
+                      <Badge appearance="outline" color="subtle" size="small">
+                        {titleCase(item.agentOrSkill)}
+                      </Badge>
+                      <span>{item.workItemId}</span>
+                    </div>
+                    <p>{item.reason}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {dispatch ? (
+        <div className="validation-panel" aria-labelledby="validation-heading">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">ARM64 validation</p>
+              <h4 id="validation-heading">Validation run</h4>
+            </div>
+            <StatusBadge meta={
+              scorecard
+                ? validationStatusMeta(scorecard.status)
+                : {
+                    label: validationPending
+                      ? validationRun?.status === 'running' ? 'Running' : 'Queued'
+                      : titleCase(validationRun?.status ?? 'queued'),
+                    color: validationPending ? 'informative' : 'subtle',
+                  }
+            } />
+          </div>
+
+          {!dispatch.dispatched ? (
+            <MessageBar intent="warning">
+              <MessageBarBody>
+                Validation could not be dispatched.
+                {dispatch.error ? ` ${dispatch.error}` : ''}
+              </MessageBarBody>
+            </MessageBar>
+          ) : null}
+
+          {validationPending ? <ProgressBar aria-label="Validation run in progress" /> : null}
+
+          {validationError ? (
+            <MessageBar intent="error"><MessageBarBody>{validationError}</MessageBarBody></MessageBar>
+          ) : null}
+
+          {validationRun?.status === 'failed' && validationRun.error ? (
+            <MessageBar intent="error"><MessageBarBody>{validationRun.error}</MessageBarBody></MessageBar>
+          ) : null}
+
+          {scorecard ? (
+            <>
+              <div className="scorecard-grid">
+                <div><span className="metric-label">Passed</span><span className="metric-value">{scorecard.passed}</span></div>
+                <div><span className="metric-label">Failed</span><span className="metric-value">{scorecard.failed}</span></div>
+                <div><span className="metric-label">Inconclusive</span><span className="metric-value">{scorecard.inconclusive}</span></div>
+                <div><span className="metric-label">Not run</span><span className="metric-value">{scorecard.notRun}</span></div>
+                <div><span className="metric-label">Skipped</span><span className="metric-value">{scorecard.skipped}</span></div>
+              </div>
+
+              <div className="criteria-list" aria-label="Validation criteria">
+                {scorecard.criteria.map((criterion) => (
+                  <div className="criteria-row" key={criterion.criterion.key}>
+                    <div>
+                      <Badge appearance="outline" color="informative" size="small">
+                        {titleCase(criterion.criterion.category)}
+                      </Badge>
+                      <StatusBadge meta={criterionStatusMeta(criterion.status)} />
+                    </div>
+                    <p><strong>{criterion.criterion.description}</strong>{criterion.reason}</p>
+                  </div>
+                ))}
+              </div>
+
+              {validationReport && validationReport.coverageGaps.length > 0 ? (
+                <div className="coverage-gaps" aria-label="Coverage gaps">
+                  <h5>Coverage gaps</h5>
+                  <ul>
+                    {validationReport.coverageGaps.map((gap) => (
+                      <li key={gap.id}>
+                        <strong>{gap.description}</strong>
+                        <span>{gap.criterionKeys.join(', ')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function AssessmentResults({
   assessment,
   planning,
   planningPending,
   planningError,
+  migrationJob,
+  migrationJobPending,
+  migrationJobError,
+  validationRun,
+  validationReport,
+  validationPending,
+  validationError,
+  onRunMigration,
+  onCancelMigration,
 }: {
   assessment: RepositoryAssessment;
   planning: MigrationPlanningResult | null;
   planningPending: boolean;
   planningError: string | null;
+  migrationJob: MigrationJob | null;
+  migrationJobPending: boolean;
+  migrationJobError: string | null;
+  validationRun: ValidationRunSummary | null;
+  validationReport: ValidationReport | null;
+  validationPending: boolean;
+  validationError: string | null;
+  onRunMigration: () => void;
+  onCancelMigration: () => void;
 }) {
   const coverage = assessment.scanCoverage.filesTotal === 0
     ? 0
@@ -642,6 +1028,7 @@ function AssessmentResults({
       <div className="assessment-layout">
         <aside className="section-rail" aria-label="Assessment sections">
           <a href="#migration-plan">Migration plan</a>
+          {planning ? <a href="#migration-actions">Reviewable changes</a> : null}
           <a href="#coverage">Coverage</a>
           <a href="#technology">Technology</a>
           <a href="#dependencies">Dependencies</a>
@@ -652,6 +1039,24 @@ function AssessmentResults({
 
         <div className="assessment-content">
           <PlanningResults planning={planning} pending={planningPending} error={planningError} />
+          {planning ? (
+            <TransformValidateResults
+              planning={planning}
+              target={{
+                url: assessment.repository.url,
+                commitSha: assessment.repository.commitSha,
+              }}
+              job={migrationJob}
+              jobPending={migrationJobPending}
+              jobError={migrationJobError}
+              validationRun={validationRun}
+              validationReport={validationReport}
+              validationPending={validationPending}
+              validationError={validationError}
+              onRun={onRunMigration}
+              onCancel={onCancelMigration}
+            />
+          ) : null}
           <section className="content-section" id="coverage" aria-labelledby="coverage-heading">
             <div className="section-heading">
               <div>
@@ -903,7 +1308,15 @@ export default function App() {
   const [inputError, setInputError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [authenticationMessage, setAuthenticationMessage] = useState<string | null>(null);
+  const [migrationJob, setMigrationJob] = useState<MigrationJob | null>(null);
+  const [migrationJobError, setMigrationJobError] = useState<string | null>(null);
+  const [migrationJobPending, setMigrationJobPending] = useState(false);
+  const [validationRun, setValidationRun] = useState<ValidationRunSummary | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [validationPending, setValidationPending] = useState(false);
+  const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
+  const migrationControllerRef = useRef<AbortController | null>(null);
   const authenticationSessionRef = useRef<string | null>(null);
   const assessmentJobRef = useRef<AssessmentJob | null>(null);
   const repositoryInputRef = useRef<HTMLInputElement>(null);
@@ -987,6 +1400,15 @@ export default function App() {
     setPlanning(null);
     setPlanningError(null);
     setAuthenticationMessage(null);
+    migrationControllerRef.current?.abort();
+    migrationControllerRef.current = null;
+    setMigrationJob(null);
+    setMigrationJobError(null);
+    setMigrationJobPending(false);
+    setValidationRun(null);
+    setValidationError(null);
+    setValidationPending(false);
+    setValidationReport(null);
     setProgress({ phase: 'queued', percent: 0, message: 'Submitting assessment.' });
     setLoading(true);
     const nextController = new AbortController();
@@ -1038,6 +1460,83 @@ export default function App() {
     }
     if (authenticationSessionId) {
       void cancelGitHubAuthentication(authenticationSessionId).catch(() => undefined);
+    }
+  }
+
+  function cancelMigration() {
+    migrationControllerRef.current?.abort();
+    migrationControllerRef.current = null;
+    setMigrationJobPending(false);
+    setValidationPending(false);
+  }
+
+  async function handleRunMigration() {
+    if (!planning || !assessment) return;
+    migrationControllerRef.current?.abort();
+    const controller = new AbortController();
+    migrationControllerRef.current = controller;
+    setMigrationJob(null);
+    setMigrationJobError(null);
+    setMigrationJobPending(true);
+    setValidationRun(null);
+    setValidationError(null);
+    setValidationReport(null);
+    setValidationPending(false);
+
+    const target = {
+      url: assessment.repository.url,
+      commitSha: assessment.repository.commitSha,
+    };
+
+    try {
+      const accepted = await submitMigrationJob(planning.plan, target, controller.signal);
+      const finalJob = await pollMigrationJob(accepted.jobId, {
+        onUpdate: (next) => setMigrationJob(next),
+        signal: controller.signal,
+      });
+      setMigrationJob(finalJob);
+      setMigrationJobPending(false);
+
+      const dispatch = finalJob.result?.validation ?? null;
+      if (finalJob.status === 'completed' && dispatch?.dispatched && dispatch.runId) {
+        const runId = dispatch.runId;
+        setValidationPending(true);
+        try {
+          const finalRun = await pollValidationRun(runId, {
+            onUpdate: (next) => setValidationRun(next),
+            signal: controller.signal,
+          });
+          setValidationRun(finalRun);
+          if (finalRun.status === 'completed' || finalRun.status === 'failed') {
+            try {
+              const report = await getValidationReport(runId, controller.signal);
+              setValidationReport(report);
+            } catch (reportError) {
+              if (reportError instanceof DOMException && reportError.name === 'AbortError') return;
+              setValidationError(
+                reportError instanceof Error ? reportError.message : 'Validation report is unavailable.',
+              );
+            }
+          }
+        } catch (runError) {
+          if (runError instanceof DOMException && runError.name === 'AbortError') return;
+          setValidationError(
+            runError instanceof Error ? runError.message : 'Validation run status is unavailable.',
+          );
+        } finally {
+          setValidationPending(false);
+        }
+      }
+    } catch (requestError) {
+      if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
+      setMigrationJobError(
+        requestError instanceof Error ? requestError.message : 'Migration actions failed.',
+      );
+    } finally {
+      setMigrationJobPending(false);
+      if (migrationControllerRef.current === controller) {
+        migrationControllerRef.current = null;
+      }
     }
   }
 
@@ -1171,6 +1670,12 @@ export default function App() {
           planningError={planningError}
           loading={loading}
           progressPhase={progress.phase}
+          migrationJob={migrationJob}
+          migrationJobPending={migrationJobPending}
+          migrationJobError={migrationJobError}
+          validationRun={validationRun}
+          validationReport={validationReport}
+          validationPending={validationPending}
         />
 
         <div className="workspace">
@@ -1180,6 +1685,15 @@ export default function App() {
               planning={planning}
               planningPending={loading && progress.phase === 'migration-planning'}
               planningError={planningError}
+              migrationJob={migrationJob}
+              migrationJobPending={migrationJobPending}
+              migrationJobError={migrationJobError}
+              validationRun={validationRun}
+              validationReport={validationReport}
+              validationPending={validationPending}
+              validationError={validationError}
+              onRunMigration={handleRunMigration}
+              onCancelMigration={cancelMigration}
             />
           ) : !loading ? (
             <section className="empty-workspace" aria-labelledby="empty-title">
