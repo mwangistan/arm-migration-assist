@@ -300,6 +300,31 @@ describe('App', () => {
     )).toBeInTheDocument();
   });
 
+  it('polls the planner when migration planning is queued asynchronously', async () => {
+    vi.stubEnv('VITE_MIGRATION_PLANNER_API_URL', 'https://planner.example.test/');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(assessmentJob(), 202))
+      .mockResolvedValueOnce(jsonResponse(assessment))
+      .mockResolvedValueOnce(jsonResponse(
+        { runId: 'run-ui-test', status: 'queued', statusUrl: '/api/migration-plans/runs/run-ui-test' },
+        202,
+      ))
+      .mockResolvedValueOnce(jsonResponse({ ...planningResult, status: 'completed' }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('GitHub repository URL'), {
+      target: { value: 'https://github.com/example/sample-app' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Run migration analysis' }));
+
+    expect(await screen.findByText('Add an ARM64 build target', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByText('74')).toBeInTheDocument();
+    expect(fetchMock.mock.calls[3][0]).toBe(
+      'https://planner.example.test/api/migration-plans/runs/run-ui-test',
+    );
+  });
+
   it('runs an assessment and presents dependency and code findings', async () => {
     vi.stubEnv('VITE_ASSESSMENT_API_URL', 'https://assessment.example.test/');
     vi.stubEnv('VITE_MIGRATION_PLANNER_API_URL', 'https://planner.example.test/');
