@@ -79,7 +79,7 @@ app.MapGet("/api/v1/arm64/runs/{jobId}", (string jobId, HttpRequest http, JobSto
     {
         return Results.Problem("Job not found.", statusCode: StatusCodes.Status404NotFound);
     }
-    var status = new JobStatus(record.JobId, record.Status, record.CreatedAt, record.StartedAt, record.FinishedAt, record.Scorecard, record.Error);
+    var status = new JobStatus(record.JobId, record.Status, record.CreatedAt, record.StartedAt, record.FinishedAt, record.Progress, record.Scorecard, record.Error);
     return Results.Ok(status);
 });
 

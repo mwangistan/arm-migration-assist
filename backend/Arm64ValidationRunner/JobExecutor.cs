@@ -34,23 +34,51 @@ public sealed class JobExecutor
         {
             ValidateRequest(request);
 
-            // 1. Clone (shallow, single-branch) then fetch + detach onto the base commit.
-            var clone = await RunGitAsync(scratch, new[]
+            var progress = new ProgressTracker(job, new[]
+            {
+                ("clone", "Clone repository"),
+                ("checkout", "Fetch & checkout base commit"),
+                ("patches", "Apply patches"),
+                ("detect", "Detect toolchain"),
+                ("build", "Build (arm64)"),
+                ("tests", "Run tests"),
+            });
+
+            // 1. Clone (shallow) then fetch + detach onto the base commit.
+            // Only pin a branch when one is supplied; otherwise clone the remote's
+            // default branch. "HEAD" is not a valid --branch value and makes
+            // `git clone --branch HEAD` fail with "Remote branch HEAD not found".
+            progress.Start("clone");
+            var cloneArgs = new List<string>
             {
                 "clone", "--filter=blob:none", "--no-tags",
                 "--depth", "1",
-                "--branch", string.IsNullOrWhiteSpace(request.Branch) ? "HEAD" : request.Branch!,
-                "--single-branch",
-                request.SourceUrl, "repo"
-            }, cancellationToken);
-            EnsureOk(clone, "git clone");
+            };
+            if (!string.IsNullOrWhiteSpace(request.Branch))
+            {
+                cloneArgs.Add("--branch");
+                cloneArgs.Add(request.Branch!);
+                cloneArgs.Add("--single-branch");
+            }
+            cloneArgs.Add(request.SourceUrl);
+            cloneArgs.Add("repo");
 
+            var clone = await RunGitAsync(scratch, cloneArgs, cancellationToken);
+            if (clone.ExitCode != 0 || clone.TimedOut) progress.Fail("clone", Trim(clone.Stderr));
+            EnsureOk(clone, "git clone");
+            progress.Succeed("clone");
+
+            progress.Start("checkout");
             var fetch = await RunGitAsync(repoDir, new[] { "fetch", "--depth", "1", "origin", request.BaseCommitSha }, cancellationToken);
+            if (fetch.ExitCode != 0 || fetch.TimedOut) progress.Fail("checkout", Trim(fetch.Stderr));
             EnsureOk(fetch, "git fetch");
             var checkout = await RunGitAsync(repoDir, new[] { "checkout", "--detach", request.BaseCommitSha }, cancellationToken);
+            if (checkout.ExitCode != 0 || checkout.TimedOut) progress.Fail("checkout", Trim(checkout.Stderr));
             EnsureOk(checkout, "git checkout");
+            progress.Succeed("checkout", request.BaseCommitSha[..Math.Min(12, request.BaseCommitSha.Length)]);
 
             // 2. Apply each patch — strict first, 3-way fallback for context drift.
+            progress.Start("patches", $"0/{request.Patches.Count} applied");
             var applied = new List<string>();
             var rejected = new List<PatchRejection>();
             var patchDir = Path.Combine(scratch, "patches");
@@ -66,19 +94,18 @@ public sealed class JobExecutor
                 if (check.ExitCode == 0)
                 {
                     var apply = await RunGitAsync(repoDir, new[] { "apply", patchFile }, cancellationToken);
-                    if (apply.ExitCode == 0) { applied.Add(patch.Id); continue; }
-                    rejected.Add(new PatchRejection(patch.Id, $"git apply failed: {Trim(apply.Stderr)}"));
-                    continue;
+                    if (apply.ExitCode == 0) { applied.Add(patch.Id); }
+                    else { rejected.Add(new PatchRejection(patch.Id, $"git apply failed: {Trim(apply.Stderr)}")); }
                 }
-
-                var threeWay = await RunGitAsync(repoDir, new[] { "apply", "--3way", patchFile }, cancellationToken);
-                if (threeWay.ExitCode == 0)
+                else
                 {
-                    applied.Add(patch.Id);
-                    continue;
+                    var threeWay = await RunGitAsync(repoDir, new[] { "apply", "--3way", patchFile }, cancellationToken);
+                    if (threeWay.ExitCode == 0) { applied.Add(patch.Id); }
+                    else { rejected.Add(new PatchRejection(patch.Id, $"3-way apply failed: {Trim(threeWay.Stderr)}")); }
                 }
-                rejected.Add(new PatchRejection(patch.Id, $"3-way apply failed: {Trim(threeWay.Stderr)}"));
+                progress.Detail("patches", $"{applied.Count}/{request.Patches.Count} applied");
             }
+            progress.Succeed("patches", $"{applied.Count}/{request.Patches.Count} applied, {rejected.Count} rejected");
 
             // 3. Commit whatever landed so subsequent tools see a clean tree.
             string resolvedSha = request.BaseCommitSha;
@@ -102,8 +129,10 @@ public sealed class JobExecutor
             var patchReport = new PatchApplicationReport(applied, rejected);
 
             // 4. Detect toolchain and run build + tests.
+            progress.Start("detect");
             var detected = ToolchainDetector.Detect(repoDir, request.ProjectHints);
             _logger.LogInformation("Job {JobId} detected toolchain: {Kind}", job.JobId, detected.Kind);
+            progress.Succeed("detect", detected.Kind.ToString());
 
             StepOutcome? build = null;
             StepOutcome? tests = null;
@@ -111,28 +140,45 @@ public sealed class JobExecutor
             switch (detected.Kind)
             {
                 case ToolchainKind.Dotnet:
+                    progress.Start("build", "dotnet build --arch arm64");
                     build = await RunDotnetBuildAsync(repoDir, detected, cancellationToken);
+                    MarkBuild(progress, build);
                     if (build?.Succeeded == true)
                     {
+                        progress.Start("tests", "dotnet test");
                         tests = await RunDotnetTestAsync(repoDir, detected, cancellationToken);
+                        MarkTests(progress, tests);
                     }
+                    else { progress.Skip("tests", "build failed"); }
                     break;
                 case ToolchainKind.Python:
+                    progress.Start("build", "pip install");
                     build = await RunPythonInstallAsync(repoDir, detected, cancellationToken);
+                    MarkBuild(progress, build);
                     if (build?.Succeeded == true)
                     {
+                        progress.Start("tests", "import smoke test");
                         tests = await RunPythonImportSmokeAsync(repoDir, detected, cancellationToken);
+                        MarkTests(progress, tests);
                     }
+                    else { progress.Skip("tests", "install failed"); }
                     break;
                 case ToolchainKind.Node:
+                    progress.Start("build", "npm install");
                     build = await RunNodeInstallAsync(repoDir, detected, cancellationToken);
+                    MarkBuild(progress, build);
                     if (build?.Succeeded == true)
                     {
+                        progress.Start("tests", "npm test");
                         tests = await RunNodeTestAsync(repoDir, detected, cancellationToken);
+                        MarkTests(progress, tests);
                     }
+                    else { progress.Skip("tests", "install failed"); }
                     break;
                 default:
                     build = new StepOutcome("detect", "n/a", repoDir, 0, false, 0, "", "no supported toolchain detected");
+                    progress.Skip("build", "no supported toolchain detected");
+                    progress.Skip("tests", "no supported toolchain detected");
                     break;
             }
 
@@ -148,6 +194,7 @@ public sealed class JobExecutor
                 Tests: tests,
                 WallClockSeconds: totalSw.Elapsed.TotalSeconds,
                 Summary: summary);
+            progress.Complete();
             job.Status = "completed";
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -270,6 +317,18 @@ public sealed class JobExecutor
                 ["GIT_TERMINAL_PROMPT"] = "0",
                 ["GIT_ASKPASS"] = "/bin/echo",
             }, cancellationToken: ct);
+    }
+
+    private static void MarkBuild(ProgressTracker progress, StepOutcome? outcome)
+    {
+        if (outcome is { Succeeded: true }) progress.Succeed("build", $"{outcome.DurationSeconds:F0}s");
+        else progress.Fail("build", outcome is null ? "build failed" : Trim(outcome.StderrTail));
+    }
+
+    private static void MarkTests(ProgressTracker progress, StepOutcome? outcome)
+    {
+        if (outcome is { Succeeded: true }) progress.Succeed("tests", $"{outcome.DurationSeconds:F0}s");
+        else progress.Fail("tests", outcome is null ? "tests failed" : Trim(outcome.StderrTail));
     }
 
     private static void EnsureOk(ProcessResult r, string what)

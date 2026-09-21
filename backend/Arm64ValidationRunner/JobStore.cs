@@ -9,6 +9,7 @@ public sealed class JobRecord
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
     public string Status { get; set; } = "queued";
+    public JobProgress? Progress { get; set; }
     public Arm64Scorecard? Scorecard { get; set; }
     public string? Error { get; set; }
 }
