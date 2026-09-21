@@ -157,7 +157,7 @@ public sealed class JobExecutor
                     MarkBuild(progress, build);
                     if (build?.Succeeded == true)
                     {
-                        progress.Start("tests", "import smoke test");
+                        progress.Start("tests", "import installed deps (arm64)");
                         tests = await RunPythonImportSmokeAsync(repoDir, detected, cancellationToken);
                         MarkTests(progress, tests);
                     }
@@ -278,21 +278,87 @@ public sealed class JobExecutor
     private async Task<StepOutcome> RunPythonImportSmokeAsync(string repoDir, DetectedToolchain d, CancellationToken ct)
     {
         var py = Path.Combine(repoDir, ".arm-venv", "bin", "python");
-        var script = "import sys, importlib, glob, os\n"
-            + "root = os.getcwd()\n"
-            + "top = sorted({os.path.splitext(os.path.basename(p))[0] for p in glob.glob(os.path.join(root, '*.py')) if not os.path.basename(p).startswith('_')})[:5]\n"
-            + "results = []\n"
-            + "for m in top:\n"
-            + "    try:\n"
-            + "        importlib.import_module(m); results.append((m, 'ok'))\n"
-            + "    except Exception as e: results.append((m, f'err: {type(e).__name__}: {e}'))\n"
-            + "for m, s in results: print(f'{m}: {s}')\n"
-            + "sys.exit(0 if all(s == 'ok' for _, s in results) else 1)\n";
+        // Import the *installed dependency distributions*, not the repository's top-level
+        // entry scripts. Application entry points (main.py, server.py, ...) run argparse,
+        // require GPUs/model files, or have import side effects, so importing them is not a
+        // meaningful ARM64 signal and fails spuriously. Loading the installed third-party
+        // packages instead verifies their native ARM64 wheels actually import on this VM.
+        var script = """
+            import sys, importlib
+            from importlib import metadata
+
+            skip_dist = {'pip', 'setuptools', 'wheel', 'pkg_resources', '_distutils_hack'}
+
+            # Map each installed distribution -> the import names it provides.
+            try:
+                pkg_to_dists = metadata.packages_distributions()
+            except Exception:
+                pkg_to_dists = {}
+
+            dist_to_imports = {}
+            for import_name, dists in pkg_to_dists.items():
+                for dname in dists:
+                    dist_to_imports.setdefault(dname.lower().replace('-', '_'), set()).add(import_name)
+
+            # Fall back to top_level.txt only for distributions we could not map above.
+            for dist in metadata.distributions():
+                try:
+                    raw = dist.metadata['Name'] or ''
+                except Exception:
+                    raw = ''
+                key = raw.lower().replace('-', '_')
+                if not key or key in dist_to_imports:
+                    continue
+                try:
+                    text = dist.read_text('top_level.txt')
+                except Exception:
+                    text = None
+                if not text:
+                    continue
+                for line in text.splitlines():
+                    nm = line.strip()
+                    if nm:
+                        dist_to_imports.setdefault(key, set()).add(nm.split('/')[0].split('.')[0])
+
+            # A distribution is importable if ANY of its top-level modules loads.
+            # Try the module whose name matches the distribution first.
+            results = []
+            for dist_key, imports in sorted(dist_to_imports.items()):
+                if dist_key in skip_dist:
+                    continue
+                cands = sorted((i for i in imports if i and not i.startswith('_')),
+                               key=lambda i: (i.lower() != dist_key, i))
+                if not cands:
+                    continue
+                ok = False
+                last = 'no candidate module'
+                for m in cands:
+                    try:
+                        importlib.import_module(m)
+                        ok = True
+                        break
+                    except Exception as e:
+                        last = f'{type(e).__name__}: {e}'
+                results.append((dist_key, 'ok' if ok else f'err: {last}'))
+                if len(results) >= 40:
+                    break
+
+            if not results:
+                print('no third-party distributions detected; nothing to import')
+                sys.exit(0)
+
+            for m, s in results:
+                print(f'{m}: {s}')
+
+            failed = [m for m, s in results if s != 'ok']
+            print(f'imported={len(results) - len(failed)}/{len(results)} failed={len(failed)}')
+            sys.exit(1 if failed else 0)
+            """;
         var scriptPath = Path.Combine(repoDir, ".arm-smoke.py");
         await File.WriteAllTextAsync(scriptPath, script, ct);
         var r = await ProcessRunner.RunAsync(py, new[] { scriptPath }, repoDir, TestTimeout, cancellationToken: ct);
         try { File.Delete(scriptPath); } catch { }
-        return new StepOutcome("python", "python .arm-smoke.py", repoDir, r.ExitCode, r.ExitCode == 0 && !r.TimedOut, r.Duration.TotalSeconds, r.Stdout, r.Stderr);
+        return new StepOutcome("python", "python .arm-smoke.py (installed deps)", repoDir, r.ExitCode, r.ExitCode == 0 && !r.TimedOut, r.Duration.TotalSeconds, r.Stdout, r.Stderr);
     }
 
     private async Task<StepOutcome> RunNodeInstallAsync(string repoDir, DetectedToolchain d, CancellationToken ct)
