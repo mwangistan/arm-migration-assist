@@ -1,7 +1,9 @@
 using System.IO.Compression;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using ArmMigrationAssist.RepositoryDiscovery.Models;
 
 namespace ArmMigrationAssist.Assessment.DependencyScanner;
@@ -52,13 +54,25 @@ internal sealed class DependencyRegistryVerifier : IDependencyArchitectureVerifi
     private readonly HttpClient http;
     private readonly IReadOnlyList<string> npmBases;
     private readonly IReadOnlyList<string> nugetBases;
+    private readonly IReadOnlyList<PyPiSource> pypiSources;
 
     public DependencyRegistryVerifier(HttpClient http)
     {
         this.http = http;
         this.npmBases = ResolveNpmBases();
         this.nugetBases = ResolveNuGetBases();
+        this.pypiSources = ResolvePyPiSources();
     }
+
+    // How a configured PyPI base is queried: the rich JSON API (pypi.org/pypi/{name}/json) or a
+    // PEP 503/691 "simple" index (e.g. the Microsoft PackageFeedProxy at /pypi/simple/{name}/).
+    private enum PyPiApiStyle
+    {
+        JsonApi,
+        SimpleIndex,
+    }
+
+    private sealed record PyPiSource(string Base, PyPiApiStyle Style);
 
     public async Task<IReadOnlyList<DependencyFinding>> VerifyAsync(
         IReadOnlyList<DependencyFinding> findings,
@@ -478,12 +492,69 @@ internal sealed class DependencyRegistryVerifier : IDependencyArchitectureVerifi
     private async Task<RegistryVerdict?> VerifyPyPiAsync(string name, string? version, CancellationToken cancellationToken)
     {
         var exactVersion = NormalizePyPiVersion(version);
-        var encodedName = Uri.EscapeDataString(name);
+        foreach (var source in pypiSources)
+        {
+            try
+            {
+                var verdict = source.Style switch
+                {
+                    PyPiApiStyle.JsonApi => await FetchPyPiJsonVerdictAsync(source.Base, name, exactVersion, cancellationToken),
+                    PyPiApiStyle.SimpleIndex => await FetchPyPiSimpleVerdictAsync(source.Base, name, exactVersion, cancellationToken),
+                    _ => null,
+                };
+                if (verdict is not null)
+                {
+                    return verdict;
+                }
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // The base is unreachable or returned malformed data; try the next source.
+            }
+        }
 
+        return null;
+    }
+
+    // Resolves the ordered list of PyPI bases to consult. The Microsoft PackageFeedProxy simple index
+    // is reachable on Microsoft-managed devices where pypi.org is blocked; the public JSON API is the
+    // final fallback for machines with direct internet egress. An explicit PIP_INDEX_URL /
+    // PYPI_SIMPLE_URL override (a corporate mirror) takes precedence.
+    private static IReadOnlyList<PyPiSource> ResolvePyPiSources()
+    {
+        var sources = new List<PyPiSource>();
+        void Add(string? value, PyPiApiStyle style)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            var trimmed = value.TrimEnd('/');
+            if (!sources.Any(existing => string.Equals(existing.Base, trimmed, StringComparison.OrdinalIgnoreCase)))
+            {
+                sources.Add(new PyPiSource(trimmed, style));
+            }
+        }
+
+        Add(Environment.GetEnvironmentVariable("PYPI_SIMPLE_URL"), PyPiApiStyle.SimpleIndex);
+        Add(Environment.GetEnvironmentVariable("PIP_INDEX_URL"), PyPiApiStyle.SimpleIndex);
+        Add("https://packagefeedproxy.microsoft.io/pypi/simple", PyPiApiStyle.SimpleIndex);
+        Add("https://pypi.org/pypi", PyPiApiStyle.JsonApi);
+        return sources;
+    }
+
+    private async Task<RegistryVerdict?> FetchPyPiJsonVerdictAsync(
+        string baseUrl,
+        string name,
+        string? exactVersion,
+        CancellationToken cancellationToken)
+    {
+        var encodedName = Uri.EscapeDataString(name);
         if (exactVersion is not null)
         {
-            var pinned = await FetchPyPiVerdictAsync(
-                $"https://pypi.org/pypi/{encodedName}/{Uri.EscapeDataString(exactVersion)}/json",
+            var pinned = await FetchPyPiJsonDocumentAsync(
+                $"{baseUrl}/{encodedName}/{Uri.EscapeDataString(exactVersion)}/json",
                 cancellationToken);
             if (pinned is not null)
             {
@@ -493,12 +564,12 @@ internal sealed class DependencyRegistryVerifier : IDependencyArchitectureVerifi
 
         // No exact pin, or the pinned release is unavailable: fall back to the latest release so a
         // declared range (e.g. ">=2023.5.7") still resolves real ARM64 wheel availability.
-        return await FetchPyPiVerdictAsync(
-            $"https://pypi.org/pypi/{encodedName}/json",
+        return await FetchPyPiJsonDocumentAsync(
+            $"{baseUrl}/{encodedName}/json",
             cancellationToken);
     }
 
-    private async Task<RegistryVerdict?> FetchPyPiVerdictAsync(string url, CancellationToken cancellationToken)
+    private async Task<RegistryVerdict?> FetchPyPiJsonDocumentAsync(string url, CancellationToken cancellationToken)
     {
         using var response = await http.GetAsync(url, cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -522,6 +593,134 @@ internal sealed class DependencyRegistryVerifier : IDependencyArchitectureVerifi
         }
 
         return filenames.Count == 0 ? null : PyPiVerdict(filenames);
+    }
+
+    // Queries a PEP 503/691 simple index. Prefers the PEP 691 JSON representation and degrades to the
+    // legacy PEP 503 HTML anchors, so it works against the Microsoft PackageFeedProxy regardless of
+    // which representation it serves. The simple index lists files across every release, so a pinned
+    // version is filtered by filename when possible and otherwise scoped project-wide.
+    private async Task<RegistryVerdict?> FetchPyPiSimpleVerdictAsync(
+        string baseUrl,
+        string name,
+        string? exactVersion,
+        CancellationToken cancellationToken)
+    {
+        var normalized = NormalizePyPiProjectName(name);
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/{normalized}/");
+        request.Headers.Accept.ParseAdd("application/vnd.pypi.simple.v1+json");
+        request.Headers.Accept.ParseAdd("text/html");
+        using var response = await http.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+        var filenames = ParseSimpleIndexFilenames(payload);
+        if (filenames.Count == 0)
+        {
+            return null;
+        }
+
+        return PyPiVerdict(ScopeToVersion(filenames, exactVersion));
+    }
+
+    // Narrows a project-wide file listing to a single pinned release when at least one filename
+    // matches; otherwise keeps the full listing (best-effort project-wide verdict).
+    private static IReadOnlyCollection<string> ScopeToVersion(IReadOnlyList<string> filenames, string? exactVersion)
+    {
+        if (exactVersion is null)
+        {
+            return filenames;
+        }
+
+        var matched = filenames
+            .Where(file => file.Contains($"-{exactVersion}-", StringComparison.OrdinalIgnoreCase)
+                || file.Contains($"-{exactVersion}.", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return matched.Length > 0 ? matched : filenames;
+    }
+
+    // Extracts distribution filenames from either a PEP 691 JSON body ({"files":[{"filename":...}]})
+    // or a legacy PEP 503 HTML index (<a href="...name-version-tags.whl#sha256=...">). Pure and
+    // static so it can be unit-tested offline.
+    public static List<string> ParseSimpleIndexFilenames(string payload)
+    {
+        var filenames = new List<string>();
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return filenames;
+        }
+
+        if (payload.TrimStart().StartsWith('{'))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(payload);
+                if (document.RootElement.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var entry in files.EnumerateArray())
+                    {
+                        if (entry.TryGetProperty("filename", out var filename) && filename.GetString() is { } value)
+                        {
+                            filenames.Add(value);
+                        }
+                    }
+                }
+
+                return filenames;
+            }
+            catch (JsonException)
+            {
+                filenames.Clear();
+            }
+        }
+
+        foreach (Match match in Regex.Matches(payload, "href=\"(?<href>[^\"]+)\"", RegexOptions.IgnoreCase))
+        {
+            var href = match.Groups["href"].Value;
+            var hash = href.IndexOf('#');
+            if (hash >= 0)
+            {
+                href = href[..hash];
+            }
+
+            var slash = href.LastIndexOf('/');
+            var filename = Uri.UnescapeDataString(slash >= 0 ? href[(slash + 1)..] : href);
+            if (filename.EndsWith(".whl", StringComparison.OrdinalIgnoreCase)
+                || filename.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase)
+                || filename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                filenames.Add(filename);
+            }
+        }
+
+        return filenames;
+    }
+
+    // PEP 503 name normalization: lowercase, with runs of '-', '_' or '.' collapsed to a single '-'.
+    private static string NormalizePyPiProjectName(string name)
+    {
+        var builder = new StringBuilder(name.Length);
+        var pendingDash = false;
+        foreach (var ch in name.Trim().ToLowerInvariant())
+        {
+            if (ch is '-' or '_' or '.')
+            {
+                pendingDash = true;
+                continue;
+            }
+
+            if (pendingDash && builder.Length > 0)
+            {
+                builder.Append('-');
+            }
+
+            pendingDash = false;
+            builder.Append(ch);
+        }
+
+        return builder.ToString();
     }
 
     // Returns a version only when the declaration pins one exactly (bare "1.2.3" or "==1.2.3").

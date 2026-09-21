@@ -47,6 +47,56 @@ public sealed class DependencyRegistryVerifierTests
     }
 
     [Fact]
+    public void ParseSimpleIndexFilenames_Pep691Json_ReturnsFilenames()
+    {
+        const string payload = """
+        {
+          "meta": { "api-version": "1.0" },
+          "name": "click",
+          "files": [
+            { "filename": "click-8.1.7-py3-none-any.whl", "url": "https://files.example/click-8.1.7-py3-none-any.whl" },
+            { "filename": "click-8.1.7.tar.gz", "url": "https://files.example/click-8.1.7.tar.gz" }
+          ]
+        }
+        """;
+
+        var filenames = DependencyRegistryVerifier.ParseSimpleIndexFilenames(payload);
+
+        Assert.Contains("click-8.1.7-py3-none-any.whl", filenames);
+        Assert.Contains("click-8.1.7.tar.gz", filenames);
+    }
+
+    [Fact]
+    public void ParseSimpleIndexFilenames_Pep503Html_ReturnsFilenames()
+    {
+        const string payload = """
+        <!DOCTYPE html>
+        <html><body>
+          <a href="https://files.example/numpy-1.26.0-cp312-cp312-win_arm64.whl#sha256=abc">numpy-1.26.0-cp312-cp312-win_arm64.whl</a>
+          <a href="../../packages/numpy-1.26.0.tar.gz#sha256=def">numpy-1.26.0.tar.gz</a>
+        </body></html>
+        """;
+
+        var filenames = DependencyRegistryVerifier.ParseSimpleIndexFilenames(payload);
+
+        Assert.Contains("numpy-1.26.0-cp312-cp312-win_arm64.whl", filenames);
+        Assert.Contains("numpy-1.26.0.tar.gz", filenames);
+    }
+
+    [Fact]
+    public void ParseSimpleIndexFilenames_HtmlIndexFeedsArm64Verdict()
+    {
+        const string payload =
+            "<a href=\"https://files.example/numpy-1.26.0-cp312-cp312-win_arm64.whl#sha256=abc\">numpy</a>";
+
+        var verdict = DependencyRegistryVerifier.PyPiVerdict(
+            DependencyRegistryVerifier.ParseSimpleIndexFilenames(payload));
+
+        Assert.Equal("ready", verdict.ArchitectureStatus);
+        Assert.Contains("arm64", verdict.AvailableArchitectures);
+    }
+
+    [Fact]
     public void NpmVerdict_NoRestrictions_IsReadyAnyCpu()
     {
         var verdict = DependencyRegistryVerifier.NpmVerdict(
