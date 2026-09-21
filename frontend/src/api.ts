@@ -578,6 +578,97 @@ export async function cancelAssessmentJob(job: AssessmentJob): Promise<void> {
   }
 }
 
+interface PlanJobEnvelope {
+  runId: string;
+  status: string;
+  statusUrl?: string;
+}
+
+const activePlanStatuses = ['queued', 'running'];
+const planJobStatuses = [...activePlanStatuses, 'completed', 'failed', 'cancelled', 'canceled'];
+
+// The planner host can answer /api/migration-plans synchronously (200 with the
+// full plan) or as a queued job (202 with { runId, status, statusUrl }). A queued
+// envelope carries a top-level `status` but no `plan`, so it is distinguishable
+// from a finished synchronous result.
+function isPlanJobEnvelope(value: unknown): value is PlanJobEnvelope {
+  return isRecord(value)
+    && typeof value.runId === 'string'
+    && typeof value.status === 'string'
+    && planJobStatuses.includes(value.status)
+    && !isRecord(value.plan)
+    && isOptionalString(value.statusUrl);
+}
+
+async function delayPoll(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+      return;
+    }
+    const handleAbort = () => {
+      window.clearTimeout(timer);
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+    };
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener('abort', handleAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', handleAbort, { once: true });
+  });
+}
+
+async function pollMigrationPlanJob(
+  job: PlanJobEnvelope,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const statusPath = job.statusUrl && job.statusUrl.trim().length > 0
+    ? job.statusUrl
+    : `/api/migration-plans/runs/${encodeURIComponent(job.runId)}`;
+  const deadline = Date.now() + 5 * 60 * 1000;
+
+  let latest: unknown = job;
+  let status = job.status;
+  while (activePlanStatuses.includes(status)) {
+    if (Date.now() > deadline) {
+      throw new Error('The migration planner timed out while generating the plan.');
+    }
+    await delayPoll(2000, signal);
+    const response = await fetchMigrationPlanner(statusPath, { signal });
+    latest = await readJson(response);
+    if (!response.ok) {
+      throw new Error(problemMessage(latest).replace(/^Assessment failed\.$/, 'Migration planning failed.'));
+    }
+    status = isRecord(latest) && typeof latest.status === 'string' ? latest.status : 'failed';
+  }
+
+  if (status !== 'completed') {
+    const detail = isRecord(latest)
+      ? (latest.error ?? latest.detail ?? latest.message)
+      : null;
+    throw new Error(typeof detail === 'string' && detail.trim().length > 0
+      ? detail
+      : 'Migration planning failed.');
+  }
+
+  return latest;
+}
+
+function finalizePlanResult(
+  payload: unknown,
+  assessment: RepositoryAssessment,
+): MigrationPlanningResult {
+  if (!isMigrationPlanningResult(payload)) {
+    throw new Error('The migration planner returned an invalid response.');
+  }
+  if (payload.plan.assessmentId !== assessment.assessmentId
+      || payload.score.assessmentId !== assessment.assessmentId) {
+    throw new Error('The migration planner returned a result for a different assessment.');
+  }
+
+  return payload;
+}
+
 export async function planMigration(
   assessment: RepositoryAssessment,
   signal?: AbortSignal,
@@ -588,19 +679,79 @@ export async function planMigration(
     body: JSON.stringify(assessment),
     signal,
   });
+  // 202 Accepted → async run; poll the returned statusUrl until it terminates.
+  // 200 OK is not used by the current server but kept as a fallback for older builds.
+  if (response.status === 202) {
+    const acceptEnvelope = await readJson(response);
+    if (!isRecord(acceptEnvelope) || typeof acceptEnvelope.runId !== 'string') {
+      throw new Error('The migration planner returned an invalid acceptance envelope.');
+    }
+    return await pollMigrationPlanRun(acceptEnvelope.runId, assessment, signal);
+  }
+
   const payload = await readJson(response);
   if (!response.ok) {
     throw new Error(problemMessage(payload).replace(/^Assessment failed\.$/, 'Migration planning failed.'));
   }
-  if (!isMigrationPlanningResult(payload)) {
-    throw new Error('The migration planner returned an invalid response.');
-  }
-  if (payload.plan.assessmentId !== assessment.assessmentId
-      || payload.score.assessmentId !== assessment.assessmentId) {
-    throw new Error('The migration planner returned a result for a different assessment.');
+
+  // Queued-job mode: the host acknowledged with a run envelope; poll until ready.
+  if (response.status === 202 || isPlanJobEnvelope(payload)) {
+    if (!isPlanJobEnvelope(payload)) {
+      throw new Error('The migration planner returned an invalid response.');
+    }
+    const completed = await pollMigrationPlanJob(payload, signal);
+    return finalizePlanResult(completed, assessment);
   }
 
-  return payload;
+  return finalizePlanResult(payload, assessment);
+}
+
+async function pollMigrationPlanRun(
+  runId: string,
+  assessment: RepositoryAssessment,
+  signal?: AbortSignal,
+): Promise<MigrationPlanningResult> {
+  const startedAt = Date.now();
+  const timeoutMs = 5 * 60 * 1000;
+  const intervalMs = 2_000;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    const pollResponse = await fetchMigrationPlanner(
+      `/api/migration-plans/runs/${encodeURIComponent(runId)}`,
+      { signal },
+    );
+    const pollPayload = await readJson(pollResponse);
+    if (!pollResponse.ok) {
+      throw new Error(problemMessage(pollPayload).replace(/^Assessment failed\.$/, 'Migration planning failed.'));
+    }
+    if (!isRecord(pollPayload)) {
+      throw new Error('The migration planner returned an invalid poll response.');
+    }
+    const status = pollPayload.status;
+    if (status === 'completed') {
+      if (!isMigrationPlanningResult(pollPayload)) {
+        throw new Error('The migration planner returned an invalid completed response.');
+      }
+      if (pollPayload.plan.assessmentId !== assessment.assessmentId
+          || pollPayload.score.assessmentId !== assessment.assessmentId) {
+        throw new Error('The migration planner returned a result for a different assessment.');
+      }
+      return pollPayload;
+    }
+    if (status === 'failed') {
+      const errorObj = pollPayload.error;
+      const title = isRecord(errorObj) && typeof errorObj.title === 'string' ? errorObj.title : 'Migration planning failed.';
+      const errors = isRecord(errorObj) && Array.isArray(errorObj.errors) ? errorObj.errors.filter((e): e is string => typeof e === 'string') : [];
+      const detail = errors.length > 0 ? `${title} (${errors.join('; ')})` : title;
+      throw new Error(detail);
+    }
+    await waitForNextPoll(intervalMs, signal);
+  }
+
+  throw new Error(`Migration planning did not complete within ${Math.round(timeoutMs / 1000)}s.`);
 }
 
 export function migrationReportUrl(runId: string, extension: 'md' | 'html') {
@@ -885,6 +1036,21 @@ export async function getArm64Run(
     throw new Error('The ARM64 runner returned an invalid response.');
   }
   return payload as Arm64RunStatus;
+}
+
+export async function pollArm64Run(
+  runId: string,
+  options: { onUpdate?: (run: Arm64RunStatus) => void; signal?: AbortSignal; intervalMs?: number } = {},
+): Promise<Arm64RunStatus> {
+  const interval = options.intervalMs ?? 2500;
+  let latest = await getArm64Run(runId, options.signal);
+  options.onUpdate?.(latest);
+  while (latest.status === 'queued' || latest.status === 'running') {
+    await waitForNextPoll(interval, options.signal);
+    latest = await getArm64Run(runId, options.signal);
+    options.onUpdate?.(latest);
+  }
+  return latest;
 }
 
 function waitForNextPoll(intervalMs: number, signal?: AbortSignal) {

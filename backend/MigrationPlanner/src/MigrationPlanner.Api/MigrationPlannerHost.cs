@@ -1,6 +1,7 @@
 using MigrationPlanner.Api.Automation;
 using MigrationPlanner.Api.Configuration;
 using MigrationPlanner.Api.Endpoints;
+using MigrationPlanner.Api.Planning;
 using MigrationPlanner.Application.Abstractions;
 using MigrationPlanner.Infrastructure.DependencyInjection;
 using MigrationPlanner.Infrastructure.Model;
@@ -13,6 +14,7 @@ public static class MigrationPlannerHost
     {
         var options = ResolveOptions(configuration, contentRoot);
         services.AddSingleton(options);
+        services.AddSingleton<PlanRunStore>();
         services.AddProblemDetails();
 
         if (options.AllowedOrigins.Length > 0)
@@ -79,6 +81,7 @@ public static class MigrationPlannerHost
     public static IEndpointRouteBuilder MapMigrationPlannerApi(this IEndpointRouteBuilder endpoints, bool includeRootHealth = true)
     {
         endpoints.MapMigrationPlansEndpoint();
+        endpoints.MapMigrationPlanRunsEndpoint();
         endpoints.MapMigrationReportsEndpoint();
         if (includeRootHealth)
         {

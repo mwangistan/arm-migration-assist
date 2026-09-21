@@ -22,7 +22,10 @@ public sealed class HostedModelOptions
     /// </summary>
     public string? ApiKey { get; set; }
 
-    public int MaxOutputTokens { get; set; } = 4096;
+    // gpt-4o class models emit the full MigrationPlanV1 JSON in one completion.
+    // 4096 truncates verbose plans (finishReason=length) and yields invalid JSON,
+    // so cap at the deployment's 16384-token ceiling to avoid truncation.
+    public int MaxOutputTokens { get; set; } = 16384;
 
     public float Temperature { get; set; }
 

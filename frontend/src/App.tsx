@@ -33,6 +33,7 @@ import {
   getValidationReport,
   migrationReportUrl,
   planMigration,
+  pollArm64Run,
   pollMigrationJob,
   pollValidationRun,
   startGitHubAuthentication,
@@ -41,13 +42,17 @@ import {
   type AssessmentProgress,
 } from './api';
 import type {
+  Arm64RunStatus,
+  Arm64StepOutcome,
   CodeFinding,
   CriterionResult,
+  CriterionResultStatus,
   DependencyFinding,
   GeneratedPatch,
   MigrationJob,
   MigrationPlanningResult,
   MigrationWorkItem,
+  OverallScorecardStatus,
   RepositoryAssessment,
   ValidationReport,
   ValidationRunSummary,
@@ -243,6 +248,8 @@ function ProductWorkflow({
   validationRun,
   validationReport,
   validationPending,
+  arm64Run,
+  arm64Pending,
 }: {
   assessment: RepositoryAssessment | null;
   planning: MigrationPlanningResult | null;
@@ -255,6 +262,8 @@ function ProductWorkflow({
   validationRun: ValidationRunSummary | null;
   validationReport: ValidationReport | null;
   validationPending: boolean;
+  arm64Run: Arm64RunStatus | null;
+  arm64Pending: boolean;
 }) {
   const actionableSkills = new Set([
     'build/add-arm64-target',
@@ -291,28 +300,32 @@ function ProductWorkflow({
           : 'waiting';
   const scorecard = validationReport?.scorecard ?? null;
   const validationFailed = validationRun?.status === 'failed';
+  const arm64Active = arm64Pending || arm64Run?.status === 'running' || arm64Run?.status === 'queued';
+  const arm64Phase = arm64Run?.progress?.steps.find((s) => s.status === 'running')?.label ?? null;
   const validateDetail = scorecard
     ? scorecard.status === 'validated'
       ? `${scorecard.passed} passed`
       : scorecard.status === 'validation-failed'
         ? `${scorecard.failed} failed`
         : scorecard.status === 'partially-validated'
-          ? `${scorecard.passed}/${scorecard.criteria.length} passed`
+          ? `${scorecard.passed}/${scorecard.passed + scorecard.failed + scorecard.notRun + scorecard.inconclusive + scorecard.skipped} passed`
           : 'Not validated'
-    : validationPending
-      ? validationRun?.status === 'running' ? 'Validation running' : 'Validation queued'
-      : validationFailed
-        ? 'Validation failed'
-        : planning
-          ? `${pluralize(validationChecks, 'check')} defined`
-          : 'ARM64 verification';
+    : arm64Active
+      ? arm64Phase ? `ARM64: ${arm64Phase}` : 'ARM64 build running'
+      : validationPending
+        ? validationRun?.status === 'running' ? 'Validation running' : 'Validation queued'
+        : validationFailed
+          ? 'Validation failed'
+          : planning
+            ? `${pluralize(validationChecks, 'check')} defined`
+            : 'ARM64 verification';
   const validateState: WorkflowStageState = scorecard
     ? scorecard.status === 'validated'
       ? 'complete'
       : scorecard.status === 'validation-failed' ? 'attention' : 'ready'
     : validationFailed
       ? 'attention'
-      : validationPending
+      : validationPending || arm64Active
         ? 'active'
         : planning ? 'ready' : 'waiting';
   const stages: Array<{
@@ -666,6 +679,222 @@ function GeneratedPatchRow({ patch }: { patch: GeneratedPatch }) {
   );
 }
 
+function arm64OverallMeta(run: Arm64RunStatus | null, pending: boolean): StatusMeta {
+  if (run?.status === 'completed') {
+    const build = run.scorecard?.build ?? null;
+    const tests = run.scorecard?.tests ?? null;
+    if (build && !build.succeeded) return { label: 'Build failed', color: 'danger' };
+    if (tests && !tests.succeeded) return { label: 'Tests failed', color: 'warning' };
+    return { label: 'Build passed', color: 'success' };
+  }
+  if (run?.status === 'failed') return { label: 'Failed', color: 'danger' };
+  if (run?.status === 'cancelled') return { label: 'Cancelled', color: 'subtle' };
+  if (pending || run?.status === 'running') return { label: 'Running', color: 'informative' };
+  return { label: 'Queued', color: 'subtle' };
+}
+
+function arm64StepStatusMeta(status: string): StatusMeta {
+  switch (status) {
+    case 'succeeded': return { label: 'Done', color: 'success' };
+    case 'running': return { label: 'Running', color: 'informative' };
+    case 'failed': return { label: 'Failed', color: 'danger' };
+    case 'skipped': return { label: 'Skipped', color: 'subtle' };
+    default: return { label: 'Pending', color: 'subtle' };
+  }
+}
+
+function arm64StepDuration(step: { startedAt: string | null; finishedAt: string | null }): string | null {
+  if (!step.startedAt) return null;
+  const end = step.finishedAt ? new Date(step.finishedAt).getTime() : Date.now();
+  const seconds = Math.max(0, Math.round((end - new Date(step.startedAt).getTime()) / 1000));
+  return `${seconds}s`;
+}
+
+function Arm64BuildPanel({
+  dispatch,
+  run,
+  pending,
+  error,
+}: {
+  dispatch: { dispatched: boolean; error: string | null } | null;
+  run: Arm64RunStatus | null;
+  pending: boolean;
+  error: string | null;
+}) {
+  if (!dispatch && !run && !pending && !error) return null;
+
+  const steps = run?.progress?.steps ?? [];
+  const percent = run?.progress?.percent ?? 0;
+  const sc = run?.scorecard ?? null;
+  const active = pending || run?.status === 'running' || run?.status === 'queued';
+
+  return (
+    <div className="validation-panel arm64-panel" aria-labelledby="arm64-heading">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">ARM64 hardware build</p>
+          <h4 id="arm64-heading">Runner on Azure Cobalt 100</h4>
+        </div>
+        <StatusBadge meta={arm64OverallMeta(run, pending)} />
+      </div>
+
+      <p className="transform-context">
+        Clones the pinned commit on a real Arm64 VM, applies the generated patches, then runs a
+        native build and test pass. This can take several minutes — the steps below update live.
+      </p>
+
+      {dispatch && !dispatch.dispatched ? (
+        <MessageBar intent="warning">
+          <MessageBarBody>
+            ARM64 build was not dispatched.{dispatch.error ? ` ${dispatch.error}` : ''}
+          </MessageBarBody>
+        </MessageBar>
+      ) : null}
+
+      {active ? (
+        <ProgressBar
+          aria-label="ARM64 build in progress"
+          value={percent > 0 ? percent / 100 : undefined}
+        />
+      ) : null}
+
+      {error ? (
+        <MessageBar intent="error"><MessageBarBody>{error}</MessageBarBody></MessageBar>
+      ) : null}
+
+      {run?.status === 'failed' && run.error ? (
+        <MessageBar intent="error"><MessageBarBody>{run.error}</MessageBarBody></MessageBar>
+      ) : null}
+
+      {steps.length > 0 ? (
+        <ol className="arm64-steps" aria-label="ARM64 build steps">
+          {steps.map((step) => {
+            const duration = arm64StepDuration(step);
+            return (
+              <li key={step.key} className={`arm64-step arm64-step-${step.status}`}>
+                <span className="arm64-step-icon" aria-hidden="true">
+                  {step.status === 'running' ? <Spinner size="tiny" />
+                    : step.status === 'succeeded' ? <Checkmark16Regular />
+                      : step.status === 'failed' ? <Dismiss20Regular />
+                        : step.status === 'skipped' ? '—' : '•'}
+                </span>
+                <span className="arm64-step-body">
+                  <strong>{step.label}</strong>
+                  {step.detail ? <small>{step.detail}</small> : null}
+                </span>
+                <span className="arm64-step-meta">
+                  <StatusBadge meta={arm64StepStatusMeta(step.status)} />
+                  {duration ? <small>{duration}</small> : null}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      ) : null}
+
+      {sc ? (
+        <div className="arm64-scorecard">
+          <div className="scorecard-grid">
+            <div><span className="metric-label">Build</span><span className="metric-value">{sc.build ? (sc.build.succeeded ? 'PASS' : 'FAIL') : 'n/a'}</span></div>
+            <div><span className="metric-label">Tests</span><span className="metric-value">{sc.tests ? (sc.tests.succeeded ? 'PASS' : 'FAIL') : 'n/a'}</span></div>
+            <div><span className="metric-label">Applied</span><span className="metric-value">{sc.patchApplication.applied.length}</span></div>
+            <div><span className="metric-label">Wall clock</span><span className="metric-value">{Math.round(sc.wallClockSeconds)}s</span></div>
+          </div>
+          <p className="arm64-hardware">
+            {sc.hardware.cpuModel} · {sc.hardware.cpuCount} vCPU · {sc.hardware.architecture} · {sc.hardware.vmSku} ({sc.hardware.region})
+          </p>
+          {sc.build && !sc.build.succeeded && sc.build.stderrTail ? (
+            <pre className="patch-diff" aria-label="ARM64 build error output">{sc.build.stderrTail}</pre>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// The deterministic F4 validation run cannot execute a build for interpreted
+// stacks (e.g. Python), so it returns every criterion as not-run with "no
+// executable mapping or measured evidence". The real measured evidence for those
+// generic ARM64 build/functional criteria is produced by the ARM64 runner on the
+// Cobalt VM. Once the runner reaches a terminal state, fold its measured build /
+// test outcomes into the two generic validation-sourced criteria. Per-package
+// acceptance criteria are intentionally left untouched — one runner build does
+// not prove each declared package builds.
+// A criterion is "machine-measured" when the ARM64 runner (or F4 for compiled
+// stacks) can produce executable evidence for it. Those are the generic
+// `validation:` build/functional checks. Everything else (`acceptance:` per
+// work-item tests, `discovered:` device targets) is a manual sign-off item.
+export function isMeasuredCriterion(result: CriterionResult): boolean {
+  return result.criterion.key.startsWith('validation:');
+}
+
+export function foldArm64Evidence(report: ValidationReport, run: Arm64RunStatus | null): ValidationReport {
+  const card = run?.scorecard ?? null;
+  if (!run || (run.status !== 'completed' && run.status !== 'failed') || !card) {
+    return report;
+  }
+
+  const runnerLabel = `${card.hardware.vmSku} (${card.hardware.architecture})`;
+  const applyOutcome = (
+    result: CriterionResult,
+    outcome: Arm64StepOutcome | null,
+    kind: 'build' | 'test',
+  ): CriterionResult => {
+    if (!outcome || result.status !== 'not-run') {
+      return result;
+    }
+    const verdict = outcome.succeeded ? 'succeeded' : `failed (exit ${outcome.exitCode})`;
+    return {
+      ...result,
+      status: outcome.succeeded ? 'passed' : 'failed',
+      reason: ` Measured on the ARM64 runner: ${kind} ${verdict} on ${runnerLabel} via \`${outcome.command}\`.`,
+      evidenceIds: [...result.evidenceIds, `arm64-run:${run.jobId}`],
+    };
+  };
+
+  const criteria = report.scorecard.criteria.map((result) => {
+    const { key, category } = result.criterion;
+    if (!key.startsWith('validation:')) {
+      return result;
+    }
+    if (category === 'build') {
+      return applyOutcome(result, card.build, 'build');
+    }
+    if (category === 'functional') {
+      return applyOutcome(result, card.tests, 'test');
+    }
+    return result;
+  });
+
+  // Headline counts and overall status reflect only the machine-measured criteria
+  // (the generic `validation:` build + functional checks the ARM64 runner actually
+  // executes). The per-work-item `acceptance:` and `discovered:` device criteria are
+  // manual sign-off items the automated pipeline can never mark passed, so counting
+  // them here would permanently drag a genuinely successful ARM64 run down to
+  // "partially-validated" with a wall of not-run. They remain in `criteria` and are
+  // surfaced separately in the UI as manual criteria.
+  const measured = criteria.filter((c) => isMeasuredCriterion(c));
+  const count = (status: CriterionResultStatus) => measured.filter((c) => c.status === status).length;
+  const passed = count('passed');
+  const failed = count('failed');
+  const notRun = count('not-run');
+  const inconclusive = count('inconclusive');
+  const skipped = count('skipped');
+  const status: OverallScorecardStatus =
+    failed > 0
+      ? 'validation-failed'
+      : measured.length > 0 && passed === measured.length
+        ? 'validated'
+        : passed > 0
+          ? 'partially-validated'
+          : 'not-validated';
+
+  return {
+    ...report,
+    scorecard: { ...report.scorecard, status, passed, failed, notRun, inconclusive, skipped, criteria },
+  };
+}
+
 function TransformValidateResults({
   planning,
   target,
@@ -676,6 +905,9 @@ function TransformValidateResults({
   validationReport,
   validationPending,
   validationError,
+  arm64Run,
+  arm64Pending,
+  arm64Error,
   onRun,
   onCancel,
 }: {
@@ -688,6 +920,9 @@ function TransformValidateResults({
   validationReport: ValidationReport | null;
   validationPending: boolean;
   validationError: string | null;
+  arm64Run: Arm64RunStatus | null;
+  arm64Pending: boolean;
+  arm64Error: string | null;
   onRun: () => void;
   onCancel: () => void;
 }) {
@@ -696,7 +931,18 @@ function TransformValidateResults({
   const skipped = result?.skipped ?? [];
   const branch = result?.branch ?? null;
   const dispatch = result?.validation ?? null;
-  const scorecard = validationReport?.scorecard ?? null;
+  const arm64Dispatch = result?.arm64Build ?? null;
+  const arm64Active = arm64Pending || arm64Run?.status === 'running' || arm64Run?.status === 'queued';
+  const arm64Dispatched = Boolean(arm64Dispatch?.dispatched);
+  // When the ARM64 runner is the source of measured evidence, hold the scorecard
+  // until the runner reaches a terminal state, then present the merged result.
+  const awaitingArm64Evidence = arm64Dispatched && arm64Active;
+  const effectiveReport = validationReport && arm64Dispatched
+    ? foldArm64Evidence(validationReport, arm64Run)
+    : validationReport;
+  const scorecard = effectiveReport?.scorecard ?? null;
+  const measuredCriteria = scorecard?.criteria.filter(isMeasuredCriterion) ?? [];
+  const manualCriteria = scorecard?.criteria.filter((c) => !isMeasuredCriterion(c)) ?? [];
   const canRun = Boolean(target) && !jobPending;
 
   return (
@@ -829,6 +1075,13 @@ function TransformValidateResults({
         </div>
       ) : null}
 
+      <Arm64BuildPanel
+        dispatch={arm64Dispatch}
+        run={arm64Run}
+        pending={arm64Pending}
+        error={arm64Error}
+      />
+
       {dispatch ? (
         <div className="validation-panel" aria-labelledby="validation-heading">
           <div className="section-heading">
@@ -837,14 +1090,16 @@ function TransformValidateResults({
               <h4 id="validation-heading">Validation run</h4>
             </div>
             <StatusBadge meta={
-              scorecard
-                ? validationStatusMeta(scorecard.status)
-                : {
-                    label: validationPending
-                      ? validationRun?.status === 'running' ? 'Running' : 'Queued'
-                      : titleCase(validationRun?.status ?? 'queued'),
-                    color: validationPending ? 'informative' : 'subtle',
-                  }
+              awaitingArm64Evidence
+                ? { label: 'Measuring on ARM64 runner', color: 'informative' }
+                : scorecard
+                  ? validationStatusMeta(scorecard.status)
+                  : {
+                      label: validationPending
+                        ? validationRun?.status === 'running' ? 'Running' : 'Queued'
+                        : titleCase(validationRun?.status ?? 'queued'),
+                      color: validationPending ? 'informative' : 'subtle',
+                    }
             } />
           </div>
 
@@ -859,6 +1114,19 @@ function TransformValidateResults({
 
           {validationPending ? <ProgressBar aria-label="Validation run in progress" /> : null}
 
+          {awaitingArm64Evidence ? (
+            <>
+              <ProgressBar aria-label="Waiting for ARM64 build and test evidence" />
+              <MessageBar intent="info">
+                <MessageBarBody>
+                  Waiting for measured build + test evidence from the ARM64 runner before
+                  scoring. The build and functional criteria resolve once the runner above
+                  finishes — this can take several minutes.
+                </MessageBarBody>
+              </MessageBar>
+            </>
+          ) : null}
+
           {validationError ? (
             <MessageBar intent="error"><MessageBarBody>{validationError}</MessageBarBody></MessageBar>
           ) : null}
@@ -867,7 +1135,7 @@ function TransformValidateResults({
             <MessageBar intent="error"><MessageBarBody>{validationRun.error}</MessageBarBody></MessageBar>
           ) : null}
 
-          {scorecard ? (
+          {scorecard && !awaitingArm64Evidence ? (
             <>
               <div className="scorecard-grid">
                 <div><span className="metric-label">Passed</span><span className="metric-value">{scorecard.passed}</span></div>
@@ -876,33 +1144,63 @@ function TransformValidateResults({
                 <div><span className="metric-label">Not run</span><span className="metric-value">{scorecard.notRun}</span></div>
                 <div><span className="metric-label">Skipped</span><span className="metric-value">{scorecard.skipped}</span></div>
               </div>
+              <p className="scorecard-caption">
+                Counts above cover the machine-measured ARM64 build &amp; functional checks.
+                Per-work-item acceptance criteria and device targets require manual sign-off
+                and are listed separately below.
+              </p>
 
-              <div className="criteria-list" aria-label="Validation criteria">
-                {scorecard.criteria.map((criterion) => (
-                  <div className="criteria-row" key={criterion.criterion.key}>
-                    <div>
-                      <Badge appearance="outline" color="informative" size="small">
-                        {titleCase(criterion.criterion.category)}
-                      </Badge>
-                      <StatusBadge meta={criterionStatusMeta(criterion.status)} />
+              <div className="criteria-list" aria-label="Measured validation criteria">
+                {measuredCriteria.length > 0 ? (
+                  measuredCriteria.map((criterion) => (
+                    <div className="criteria-row" key={criterion.criterion.key}>
+                      <div>
+                        <Badge appearance="outline" color="informative" size="small">
+                          {titleCase(criterion.criterion.category)}
+                        </Badge>
+                        <StatusBadge meta={criterionStatusMeta(criterion.status)} />
+                      </div>
+                      <p><strong>{criterion.criterion.description}</strong>{criterion.reason}</p>
                     </div>
-                    <p><strong>{criterion.criterion.description}</strong>{criterion.reason}</p>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="scorecard-caption">No machine-measurable ARM64 criteria were defined for this plan.</p>
+                )}
               </div>
 
-              {validationReport && validationReport.coverageGaps.length > 0 ? (
-                <div className="coverage-gaps" aria-label="Coverage gaps">
-                  <h5>Coverage gaps</h5>
-                  <ul>
-                    {validationReport.coverageGaps.map((gap) => (
-                      <li key={gap.id}>
-                        <strong>{gap.description}</strong>
-                        <span>{gap.criterionKeys.join(', ')}</span>
-                      </li>
+              {manualCriteria.length > 0 ? (
+                <details className="manual-criteria">
+                  <summary>
+                    Manual acceptance criteria ({manualCriteria.length}) — require human sign-off, not auto-run
+                  </summary>
+                  <div className="criteria-list" aria-label="Manual acceptance criteria">
+                    {manualCriteria.map((criterion) => (
+                      <div className="criteria-row" key={criterion.criterion.key}>
+                        <div>
+                          <Badge appearance="outline" color="informative" size="small">
+                            {titleCase(criterion.criterion.category)}
+                          </Badge>
+                          <StatusBadge meta={criterionStatusMeta(criterion.status)} />
+                        </div>
+                        <p><strong>{criterion.criterion.description}</strong>{criterion.reason}</p>
+                      </div>
                     ))}
-                  </ul>
-                </div>
+                  </div>
+
+                  {effectiveReport && effectiveReport.coverageGaps.length > 0 ? (
+                    <div className="coverage-gaps" aria-label="Coverage gaps">
+                      <h5>Coverage gaps</h5>
+                      <ul>
+                        {effectiveReport.coverageGaps.map((gap) => (
+                          <li key={gap.id}>
+                            <strong>{gap.description}</strong>
+                            <span>{gap.criterionKeys.join(', ')}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </details>
               ) : null}
             </>
           ) : null}
@@ -924,6 +1222,9 @@ function AssessmentResults({
   validationReport,
   validationPending,
   validationError,
+  arm64Run,
+  arm64Pending,
+  arm64Error,
   onRunMigration,
   onCancelMigration,
 }: {
@@ -938,6 +1239,9 @@ function AssessmentResults({
   validationReport: ValidationReport | null;
   validationPending: boolean;
   validationError: string | null;
+  arm64Run: Arm64RunStatus | null;
+  arm64Pending: boolean;
+  arm64Error: string | null;
   onRunMigration: () => void;
   onCancelMigration: () => void;
 }) {
@@ -1061,6 +1365,9 @@ function AssessmentResults({
               validationReport={validationReport}
               validationPending={validationPending}
               validationError={validationError}
+              arm64Run={arm64Run}
+              arm64Pending={arm64Pending}
+              arm64Error={arm64Error}
               onRun={onRunMigration}
               onCancel={onCancelMigration}
             />
@@ -1323,6 +1630,9 @@ export default function App() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [validationPending, setValidationPending] = useState(false);
   const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
+  const [arm64Run, setArm64Run] = useState<Arm64RunStatus | null>(null);
+  const [arm64Pending, setArm64Pending] = useState(false);
+  const [arm64Error, setArm64Error] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const migrationControllerRef = useRef<AbortController | null>(null);
   const authenticationSessionRef = useRef<string | null>(null);
@@ -1417,6 +1727,9 @@ export default function App() {
     setValidationError(null);
     setValidationPending(false);
     setValidationReport(null);
+    setArm64Run(null);
+    setArm64Error(null);
+    setArm64Pending(false);
     setProgress({ phase: 'queued', percent: 0, message: 'Submitting assessment.' });
     setLoading(true);
     const nextController = new AbortController();
@@ -1476,6 +1789,7 @@ export default function App() {
     migrationControllerRef.current = null;
     setMigrationJobPending(false);
     setValidationPending(false);
+    setArm64Pending(false);
   }
 
   async function handleRunMigration() {
@@ -1490,6 +1804,9 @@ export default function App() {
     setValidationError(null);
     setValidationReport(null);
     setValidationPending(false);
+    setArm64Run(null);
+    setArm64Error(null);
+    setArm64Pending(false);
 
     const target = {
       url: assessment.repository.url,
@@ -1506,7 +1823,10 @@ export default function App() {
       setMigrationJobPending(false);
 
       const dispatch = finalJob.result?.validation ?? null;
-      if (finalJob.status === 'completed' && dispatch?.dispatched && dispatch.runId) {
+      const arm64Dispatch = finalJob.result?.arm64Build ?? null;
+
+      const validationTask = (async () => {
+        if (finalJob.status !== 'completed' || !dispatch?.dispatched || !dispatch.runId) return;
         const runId = dispatch.runId;
         setValidationPending(true);
         try {
@@ -1534,7 +1854,28 @@ export default function App() {
         } finally {
           setValidationPending(false);
         }
-      }
+      })();
+
+      const arm64Task = (async () => {
+        if (finalJob.status !== 'completed' || !arm64Dispatch?.dispatched || !arm64Dispatch.jobId) return;
+        setArm64Pending(true);
+        try {
+          const finalRun = await pollArm64Run(arm64Dispatch.jobId, {
+            onUpdate: (next) => setArm64Run(next),
+            signal: controller.signal,
+          });
+          setArm64Run(finalRun);
+        } catch (runError) {
+          if (runError instanceof DOMException && runError.name === 'AbortError') return;
+          setArm64Error(
+            runError instanceof Error ? runError.message : 'ARM64 build status is unavailable.',
+          );
+        } finally {
+          setArm64Pending(false);
+        }
+      })();
+
+      await Promise.all([validationTask, arm64Task]);
     } catch (requestError) {
       if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
       setMigrationJobError(
@@ -1684,6 +2025,8 @@ export default function App() {
           validationRun={validationRun}
           validationReport={validationReport}
           validationPending={validationPending}
+          arm64Run={arm64Run}
+          arm64Pending={arm64Pending}
         />
 
         <div className="workspace">
@@ -1700,6 +2043,9 @@ export default function App() {
               validationReport={validationReport}
               validationPending={validationPending}
               validationError={validationError}
+              arm64Run={arm64Run}
+              arm64Pending={arm64Pending}
+              arm64Error={arm64Error}
               onRunMigration={handleRunMigration}
               onCancelMigration={cancelMigration}
             />

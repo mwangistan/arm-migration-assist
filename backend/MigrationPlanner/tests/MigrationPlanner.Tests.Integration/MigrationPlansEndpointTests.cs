@@ -23,7 +23,7 @@ public sealed class MigrationPlansEndpointTests : IClassFixture<PlannerWebApplic
         var assessment = MinimalValidAssessmentFactory.Build("assessment-integration-001");
         using var client = _factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/api/migration-plans", assessment);
+        var response = await client.PostAndAwaitPlanAsync("/api/migration-plans", assessment);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK,
             because: await response.Content.ReadAsStringAsync());
@@ -56,7 +56,7 @@ public sealed class MigrationPlansEndpointTests : IClassFixture<PlannerWebApplic
         };
         using var client = _factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/api/migration-plans", assessment);
+        var response = await client.PostAndAwaitPlanAsync("/api/migration-plans", assessment);
         using var body = await response.Content.ReadFromJsonAsync<JsonDocument>();
 
         response.StatusCode.Should().Be(HttpStatusCode.OK,
@@ -76,7 +76,7 @@ public sealed class MigrationPlansEndpointTests : IClassFixture<PlannerWebApplic
         string expectedContent)
     {
         using var client = _factory.CreateClient();
-        var planResponse = await client.PostAsJsonAsync(
+        var planResponse = await client.PostAndAwaitPlanAsync(
             "/api/migration-plans",
             MinimalValidAssessmentFactory.Build($"assessment-report-{extension}"));
         using var planBody = await planResponse.Content.ReadFromJsonAsync<JsonDocument>();

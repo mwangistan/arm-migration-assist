@@ -338,12 +338,28 @@ export interface Arm64StepOutcome {
   stderrTail: string;
 }
 
+export interface Arm64ProgressStep {
+  key: string;
+  label: string;
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped';
+  detail: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface Arm64Progress {
+  phase: string;
+  steps: Arm64ProgressStep[];
+  percent: number;
+}
+
 export interface Arm64RunStatus {
   jobId: string;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  progress: Arm64Progress | null;
   scorecard: Arm64Scorecard | null;
   error: string | null;
 }

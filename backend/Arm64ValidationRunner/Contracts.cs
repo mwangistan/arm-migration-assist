@@ -30,8 +30,24 @@ public sealed record JobStatus(
     [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt,
     [property: JsonPropertyName("startedAt")] DateTimeOffset? StartedAt,
     [property: JsonPropertyName("finishedAt")] DateTimeOffset? FinishedAt,
+    [property: JsonPropertyName("progress")] JobProgress? Progress,
     [property: JsonPropertyName("scorecard")] Arm64Scorecard? Scorecard,
     [property: JsonPropertyName("error")] string? Error);
+
+// Live per-step progress so callers can visualize the clone → apply → build → test pipeline
+// while the job is still running, instead of only seeing the final scorecard.
+public sealed record JobProgress(
+    [property: JsonPropertyName("phase")] string Phase,
+    [property: JsonPropertyName("steps")] IReadOnlyList<ProgressStep> Steps,
+    [property: JsonPropertyName("percent")] int Percent);
+
+public sealed record ProgressStep(
+    [property: JsonPropertyName("key")] string Key,
+    [property: JsonPropertyName("label")] string Label,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("detail")] string? Detail,
+    [property: JsonPropertyName("startedAt")] DateTimeOffset? StartedAt,
+    [property: JsonPropertyName("finishedAt")] DateTimeOffset? FinishedAt);
 
 public sealed record Arm64Scorecard(
     [property: JsonPropertyName("hardware")] HardwareInfo Hardware,
