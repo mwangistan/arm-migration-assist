@@ -43,13 +43,16 @@ import {
 } from './api';
 import type {
   Arm64RunStatus,
+  Arm64StepOutcome,
   CodeFinding,
   CriterionResult,
+  CriterionResultStatus,
   DependencyFinding,
   GeneratedPatch,
   MigrationJob,
   MigrationPlanningResult,
   MigrationWorkItem,
+  OverallScorecardStatus,
   RepositoryAssessment,
   ValidationReport,
   ValidationRunSummary,
@@ -809,6 +812,73 @@ function Arm64BuildPanel({
   );
 }
 
+// The deterministic F4 validation run cannot execute a build for interpreted
+// stacks (e.g. Python), so it returns every criterion as not-run with "no
+// executable mapping or measured evidence". The real measured evidence for those
+// generic ARM64 build/functional criteria is produced by the ARM64 runner on the
+// Cobalt VM. Once the runner reaches a terminal state, fold its measured build /
+// test outcomes into the two generic validation-sourced criteria. Per-package
+// acceptance criteria are intentionally left untouched — one runner build does
+// not prove each declared package builds.
+export function foldArm64Evidence(report: ValidationReport, run: Arm64RunStatus | null): ValidationReport {
+  const card = run?.scorecard ?? null;
+  if (!run || (run.status !== 'completed' && run.status !== 'failed') || !card) {
+    return report;
+  }
+
+  const runnerLabel = `${card.hardware.vmSku} (${card.hardware.architecture})`;
+  const applyOutcome = (
+    result: CriterionResult,
+    outcome: Arm64StepOutcome | null,
+    kind: 'build' | 'test',
+  ): CriterionResult => {
+    if (!outcome || result.status !== 'not-run') {
+      return result;
+    }
+    const verdict = outcome.succeeded ? 'succeeded' : `failed (exit ${outcome.exitCode})`;
+    return {
+      ...result,
+      status: outcome.succeeded ? 'passed' : 'failed',
+      reason: ` Measured on the ARM64 runner: ${kind} ${verdict} on ${runnerLabel} via \`${outcome.command}\`.`,
+      evidenceIds: [...result.evidenceIds, `arm64-run:${run.jobId}`],
+    };
+  };
+
+  const criteria = report.scorecard.criteria.map((result) => {
+    const { key, category } = result.criterion;
+    if (!key.startsWith('validation:')) {
+      return result;
+    }
+    if (category === 'build') {
+      return applyOutcome(result, card.build, 'build');
+    }
+    if (category === 'functional') {
+      return applyOutcome(result, card.tests, 'test');
+    }
+    return result;
+  });
+
+  const count = (status: CriterionResultStatus) => criteria.filter((c) => c.status === status).length;
+  const passed = count('passed');
+  const failed = count('failed');
+  const notRun = count('not-run');
+  const inconclusive = count('inconclusive');
+  const skipped = count('skipped');
+  const status: OverallScorecardStatus =
+    failed > 0
+      ? 'validation-failed'
+      : criteria.length > 0 && passed === criteria.length
+        ? 'validated'
+        : passed > 0
+          ? 'partially-validated'
+          : 'not-validated';
+
+  return {
+    ...report,
+    scorecard: { ...report.scorecard, status, passed, failed, notRun, inconclusive, skipped, criteria },
+  };
+}
+
 function TransformValidateResults({
   planning,
   target,
@@ -846,7 +916,15 @@ function TransformValidateResults({
   const branch = result?.branch ?? null;
   const dispatch = result?.validation ?? null;
   const arm64Dispatch = result?.arm64Build ?? null;
-  const scorecard = validationReport?.scorecard ?? null;
+  const arm64Active = arm64Pending || arm64Run?.status === 'running' || arm64Run?.status === 'queued';
+  const arm64Dispatched = Boolean(arm64Dispatch?.dispatched);
+  // When the ARM64 runner is the source of measured evidence, hold the scorecard
+  // until the runner reaches a terminal state, then present the merged result.
+  const awaitingArm64Evidence = arm64Dispatched && arm64Active;
+  const effectiveReport = validationReport && arm64Dispatched
+    ? foldArm64Evidence(validationReport, arm64Run)
+    : validationReport;
+  const scorecard = effectiveReport?.scorecard ?? null;
   const canRun = Boolean(target) && !jobPending;
 
   return (
@@ -994,14 +1072,16 @@ function TransformValidateResults({
               <h4 id="validation-heading">Validation run</h4>
             </div>
             <StatusBadge meta={
-              scorecard
-                ? validationStatusMeta(scorecard.status)
-                : {
-                    label: validationPending
-                      ? validationRun?.status === 'running' ? 'Running' : 'Queued'
-                      : titleCase(validationRun?.status ?? 'queued'),
-                    color: validationPending ? 'informative' : 'subtle',
-                  }
+              awaitingArm64Evidence
+                ? { label: 'Measuring on ARM64 runner', color: 'informative' }
+                : scorecard
+                  ? validationStatusMeta(scorecard.status)
+                  : {
+                      label: validationPending
+                        ? validationRun?.status === 'running' ? 'Running' : 'Queued'
+                        : titleCase(validationRun?.status ?? 'queued'),
+                      color: validationPending ? 'informative' : 'subtle',
+                    }
             } />
           </div>
 
@@ -1016,6 +1096,19 @@ function TransformValidateResults({
 
           {validationPending ? <ProgressBar aria-label="Validation run in progress" /> : null}
 
+          {awaitingArm64Evidence ? (
+            <>
+              <ProgressBar aria-label="Waiting for ARM64 build and test evidence" />
+              <MessageBar intent="info">
+                <MessageBarBody>
+                  Waiting for measured build + test evidence from the ARM64 runner before
+                  scoring. The build and functional criteria resolve once the runner above
+                  finishes — this can take several minutes.
+                </MessageBarBody>
+              </MessageBar>
+            </>
+          ) : null}
+
           {validationError ? (
             <MessageBar intent="error"><MessageBarBody>{validationError}</MessageBarBody></MessageBar>
           ) : null}
@@ -1024,7 +1117,7 @@ function TransformValidateResults({
             <MessageBar intent="error"><MessageBarBody>{validationRun.error}</MessageBarBody></MessageBar>
           ) : null}
 
-          {scorecard ? (
+          {scorecard && !awaitingArm64Evidence ? (
             <>
               <div className="scorecard-grid">
                 <div><span className="metric-label">Passed</span><span className="metric-value">{scorecard.passed}</span></div>
@@ -1048,11 +1141,11 @@ function TransformValidateResults({
                 ))}
               </div>
 
-              {validationReport && validationReport.coverageGaps.length > 0 ? (
+              {effectiveReport && effectiveReport.coverageGaps.length > 0 ? (
                 <div className="coverage-gaps" aria-label="Coverage gaps">
                   <h5>Coverage gaps</h5>
                   <ul>
-                    {validationReport.coverageGaps.map((gap) => (
+                    {effectiveReport.coverageGaps.map((gap) => (
                       <li key={gap.id}>
                         <strong>{gap.description}</strong>
                         <span>{gap.criterionKeys.join(', ')}</span>
