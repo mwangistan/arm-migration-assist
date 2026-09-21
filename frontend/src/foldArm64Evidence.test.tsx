@@ -113,8 +113,10 @@ describe('foldArm64Evidence', () => {
     expect(byKey.get('acceptance:wi-audit:at-report')?.status).toBe('not-run');
 
     expect(merged.scorecard.passed).toBe(2);
-    expect(merged.scorecard.notRun).toBe(1);
-    expect(merged.scorecard.status).toBe('partially-validated');
+    // Counts and status reflect only the machine-measured `validation:` criteria;
+    // the manual `acceptance:` item is excluded from the headline (still present in criteria).
+    expect(merged.scorecard.notRun).toBe(0);
+    expect(merged.scorecard.status).toBe('validated');
     expect(byKey.get('validation:vc-arm64-build-check')?.evidenceIds).toContain('arm64-run:arm64-job-1');
   });
 
@@ -128,6 +130,18 @@ describe('foldArm64Evidence', () => {
     expect(byKey.get('validation:vc-arm64-build-check')?.status).toBe('failed');
     expect(merged.scorecard.failed).toBe(1);
     expect(merged.scorecard.status).toBe('validation-failed');
+  });
+
+  it('excludes manual acceptance criteria from headline counts and status', () => {
+    // Build passes, functional not measured (tests null), plus a manual acceptance item.
+    const merged = foldArm64Evidence(
+      report(baseCriteria()),
+      run('completed', outcome(true, 0), null),
+    );
+    // measured = [build passed, functional not-run]; manual acceptance excluded.
+    expect(merged.scorecard.passed).toBe(1);
+    expect(merged.scorecard.notRun).toBe(1); // functional only, NOT the acceptance item
+    expect(merged.scorecard.status).toBe('partially-validated');
   });
 
   it('leaves the report unchanged while the runner is still in flight', () => {

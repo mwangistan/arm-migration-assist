@@ -308,7 +308,7 @@ function ProductWorkflow({
       : scorecard.status === 'validation-failed'
         ? `${scorecard.failed} failed`
         : scorecard.status === 'partially-validated'
-          ? `${scorecard.passed}/${scorecard.criteria.length} passed`
+          ? `${scorecard.passed}/${scorecard.passed + scorecard.failed + scorecard.notRun + scorecard.inconclusive + scorecard.skipped} passed`
           : 'Not validated'
     : arm64Active
       ? arm64Phase ? `ARM64: ${arm64Phase}` : 'ARM64 build running'
@@ -820,6 +820,14 @@ function Arm64BuildPanel({
 // test outcomes into the two generic validation-sourced criteria. Per-package
 // acceptance criteria are intentionally left untouched — one runner build does
 // not prove each declared package builds.
+// A criterion is "machine-measured" when the ARM64 runner (or F4 for compiled
+// stacks) can produce executable evidence for it. Those are the generic
+// `validation:` build/functional checks. Everything else (`acceptance:` per
+// work-item tests, `discovered:` device targets) is a manual sign-off item.
+export function isMeasuredCriterion(result: CriterionResult): boolean {
+  return result.criterion.key.startsWith('validation:');
+}
+
 export function foldArm64Evidence(report: ValidationReport, run: Arm64RunStatus | null): ValidationReport {
   const card = run?.scorecard ?? null;
   if (!run || (run.status !== 'completed' && run.status !== 'failed') || !card) {
@@ -858,7 +866,15 @@ export function foldArm64Evidence(report: ValidationReport, run: Arm64RunStatus 
     return result;
   });
 
-  const count = (status: CriterionResultStatus) => criteria.filter((c) => c.status === status).length;
+  // Headline counts and overall status reflect only the machine-measured criteria
+  // (the generic `validation:` build + functional checks the ARM64 runner actually
+  // executes). The per-work-item `acceptance:` and `discovered:` device criteria are
+  // manual sign-off items the automated pipeline can never mark passed, so counting
+  // them here would permanently drag a genuinely successful ARM64 run down to
+  // "partially-validated" with a wall of not-run. They remain in `criteria` and are
+  // surfaced separately in the UI as manual criteria.
+  const measured = criteria.filter((c) => isMeasuredCriterion(c));
+  const count = (status: CriterionResultStatus) => measured.filter((c) => c.status === status).length;
   const passed = count('passed');
   const failed = count('failed');
   const notRun = count('not-run');
@@ -867,7 +883,7 @@ export function foldArm64Evidence(report: ValidationReport, run: Arm64RunStatus 
   const status: OverallScorecardStatus =
     failed > 0
       ? 'validation-failed'
-      : criteria.length > 0 && passed === criteria.length
+      : measured.length > 0 && passed === measured.length
         ? 'validated'
         : passed > 0
           ? 'partially-validated'
@@ -925,6 +941,8 @@ function TransformValidateResults({
     ? foldArm64Evidence(validationReport, arm64Run)
     : validationReport;
   const scorecard = effectiveReport?.scorecard ?? null;
+  const measuredCriteria = scorecard?.criteria.filter(isMeasuredCriterion) ?? [];
+  const manualCriteria = scorecard?.criteria.filter((c) => !isMeasuredCriterion(c)) ?? [];
   const canRun = Boolean(target) && !jobPending;
 
   return (
@@ -1126,33 +1144,63 @@ function TransformValidateResults({
                 <div><span className="metric-label">Not run</span><span className="metric-value">{scorecard.notRun}</span></div>
                 <div><span className="metric-label">Skipped</span><span className="metric-value">{scorecard.skipped}</span></div>
               </div>
+              <p className="scorecard-caption">
+                Counts above cover the machine-measured ARM64 build &amp; functional checks.
+                Per-work-item acceptance criteria and device targets require manual sign-off
+                and are listed separately below.
+              </p>
 
-              <div className="criteria-list" aria-label="Validation criteria">
-                {scorecard.criteria.map((criterion) => (
-                  <div className="criteria-row" key={criterion.criterion.key}>
-                    <div>
-                      <Badge appearance="outline" color="informative" size="small">
-                        {titleCase(criterion.criterion.category)}
-                      </Badge>
-                      <StatusBadge meta={criterionStatusMeta(criterion.status)} />
+              <div className="criteria-list" aria-label="Measured validation criteria">
+                {measuredCriteria.length > 0 ? (
+                  measuredCriteria.map((criterion) => (
+                    <div className="criteria-row" key={criterion.criterion.key}>
+                      <div>
+                        <Badge appearance="outline" color="informative" size="small">
+                          {titleCase(criterion.criterion.category)}
+                        </Badge>
+                        <StatusBadge meta={criterionStatusMeta(criterion.status)} />
+                      </div>
+                      <p><strong>{criterion.criterion.description}</strong>{criterion.reason}</p>
                     </div>
-                    <p><strong>{criterion.criterion.description}</strong>{criterion.reason}</p>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="scorecard-caption">No machine-measurable ARM64 criteria were defined for this plan.</p>
+                )}
               </div>
 
-              {effectiveReport && effectiveReport.coverageGaps.length > 0 ? (
-                <div className="coverage-gaps" aria-label="Coverage gaps">
-                  <h5>Coverage gaps</h5>
-                  <ul>
-                    {effectiveReport.coverageGaps.map((gap) => (
-                      <li key={gap.id}>
-                        <strong>{gap.description}</strong>
-                        <span>{gap.criterionKeys.join(', ')}</span>
-                      </li>
+              {manualCriteria.length > 0 ? (
+                <details className="manual-criteria">
+                  <summary>
+                    Manual acceptance criteria ({manualCriteria.length}) — require human sign-off, not auto-run
+                  </summary>
+                  <div className="criteria-list" aria-label="Manual acceptance criteria">
+                    {manualCriteria.map((criterion) => (
+                      <div className="criteria-row" key={criterion.criterion.key}>
+                        <div>
+                          <Badge appearance="outline" color="informative" size="small">
+                            {titleCase(criterion.criterion.category)}
+                          </Badge>
+                          <StatusBadge meta={criterionStatusMeta(criterion.status)} />
+                        </div>
+                        <p><strong>{criterion.criterion.description}</strong>{criterion.reason}</p>
+                      </div>
                     ))}
-                  </ul>
-                </div>
+                  </div>
+
+                  {effectiveReport && effectiveReport.coverageGaps.length > 0 ? (
+                    <div className="coverage-gaps" aria-label="Coverage gaps">
+                      <h5>Coverage gaps</h5>
+                      <ul>
+                        {effectiveReport.coverageGaps.map((gap) => (
+                          <li key={gap.id}>
+                            <strong>{gap.description}</strong>
+                            <span>{gap.criterionKeys.join(', ')}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </details>
               ) : null}
             </>
           ) : null}
